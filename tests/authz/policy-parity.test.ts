@@ -7,6 +7,7 @@ import {
   canManageTeams,
   canReviewSla,
   canSendToField,
+  canWriteReport,
   canUsePreProduction,
   canSeeArea,
   canSeeOccurrence,
@@ -72,6 +73,8 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_review_sla($1::uuid) AS r`, ev));
           check(`enviar itens para o campo em ${ev}`, canSendToField(actor, ev),
             await q(`SELECT app.can_send_to_field($1::uuid) AS r`, ev));
+          check(`escrever observações do relatório em ${ev}`, canWriteReport(actor, ev),
+            await q(`SELECT app.can_write_report($1::uuid) AS r`, ev));
         }
 
         for (const o of Object.values(d.occurrences)) {

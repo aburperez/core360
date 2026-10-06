@@ -172,3 +172,9 @@ export function canSendToField(a: Actor, eventId: string): boolean {
 export function isMe(a: Actor, eventId: string, participantId: string): boolean {
   return membershipFor(a, eventId)?.participantId === participantId;
 }
+
+/** Escrever as observações do dia no relatório diário: só o gestor. */
+export function canWriteReport(a: Actor, eventId: string): boolean {
+  if (a.isAdmin) return true;
+  return membershipFor(a, eventId)?.role === "GERENTE";
+}

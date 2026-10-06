@@ -11,9 +11,11 @@ type NavProps = {
   canUseField: boolean; canUsePre: boolean;
   /** Itens da planilha enviados para conferir no campo (para esta pessoa, ou o gerente). */
   hasReceipts: boolean;
+  /** A pessoa tem briefing (no celular ele fica no cartão da tela inicial). */
+  hasBriefing: boolean;
 };
 
-type Item = { href: string; label: string; icon: string; active: boolean; primary?: boolean };
+type Item = { href: string; label: string; short?: string; icon: string; active: boolean; primary?: boolean; desktopOnly?: boolean };
 
 /**
  * Navegação do evento, em duas abas: Gestão de campo e Pré-produção. No
@@ -27,9 +29,11 @@ export function EventNav(props: NavProps) {
   const pre = `${base}/pre-producao`;
   const inPre = path.startsWith(pre);
   const preItems: Item[] = [
-    { href: pre, label: "Tipos e SLA", icon: "⏱", active: path === pre || path.startsWith(`${pre}/tipos`) },
-    { href: `${pre}/quem-faz`, label: "Quem faz o quê", icon: "▦", active: path.startsWith(`${pre}/quem-faz`) },
+    { href: pre, label: "Tipos e SLA", short: "Tipos", icon: "⏱", active: path === pre || path.startsWith(`${pre}/tipos`) },
+    { href: `${pre}/quem-faz`, label: "Quem faz o quê", short: "Quem faz", icon: "▦", active: path.startsWith(`${pre}/quem-faz`) },
     { href: `${pre}/custos`, label: "Custos", icon: "$", active: path.startsWith(`${pre}/custos`) },
+    { href: `${pre}/briefing`, label: "Briefing", icon: "📋", active: path.startsWith(`${pre}/briefing`) },
+    { href: `${pre}/relatorio`, label: "Relatório diário", short: "Relatório", icon: "📊", active: path.startsWith(`${pre}/relatorio`) },
   ];
   const items: Item[] = [
     { href: base, label: "Início", icon: "◉", active: path === base },
@@ -38,12 +42,13 @@ export function EventNav(props: NavProps) {
     ...(props.canCreate ? [{ href: `${base}/ocorrencias/nova`, label: "Novo", icon: "+", active: path.endsWith("/nova"), primary: true }] : []),
     { href: `${base}/equipe`, label: props.canBuildTeam ? "Montar equipe" : "Equipe", icon: "👥", active: path.startsWith(`${base}/equipe`) },
     ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", icon: "📦", active: path.startsWith(`${base}/recebimentos`) }] : []),
+    ...(props.hasBriefing ? [{ href: `${base}/briefing`, label: "Meu briefing", icon: "📋", active: path.startsWith(`${base}/briefing`), desktopOnly: true }] : []),
   ];
   const create = items.find((it) => it.primary);
   const links = items.filter((it) => !it.primary);
   const mobile: Item[] = !props.canUseField ? preItems
     : inPre && props.canUsePre ? [...preItems, { href: base, label: "Campo", icon: "◉", active: false }]
-    : items;
+    : items.filter((it) => !it.desktopOnly);
 
   return (
     <>
@@ -65,7 +70,7 @@ export function EventNav(props: NavProps) {
                 ) : (
                   <span className="text-xl leading-none" aria-hidden>{it.icon}</span>
                 )}
-                <span>{it.label}</span>
+                <span>{it.short ?? it.label}</span>
               </Link>
             </li>
           ))}

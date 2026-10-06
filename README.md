@@ -118,5 +118,5 @@ tests/         db (constraints), auth, authz (paridade), security (10 cenários:
 - [x] Pré-produção separada do campo: papel Pré-produtor; só ele e o Gerente entram. O campo só lê nome e prazo dos tipos ao abrir chamado
 - [x] Pré-produção 3: planilha de custos no formato da matriz de orçamento (seções, itens, opcionais, fatura/NF/direto, honorários e encargos), importação do .xlsx com prévia e "Baixar Excel" com as fórmulas
 - [x] Itens da planilha no campo: o Gerente escolhe quem recebe cada item (ou seção) e envia; quem recebe confere em "Recebimentos" (chegou certo ou diferente, com foto). O campo nunca recebe valores. Valor em branco = "a definir"
-- [ ] Pré-produção 2: briefing por pessoa e relatório diário
+- [x] Pré-produção 2: briefing por pessoa (a Pré-produção escreve, a pessoa lê em "Meu briefing" e confirma; tipos e contatos entram sozinhos) e relatório diário (chamados e recebimentos do dia, observações do Gerente, "Baixar Excel")
 - [ ] Etapa 10: PWA instalável, revisão de segurança e deploy

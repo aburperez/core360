@@ -185,6 +185,8 @@ model User {
   serviceTypesCreated  ServiceType[]    @relation("ServiceTypeCreatedBy")
   slaProposed          SlaProposal[]    @relation("SlaProposalProposedBy")
   slaReviewed          SlaProposal[]    @relation("SlaProposalReviewedBy")
+  briefingsUpdated     Briefing[]       @relation("BriefingUpdatedBy")
+  dailyNotesUpdated    DailyNote[]      @relation("DailyNoteUpdatedBy")
 
   @@map("users")
 }
@@ -291,6 +293,8 @@ model Event {
   costItems     CostItem[]
   itemReceipts  ItemReceipt[]
   receiptPhotos ReceiptPhoto[]
+  briefings     Briefing[]
+  dailyNotes    DailyNote[]
 
   @@index([clientId])
   @@index([status])
@@ -376,6 +380,7 @@ model Participant {
   serviceTypes           ServiceTypePerson[]
   costItemsToReceive     CostItem[]          @relation("CostItemReceiver")
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
+  briefing               Briefing?
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -817,4 +822,52 @@ model ReceiptPhoto {
 
   @@unique([receiptId, sha256])
   @@map("receipt_photos")
+}
+
+// ─────────────── Pré-produção: briefing e relatório diário ───────────────
+
+/// Briefing de uma pessoa do campo: função, posto, horários e o que ela faz.
+/// Escrito pela Pré-produção; a pessoa lê o seu e confirma ("Li e entendi").
+/// Mudou o texto depois de lido: version sobe e a leitura vale de novo.
+model Briefing {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  participantId String    @unique @map("participant_id") @db.Uuid
+  /// Função. Vazio: usa o cargo da pessoa na equipe.
+  roleText      String?   @map("role_text")
+  post          String?
+  schedule      String?
+  duties        String?
+  notes         String?
+  /// Sobe a cada mudança no texto (gatilho no banco).
+  version       Int       @default(1)
+  /// Versão que a pessoa confirmou que leu (0 = ainda não leu).
+  readVersion   Int       @default(0) @map("read_version")
+  readAt        DateTime? @map("read_at") @db.Timestamptz(3)
+  updatedById   String    @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  participant Participant @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Restrict)
+  updatedBy   User        @relation("BriefingUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, participantId])
+  @@map("briefings")
+}
+
+/// Observações do gestor sobre um dia do evento (vão no relatório diário).
+model DailyNote {
+  eventId     String   @map("event_id") @db.Uuid
+  day         DateTime @db.Date
+  body        String
+  updatedById String   @map("updated_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  updatedBy User  @relation("DailyNoteUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@id([eventId, day])
+  @@map("daily_notes")
 }

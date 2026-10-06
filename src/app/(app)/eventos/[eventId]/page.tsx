@@ -4,6 +4,7 @@ import { canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
+import { myBriefingState } from "@/modules/briefings/briefings.service";
 import Link from "next/link";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
@@ -18,7 +19,9 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   const { eventId } = await params;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
-  const [event, dash, toReceive] = await Promise.all([getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId)]);
+  const [event, dash, toReceive, briefing] = await Promise.all([
+    getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId), myBriefingState(actor, eventId),
+  ]);
   const base = `/eventos/${eventId}`;
   const scopeLabel =
     dash.role === "HEAD" ? "da sua área" : dash.role === "OPERACIONAL" ? "da sua equipe" : "do evento";
@@ -29,6 +32,23 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
       <TopBar title={event.name} subtitle={`${ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
       {canUsePreProduction(actor, eventId) && <EventTabs eventId={eventId} active="campo" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
+        {(briefing === "NAO_LIDO" || briefing === "MUDOU") && (
+          <Link
+            href={`${base}/briefing`}
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/50 bg-amber-400/10 p-4 transition hover:border-amber-300"
+          >
+            <span>
+              <span className="block font-semibold">📋 {briefing === "MUDOU" ? "Seu briefing mudou" : "Leia seu briefing"}</span>
+              <span className="block text-sm text-muted">O que você faz, onde e quando. Leia e confirme.</span>
+            </span>
+            <span className="text-2xl text-amber-300" aria-hidden>›</span>
+          </Link>
+        )}
+        {briefing === "LIDO" && (
+          <Link href={`${base}/briefing`} className="mb-4 flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-primary lg:hidden">
+            📋 Meu briefing <span aria-hidden>›</span>
+          </Link>
+        )}
         {toReceive > 0 && (
           <Link
             href={`${base}/recebimentos`}
