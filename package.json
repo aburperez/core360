@@ -12,7 +12,9 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset --force && prisma db seed",
     "db:seed": "prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:deploy": "tsx scripts/deploy-db.ts",
+    "vercel-build": "tsx scripts/deploy-db.ts && next build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../generated/prisma/client";
+import { roleDatabaseUrl, type DbRole } from "./urls";
 
 /**
  * Três acessos ao banco, com papéis diferentes:
@@ -16,23 +17,23 @@ export function createPrismaClient(connectionString: string): PrismaClient {
 
 const cache = globalThis as unknown as { appPrisma?: PrismaClient; authPrisma?: PrismaClient; workerPrisma?: PrismaClient };
 
-function required(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} não definida`);
+function required(role: DbRole): string {
+  const v = roleDatabaseUrl(role);
+  if (!v) throw new Error(`Banco do papel ${role} não configurado (veja src/server/db/urls.ts)`);
   return v;
 }
 
 export function appPrisma(): PrismaClient {
-  cache.appPrisma ??= createPrismaClient(required("APP_DATABASE_URL"));
+  cache.appPrisma ??= createPrismaClient(required("app"));
   return cache.appPrisma;
 }
 
 export function authPrisma(): PrismaClient {
-  cache.authPrisma ??= createPrismaClient(required("AUTH_DATABASE_URL"));
+  cache.authPrisma ??= createPrismaClient(required("auth"));
   return cache.authPrisma;
 }
 
 export function workerPrisma(): PrismaClient {
-  cache.workerPrisma ??= createPrismaClient(required("WORKER_DATABASE_URL"));
+  cache.workerPrisma ??= createPrismaClient(required("worker"));
   return cache.workerPrisma;
 }

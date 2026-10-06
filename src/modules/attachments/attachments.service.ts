@@ -40,9 +40,12 @@ export async function addPhoto(actor: Actor, occurrenceId: string, input: Upload
   const id = randomUUID();
   const storageKey = `events/${occ.eventId}/occurrences/${occ.id}/${id}.${image.ext}`;
   // Primeiro o arquivo, depois o registro: se o upload falhar, não fica registro órfão.
-  await getStorage().put(storageKey, input.bytes, image.mime);
+  // No banco, os dois vão na mesma transação.
+  const storage = getStorage();
+  if (!storage.inDatabase) await storage.put(storageKey, input.bytes, image.mime);
 
   return actor.run(async (tx) => {
+    if (storage.inDatabase) await storage.put(storageKey, input.bytes, image.mime, tx);
     const a = await tx.attachment.create({
       data: {
         id, occurrenceId, eventId: occ.eventId, storageKey, mimeType: image.mime,
@@ -74,14 +77,15 @@ export async function photoUrl(actor: Actor, attachmentId: string) {
 }
 
 /**
- * Para armazenamentos sem link assinado (memória, em dev/teste): devolve os
+ * Para armazenamentos sem link assinado (memória e banco): devolve os
  * bytes diretamente, com a mesma checagem de acesso.
  */
 export async function photoBytes(actor: Actor, attachmentId: string) {
   const storage = getStorage();
   if (!storage.get) return null;
   const a = await loadPhoto(actor, attachmentId);
-  const body = await storage.get(a.storageKey);
+  const get = storage.get.bind(storage);
+  const body = storage.inDatabase ? await actor.run((tx) => get(a.storageKey, tx)) : await get(a.storageKey);
   if (!body) throw new NotFoundError("Foto");
   return { body, mimeType: a.mimeType };
 }

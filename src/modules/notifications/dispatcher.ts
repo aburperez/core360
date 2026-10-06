@@ -1,5 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import type { NotificationType } from "../../generated/prisma/enums";
+import { publicUrl } from "../../lib/public-url";
 import { signClaim } from "../../server/whatsapp/actions";
 import { TEMPLATE_ALERT, TEMPLATE_ALERT_CLAIM, type WhatsApp } from "../../server/whatsapp/whatsapp";
 import {
@@ -191,7 +192,7 @@ export async function scanUrgentReminders({ db, now = () => new Date() }: Dispat
 }
 
 export function appUrl() {
-  return (process.env.APP_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return publicUrl();
 }
 
 /** 4. Envio pelo WhatsApp, com até 4 tentativas. */

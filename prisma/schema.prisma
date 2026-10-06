@@ -555,3 +555,16 @@ model OccurrenceChange {
 
   @@map("occurrence_changes")
 }
+
+/// Fotos guardadas no próprio banco (STORAGE_DRIVER=database), para hospedagens
+/// sem armazenamento de arquivos à parte, como o ambiente de teste. Só lê quem
+/// enxerga a foto: a RLS confere a tabela attachments.
+model StoredFile {
+  key         String   @id
+  contentType String   @map("content_type")
+  sizeBytes   Int      @map("size_bytes")
+  body        Bytes
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("stored_files")
+}

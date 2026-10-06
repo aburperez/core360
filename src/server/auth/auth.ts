@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { isIP } from "node:net";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { authPrisma } from "../db/client";
+import { publicUrl } from "../../lib/public-url";
 
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -11,6 +12,8 @@ export interface AuthConfig {
   db: PrismaClient;
   secret: string;
   baseURL: string;
+  /** Outros endereços do mesmo app que podem fazer login (ex.: domínios da Vercel). */
+  trustedOrigins?: string[];
   /** Limite de tentativas de login (desligar só em testes unitários específicos). */
   rateLimit?: boolean;
 }
@@ -41,6 +44,7 @@ export function createAuth(cfg: AuthConfig) {
     appName: "CORE 360",
     secret: cfg.secret,
     baseURL: cfg.baseURL,
+    trustedOrigins: cfg.trustedOrigins,
     database: prismaAdapter(db, { provider: "postgresql" }),
     emailAndPassword: {
       enabled: true,
@@ -107,7 +111,11 @@ export function getAuth(): Auth {
     cache.auth = createAuth({
       db: authPrisma(),
       secret,
-      baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+      baseURL: process.env.BETTER_AUTH_URL || publicUrl(),
+      // Na Vercel o mesmo app responde no domínio de produção e no endereço do deploy.
+      trustedOrigins: [process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
+        .filter((h): h is string => !!h)
+        .map((h) => `https://${h}`),
     });
   }
   return cache.auth;
