@@ -3,6 +3,8 @@ import { requireUser } from "@/server/http/session";
 import { canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
+import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
+import Link from "next/link";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { Card, EmptyState, LinkButton, PAGE, SectionTitle, Stat, cx } from "@/components/ui";
@@ -16,7 +18,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   const { eventId } = await params;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
-  const [event, dash] = await Promise.all([getEvent(actor, eventId), getDashboard(actor, eventId)]);
+  const [event, dash, toReceive] = await Promise.all([getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId)]);
   const base = `/eventos/${eventId}`;
   const scopeLabel =
     dash.role === "HEAD" ? "da sua área" : dash.role === "OPERACIONAL" ? "da sua equipe" : "do evento";
@@ -27,6 +29,18 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
       <TopBar title={event.name} subtitle={`${ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
       {canUsePreProduction(actor, eventId) && <EventTabs eventId={eventId} active="campo" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
+        {toReceive > 0 && (
+          <Link
+            href={`${base}/recebimentos`}
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/50 bg-primary/10 p-4 transition hover:border-primary"
+          >
+            <span>
+              <span className="block font-semibold">📦 {toReceive === 1 ? "1 item para conferir" : `${toReceive} itens para conferir`}</span>
+              <span className="block text-sm text-muted">A pré-produção enviou itens para você receber.</span>
+            </span>
+            <span className="text-2xl text-primary" aria-hidden>›</span>
+          </Link>
+        )}
         {"structure" in dash ? (
           <>
             <div className="grid grid-cols-3 gap-3 lg:max-w-2xl">

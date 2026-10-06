@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { getCostSheet, importCostSheet } from "@/modules/costs/costs.service";
+import type { listReceiverOptions } from "@/modules/receipts/receipts.service";
 import { BILLING_LABEL, lineSubtotal, type CostBilling } from "@/modules/costs/totals";
 import { brl, decimal, parseDecimal } from "@/lib/money";
 import { Button, Card, buttonClass, cx } from "@/components/ui";
@@ -13,6 +14,12 @@ type Sheet = Awaited<ReturnType<typeof getCostSheet>>;
 type Section = Sheet["sections"][number];
 type Item = Section["items"][number];
 type Preview = Awaited<ReturnType<typeof importCostSheet>>;
+type Receiver = Awaited<ReturnType<typeof listReceiverOptions>>[number];
+
+/** Quem recebe no campo: a lista de pessoas e se quem está vendo pode escolher (gerente). */
+const Field = createContext<{ canSend: boolean; receivers: Receiver[] }>({ canSend: false, receivers: [] });
+
+const money = (n: number | null) => (n === null ? "A definir" : brl(n));
 
 function useAction() {
   const router = useRouter();
@@ -39,7 +46,7 @@ const pct = (n: number) => `${decimal(n)}%`;
 const BILLINGS = Object.entries(BILLING_LABEL) as [CostBilling, string][];
 
 /** Tela inteira: ações, seções com itens, totais e cabeçalho do orçamento. */
-export function CostsEditor({ eventId, sheet }: { eventId: string; sheet: Sheet }) {
+export function CostsEditor({ eventId, sheet, receivers }: { eventId: string; sheet: Sheet; receivers: Receiver[] }) {
   const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const empty = sheet.sections.length === 0;
@@ -56,10 +63,12 @@ export function CostsEditor({ eventId, sheet }: { eventId: string; sheet: Sheet 
   );
 
   return (
+    <Field.Provider value={{ canSend: sheet.can.sendToField, receivers }}>
     <div className="space-y-4">
       {!empty && actions}
       {importing && <ImportPanel eventId={eventId} current={sheet.itemCount} onClose={() => setImporting(false)} />}
       {!empty && <TotalsCard eventId={eventId} sheet={sheet} />}
+      {!empty && <FieldCard eventId={eventId} sheet={sheet} />}
       <HeaderCard eventId={eventId} header={sheet.header} />
 
       {empty ? (
@@ -81,6 +90,106 @@ export function CostsEditor({ eventId, sheet }: { eventId: string; sheet: Sheet 
         </div>
       )}
     </div>
+    </Field.Provider>
+  );
+}
+
+// ─────────────────────────── Envio para o campo ───────────────────────────
+
+/** Resumo do campo e o botão "Enviar para o campo" (só o gerente envia). */
+function FieldCard({ eventId, sheet }: { eventId: string; sheet: Sheet }) {
+  const { canSend } = useContext(Field);
+  const f = sheet.field;
+  const { busy, error, run } = useAction();
+  const [done, setDone] = useState<string | null>(null);
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted">No campo</p>
+          <p className="mt-1 text-sm">
+            {f.sent === 0
+              ? `${f.withReceiver} de ${sheet.itemCount} itens com quem recebe. Nada enviado ainda.`
+              : <>
+                  {f.sent} enviados: <span className="text-emerald-300">{f.ok} chegaram certo</span>
+                  {" · "}<span className={f.different ? "text-amber-300" : undefined}>{f.different} diferentes</span>
+                  {" · "}{f.pending} aguardando
+                </>}
+          </p>
+          {f.outdated && f.sent > 0 && <p className="mt-1 text-sm text-amber-300">Há mudanças que ainda não foram para o campo.</p>}
+          {!canSend && <p className="mt-1 text-xs text-muted">O gerente escolhe quem recebe cada item e envia para o campo. O campo não vê valores.</p>}
+        </div>
+        {canSend && (
+          <Button
+            className="min-h-11 text-sm"
+            disabled={busy || f.withReceiver === 0 && f.sent === 0}
+            onClick={async () => {
+              setDone(null);
+              const msg = f.withReceiver === 0
+                ? "Nenhum item tem quem recebe. Enviar assim tira do campo os itens já enviados. Continuar?"
+                : `Enviar para o campo os ${f.withReceiver} itens com quem recebe? O campo vê nome, descritivo e quantidade, sem valores.`;
+              if (!confirm(msg)) return;
+              await run(async () => {
+                const r = await api<{ created: number; updated: number; removed: number; unchanged: number }>(`/api/events/${eventId}/costs/send-to-field`, { body: {} });
+                setDone(`Enviado: ${r.created} novos, ${r.updated} atualizados${r.removed ? `, ${r.removed} retirados` : ""}.`);
+              });
+            }}
+          >
+            {busy ? "Enviando…" : "Enviar para o campo"}
+          </Button>
+        )}
+      </div>
+      {done && <p className="mt-2 text-sm text-emerald-300">{done}</p>}
+      <div className="mt-2"><FormError message={error} /></div>
+    </Card>
+  );
+}
+
+const RECEIPT_LABEL = {
+  PENDENTE: { label: "Aguardando", tone: "text-muted" },
+  OK: { label: "✓ Chegou certo", tone: "text-emerald-300" },
+  DIFERENTE: { label: "⚠ Chegou diferente", tone: "text-amber-300" },
+} as const;
+
+/** "Recebe: Fulano · ✓ Chegou certo" embaixo do item. */
+function FieldLine({ item }: { item: Item }) {
+  if (!item.receiverName && !item.receipt) return null;
+  const r = item.receipt;
+  return (
+    <p className="mt-1 text-xs">
+      {item.receiverName && <span className="text-muted">Recebe: <span className="text-foreground">{item.receiverName}</span></span>}
+      {r && !r.stale && (
+        <span className={cx("ml-2", RECEIPT_LABEL[r.status].tone)}>
+          {RECEIPT_LABEL[r.status].label}
+          {r.status === "DIFERENTE" && r.receivedQuantity !== null && ` (chegou ${decimal(r.receivedQuantity)} de ${decimal(item.quantity)})`}
+        </span>
+      )}
+      {(r?.stale || (item.receiverId && !r)) && <span className="ml-2 text-amber-300">Falta enviar</span>}
+      {r?.status === "DIFERENTE" && !r.stale && (
+        <span className="mt-0.5 block text-amber-200/90">
+          {r.receivedDescription ? `Chegou: ${r.receivedDescription}. ` : ""}&ldquo;{r.note}&rdquo;
+          {r.photoIds.map((id, k) => (
+            <a key={id} href={`/api/receipt-photos/${id}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="ml-2 font-semibold text-primary">
+              Foto {k + 1}
+            </a>
+          ))}
+        </span>
+      )}
+    </p>
+  );
+}
+
+function ReceiverSelect({ name, defaultValue, className }: { name: string; defaultValue: string | null; className?: string }) {
+  const { receivers } = useContext(Field);
+  return (
+    <Select name={name} defaultValue={defaultValue ?? ""} className={className}>
+      <option value="">Ninguém (não vai para o campo)</option>
+      {receivers.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}{p.team ? ` · ${p.team.name}` : p.area ? ` · ${p.area.name}` : ""}
+        </option>
+      ))}
+    </Select>
   );
 }
 
@@ -194,11 +303,14 @@ function ImportPanel({ eventId, current, onClose }: { eventId: string; current: 
           {current > 0 && (
             <p className="rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
               Isto substitui os {current} itens que já estão na planilha.
+              {preview.sentToField > 0 && (preview.canReplaceSent
+                ? ` ${preview.sentToField} deles já foram enviados para o campo; as conferências deles serão apagadas.`
+                : ` ${preview.sentToField} deles já foram enviados para o campo, então só o gerente pode importar por cima.`)}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             <Button
-              disabled={busy}
+              disabled={busy || (preview.sentToField > 0 && !preview.canReplaceSent)}
               onClick={async () => {
                 if (await run(() => send(file, true))) onClose();
               }}
@@ -271,6 +383,12 @@ function TotalsCard({ eventId, sheet }: { eventId: string; sheet: Sheet }) {
             <div className="flex justify-between gap-3 pt-1.5 text-xs text-muted">
               <dt>Opcionais (fora do total)</dt>
               <dd className="tabular-nums">{brl(t.optional)}</dd>
+            </div>
+          )}
+          {t.undefinedCount > 0 && (
+            <div className="flex justify-between gap-3 pt-1.5 text-xs text-amber-300">
+              <dt>Itens a definir (fora do total)</dt>
+              <dd className="tabular-nums">{t.undefinedCount}</dd>
             </div>
           )}
         </dl>
@@ -416,6 +534,8 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
   editing: string | null; setEditing: (id: string | null) => void;
 }) {
   const [rename, setRename] = useState(false);
+  const [pick, setPick] = useState(false);
+  const { canSend } = useContext(Field);
   const { busy, error, run } = useAction();
   const n = index + 1;
   const patch = (body: object) => run(() => api(`/api/cost-sections/${section.id}`, { method: "PATCH", body }));
@@ -455,6 +575,7 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
               <summary className="cursor-pointer list-none rounded-lg px-2 text-xl leading-none text-muted hover:text-foreground" aria-label="Opções da seção">⋯</summary>
               <div className="absolute right-0 z-10 mt-1 w-44 rounded-xl border border-border bg-surface p-1 text-sm shadow-lg">
                 <MenuButton onClick={() => setRename(true)}>Renomear</MenuButton>
+                {canSend && <MenuButton onClick={() => setPick(true)}>Quem recebe a seção</MenuButton>}
                 {index > 0 && <MenuButton onClick={() => patch({ move: "up" })}>Subir</MenuButton>}
                 {index < count - 1 && <MenuButton onClick={() => patch({ move: "down" })}>Descer</MenuButton>}
                 <MenuButton
@@ -473,6 +594,21 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
           </>
         )}
       </div>
+      {pick && (
+        <form
+          className="flex flex-wrap items-center gap-2 border-x border-t border-border bg-white/5 px-4 py-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const participantId = String(new FormData(e.currentTarget).get("receiver") ?? "") || null;
+            if (await run(() => api(`/api/cost-sections/${section.id}/receiver`, { method: "PUT", body: { participantId } }))) setPick(false);
+          }}
+        >
+          <span className="text-sm text-muted">Quem recebe todos os itens desta seção:</span>
+          <ReceiverSelect name="receiver" defaultValue={null} className="min-h-10 w-auto flex-1 py-0 text-sm" />
+          <Button type="submit" disabled={busy} className="min-h-10 text-sm">Aplicar</Button>
+          <Button type="button" variant="secondary" className="min-h-10 text-sm" onClick={() => setPick(false)}>Cancelar</Button>
+        </form>
+      )}
       {error && <div className="border-x border-border px-4 py-2"><FormError message={error} /></div>}
 
       {/* Tela larga: tabela no formato da matriz. */}
@@ -503,12 +639,13 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
                       {it.optional && <OptionalBadge />}
                     </p>
                     {it.description && <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs text-muted">{it.description}</p>}
+                    <FieldLine item={it} />
                   </td>
                   <td className="px-3 py-2.5 text-muted">{it.paymentTerms ?? "—"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{brl(it.unitValue)}</td>
+                  <td className={cx("px-3 py-2.5 text-right tabular-nums", it.unitValue === null && "text-amber-300")}>{money(it.unitValue)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{decimal(it.quantity)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{it.frequency === null ? "—" : decimal(it.frequency)}</td>
-                  <td className={cx("px-3 py-2.5 text-right font-semibold tabular-nums", it.optional && "line-through decoration-1")}>{brl(it.subtotal)}</td>
+                  <td className={cx("px-3 py-2.5 text-right font-semibold tabular-nums", it.optional && "line-through decoration-1")}>{it.subtotal === null ? "—" : brl(it.subtotal)}</td>
                   <td className="px-3 py-2.5 text-xs text-muted">{BILLING_LABEL[it.billing]}</td>
                 </tr>
               )
@@ -535,12 +672,13 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
                     {it.name}
                     {it.optional && <OptionalBadge />}
                   </p>
-                  <span className={cx("shrink-0 font-semibold tabular-nums", it.optional && "text-muted line-through decoration-1")}>{brl(it.subtotal)}</span>
+                  <span className={cx("shrink-0 font-semibold tabular-nums", it.optional && "text-muted line-through decoration-1", it.subtotal === null && "text-amber-300")}>{it.subtotal === null ? "A definir" : brl(it.subtotal)}</span>
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
-                  {brl(it.unitValue)} × {decimal(it.quantity)}{it.frequency !== null ? ` × ${decimal(it.frequency)}` : ""}
+                  {money(it.unitValue)} × {decimal(it.quantity)}{it.frequency !== null ? ` × ${decimal(it.frequency)}` : ""}
                   {" · "}{BILLING_LABEL[it.billing]}{it.paymentTerms ? ` · ${it.paymentTerms}` : ""}
                 </p>
+                <FieldLine item={it} />
               </button>
             )}
           </li>
@@ -581,12 +719,14 @@ function MenuButton({ children, onClick, danger }: { children: ReactNode; onClic
 
 function ItemForm({ section, sections, item, onDone }: { section: Section; sections: Section[]; item?: Item; onDone: () => void }) {
   const { busy, error, setError, run } = useAction();
-  const [unit, setUnit] = useState(item ? decimal(item.unitValue) : "");
+  const { canSend } = useContext(Field);
+  const [unit, setUnit] = useState(item?.unitValue != null ? decimal(item.unitValue) : "");
   const [qty, setQty] = useState(item ? decimal(item.quantity) : "1");
   const [freq, setFreq] = useState(item?.frequency != null ? decimal(item.frequency) : "1");
   const [optional, setOptional] = useState(item?.optional ?? false);
-  const values = { unitValue: parseDecimal(unit), quantity: parseDecimal(qty), frequency: freq.trim() ? parseDecimal(freq) : null };
-  const preview = values.unitValue !== null && values.quantity !== null
+  // Valor em branco = a definir (fica fora do total até ser preenchido).
+  const values = { unitValue: unit.trim() ? parseDecimal(unit) : null, quantity: parseDecimal(qty), frequency: freq.trim() ? parseDecimal(freq) : null };
+  const preview = values.quantity !== null
     ? lineSubtotal({ unitValue: values.unitValue, quantity: values.quantity, frequency: values.frequency })
     : null;
 
@@ -595,7 +735,7 @@ function ItemForm({ section, sections, item, onDone }: { section: Section; secti
       className="grid gap-3 lg:grid-cols-6"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (values.unitValue === null) return setError("Valor unitário inválido");
+        if (unit.trim() && values.unitValue === null) return setError("Valor unitário inválido");
         if (values.quantity === null) return setError("Quantidade inválida");
         if (freq.trim() && values.frequency === null) return setError("Frequência inválida");
         const f = new FormData(e.currentTarget);
@@ -608,11 +748,15 @@ function ItemForm({ section, sections, item, onDone }: { section: Section; secti
           ...values,
           ...(item && f.get("sectionId") !== section.id ? { sectionId: f.get("sectionId") } : {}),
         };
-        const ok = await run(() =>
-          item
-            ? api(`/api/cost-items/${item.id}`, { method: "PATCH", body })
-            : api(`/api/cost-sections/${section.id}/items`, { body }),
-        );
+        const receiver = canSend ? (String(f.get("receiver") ?? "") || null) : undefined;
+        const ok = await run(async () => {
+          const saved = item
+            ? await api<{ id: string }>(`/api/cost-items/${item.id}`, { method: "PATCH", body })
+            : await api<{ id: string }>(`/api/cost-sections/${section.id}/items`, { body });
+          if (receiver !== undefined && receiver !== (item?.receiverId ?? null)) {
+            await api(`/api/cost-items/${saved.id}/receiver`, { method: "PUT", body: { participantId: receiver } });
+          }
+        });
         if (ok) onDone();
       }}
     >
@@ -631,8 +775,8 @@ function ItemForm({ section, sections, item, onDone }: { section: Section; secti
         <Textarea name="description" maxLength={5000} defaultValue={item?.description ?? ""} className="min-h-20" />
       </label>
       <label className="block lg:col-span-2">
-        <Label>Valor unitário (R$)</Label>
-        <Input inputMode="decimal" required value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="0,00" className="min-h-11 text-right tabular-nums" />
+        <Label hint="(vazio = a definir)">Valor unitário (R$)</Label>
+        <Input inputMode="decimal" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="0,00" className="min-h-11 text-right tabular-nums" />
       </label>
       <label className="block">
         <Label>Quantidade</Label>
@@ -651,6 +795,14 @@ function ItemForm({ section, sections, item, onDone }: { section: Section; secti
           <option value="A vista" />
         </datalist>
       </label>
+      {canSend ? (
+        <label className="block lg:col-span-3">
+          <Label hint="(vê nome, descritivo e quantidade, sem valores)">Quem recebe no campo</Label>
+          <ReceiverSelect name="receiver" defaultValue={item?.receiverId ?? null} className="min-h-11" />
+        </label>
+      ) : item?.receiverName ? (
+        <p className="text-sm lg:col-span-6"><span className="text-muted">Quem recebe no campo:</span> {item.receiverName}</p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 lg:col-span-6">
         <label className="flex min-h-11 items-center gap-2 text-sm">
           <input type="checkbox" checked={optional} onChange={(e) => setOptional(e.target.checked)} className="h-5 w-5 accent-[var(--color-primary)]" />
@@ -665,7 +817,7 @@ function ItemForm({ section, sections, item, onDone }: { section: Section; secti
           </label>
         )}
         <p className="ml-auto text-sm">
-          Subtotal <strong className="tabular-nums">{preview === null ? "—" : brl(preview)}</strong>
+          Subtotal <strong className="tabular-nums">{preview === null ? "A definir" : brl(preview)}</strong>
         </p>
       </div>
       <div className="lg:col-span-6"><FormError message={error} /></div>

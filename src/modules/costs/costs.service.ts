@@ -1,14 +1,15 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canSendToField, canUsePreProduction } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
-import { NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { parseDecimal } from "../../lib/money";
 import { requireEventAccess } from "../events/events.service";
 import { readMatrix, writeMatrix, type Matrix, type MatrixHeader } from "./matrix";
 import { costTotals, DEFAULT_RATES, lineSubtotal, type CostBilling, type CostRates } from "./totals";
+import { fieldText } from "../receipts/field-text";
 
 /**
  * Pré-produção: planilha de custos (orçamento) do evento, no formato da
@@ -45,18 +46,18 @@ function ratesOf(sheet: { feePct: unknown; invoiceTaxPct: unknown; nfTaxPct: unk
 
 const itemSelect = {
   id: true, sectionId: true, position: true, name: true, description: true, paymentTerms: true,
-  unitValue: true, quantity: true, frequency: true, optional: true, billing: true,
+  unitValue: true, quantity: true, frequency: true, optional: true, billing: true, receiverId: true,
 } as const;
 
 type ItemRow = {
   id: string; sectionId: string; position: number; name: string; description: string | null; paymentTerms: string | null;
-  unitValue: unknown; quantity: unknown; frequency: unknown; optional: boolean; billing: CostBilling;
+  unitValue: unknown; quantity: unknown; frequency: unknown; optional: boolean; billing: CostBilling; receiverId: string | null;
 };
 
 const toItem = (i: ItemRow) => {
   const line = {
     ...i,
-    unitValue: num(i.unitValue),
+    unitValue: i.unitValue === null ? null : num(i.unitValue),
     quantity: num(i.quantity),
     frequency: i.frequency === null ? null : num(i.frequency),
   };
@@ -68,8 +69,45 @@ async function loadSheet(tx: Tx, eventId: string) {
   const sheet = await tx.costSheet.findUnique({ where: { eventId } });
   const sections = await tx.costSection.findMany({ where: { eventId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, position: true } });
   const items = await tx.costItem.findMany({ where: { eventId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: itemSelect });
+  // Campo: quem recebe e a conferência de cada item (a cópia enviada não tem valores).
+  const receiverIds = [...new Set(items.map((i) => i.receiverId).filter((x): x is string => !!x))];
+  const people = receiverIds.length
+    ? await tx.participant.findMany({ where: { id: { in: receiverIds } }, select: { id: true, name: true } })
+    : [];
+  const receipts = await tx.itemReceipt.findMany({
+    where: { eventId },
+    select: {
+      costItemId: true, receiverId: true, sectionName: true, name: true, description: true, quantity: true,
+      status: true, receivedQuantity: true, receivedDescription: true, note: true, receivedAt: true, sentAt: true,
+      photos: { select: { id: true } },
+    },
+  });
+  const nameOf = new Map(people.map((p) => [p.id, p.name]));
+  const receiptOf = new Map(receipts.map((r) => [r.costItemId, r]));
+  const sectionName = new Map(sections.map((x) => [x.id, x.name]));
   const rates = ratesOf(sheet);
-  const rows = items.map(toItem);
+  const rows = items.map((raw) => {
+    const i = toItem(raw);
+    const r = receiptOf.get(i.id);
+    return {
+      ...i,
+      receiverName: i.receiverId ? (nameOf.get(i.receiverId) ?? null) : null,
+      receipt: r
+        ? {
+            status: r.status,
+            sentAt: r.sentAt,
+            receivedAt: r.receivedAt,
+            receivedQuantity: r.receivedQuantity === null ? null : Number(r.receivedQuantity),
+            receivedDescription: r.receivedDescription,
+            note: r.note,
+            photoIds: r.photos.map((p) => p.id),
+            /** O item mudou depois de enviado: falta "Enviar para o campo" de novo. */
+            stale: r.receiverId !== i.receiverId || r.name !== fieldText(i.name) || r.description !== fieldText(i.description)
+              || Number(r.quantity) !== i.quantity || r.sectionName !== sectionName.get(i.sectionId),
+          }
+        : null,
+    };
+  });
   const header: MatrixHeader = {
     title: sheet?.title ?? null,
     clientName: sheet?.clientName ?? null,
@@ -83,17 +121,27 @@ async function loadSheet(tx: Tx, eventId: string) {
     rates,
     sections: sections.map((s) => {
       const own = rows.filter((i) => i.sectionId === s.id);
-      return { ...s, items: own, total: own.filter((i) => !i.optional).reduce((a, i) => a + i.subtotal, 0) };
+      return { ...s, items: own, total: own.filter((i) => !i.optional).reduce((a, i) => a + (i.subtotal ?? 0), 0) };
     }),
     totals: costTotals(rows, rates),
     itemCount: rows.length,
+    field: {
+      withReceiver: rows.filter((i) => i.receiverId).length,
+      sent: receipts.length,
+      ok: receipts.filter((r) => r.status === "OK").length,
+      different: receipts.filter((r) => r.status === "DIFERENTE").length,
+      pending: receipts.filter((r) => r.status === "PENDENTE").length,
+      /** Algo mudou (pessoa ou item) desde o último envio. */
+      outdated: rows.some((i) => (i.receiverId && !i.receipt) || i.receipt?.stale) || receipts.length > rows.filter((i) => i.receiverId).length,
+    },
   };
 }
 
 /** A planilha inteira do evento: cabeçalho, percentuais, seções, itens e totais. */
 export async function getCostSheet(actor: Actor, eventId: string) {
   requirePreProduction(actor, eventId);
-  return actor.run((tx) => loadSheet(tx, eventId));
+  const sheet = await actor.run((tx) => loadSheet(tx, eventId));
+  return { ...sheet, can: { sendToField: canSendToField(actor, eventId) } };
 }
 
 const pct = (max: number) => z.coerce.number().min(0, "Mínimo 0%").max(max, `Máximo ${max}%`);
@@ -198,6 +246,7 @@ export async function deleteCostSection(actor: Actor, id: string) {
   return actor.run(async (tx) => {
     const s = await loadSection(actor, tx, id);
     const items = await tx.costItem.count({ where: { sectionId: s.id } });
+    await dropReceipts(actor, tx, s.eventId, { costItem: { sectionId: s.id } });
     await tx.costSection.delete({ where: { id: s.id } });
     await audit(tx, actor, { eventId: s.eventId, entity: "cost_section", entityId: s.id, action: "DELETE", before: { name: s.name, items } });
     return { ok: true };
@@ -218,7 +267,8 @@ const itemFields = {
   name: text(200),
   description: optionalText(5000),
   paymentTerms: optionalText(60),
-  unitValue: money,
+  /** Em branco = a definir. */
+  unitValue: money.nullable().optional(),
   quantity: amount,
   frequency: amount.nullable().optional(),
   optional: z.boolean().optional(),
@@ -288,10 +338,27 @@ export async function updateCostItem(actor: Actor, id: string, input: unknown) {
 export async function deleteCostItem(actor: Actor, id: string) {
   return actor.run(async (tx) => {
     const i = await loadItem(actor, tx, id);
+    await dropReceipts(actor, tx, i.eventId, { costItemId: i.id });
     await tx.costItem.delete({ where: { id: i.id } });
     await audit(tx, actor, { eventId: i.eventId, entity: "cost_item", entityId: i.id, action: "DELETE", before: auditItem({ name: i.name, unitValue: i.unitValue, quantity: i.quantity }) });
     return { ok: true };
   });
+}
+
+/**
+ * Apagar itens que já foram para o campo apaga a conferência deles: só o
+ * gestor (que é quem envia) pode. O banco também barra (FK RESTRICT + RLS).
+ */
+async function dropReceipts(actor: Actor, tx: Tx, eventId: string, where: { costItemId?: string; costItem?: { sectionId: string } }) {
+  const n = await tx.itemReceipt.count({ where: { eventId, ...where } });
+  if (!n) return;
+  if (!canSendToField(actor, eventId)) {
+    throw new ConflictError(n === 1
+      ? "Este item já foi enviado para o campo. Só o gerente pode apagá-lo."
+      : `${n} itens já foram enviados para o campo. Só o gerente pode apagá-los.`);
+  }
+  await tx.itemReceipt.deleteMany({ where: { eventId, ...where } });
+  await audit(tx, actor, { eventId, entity: "cost_sheet", entityId: eventId, action: "DELETE", after: { receiptsRemoved: n } });
 }
 
 // ─────────────────────── Importar e baixar a matriz ───────────────────────
@@ -311,7 +378,7 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
     sections: m.sections.map((s) => ({
       name: s.name,
       count: s.items.length,
-      total: s.items.filter((i) => !i.optional).reduce((a, i) => a + lineSubtotal(i), 0),
+      total: s.items.filter((i) => !i.optional).reduce((a, i) => a + (lineSubtotal(i) ?? 0), 0),
     })),
     itemCount: items.length,
     optionalCount: items.filter((i) => i.optional).length,
@@ -325,8 +392,10 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
 
   return actor.run(async (tx) => {
     const existing = await tx.costItem.count({ where: { eventId } });
-    if (!opts.confirm) return { ...preview, replaces: existing, saved: false };
+    const sentToField = await tx.itemReceipt.count({ where: { eventId } });
+    if (!opts.confirm) return { ...preview, replaces: existing, sentToField, canReplaceSent: canSendToField(actor, eventId), saved: false };
 
+    await dropReceipts(actor, tx, eventId, {});
     await tx.costItem.deleteMany({ where: { eventId } });
     await tx.costSection.deleteMany({ where: { eventId } });
     const sections = await tx.costSection.createManyAndReturn({
@@ -345,7 +414,7 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
       eventId, entity: "cost_sheet", entityId: eventId, action: "UPDATE",
       after: { imported: opts.fileName?.slice(0, 200) ?? "planilha", sections: m.sections.length, items: items.length, replaced: existing, total: Math.round(totals.total * 100) / 100 },
     });
-    return { ...preview, replaces: existing, saved: true };
+    return { ...preview, replaces: existing, sentToField, canReplaceSent: canSendToField(actor, eventId), saved: true };
   });
 }
 

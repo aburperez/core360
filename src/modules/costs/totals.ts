@@ -9,7 +9,8 @@
  *   total             = direto + (fatura + encargos) + (NF + honorários + encargos NF)
  *
  * Itens opcionais aparecem na planilha, mas ficam fora dos totais (na matriz,
- * o subtotal deles é o texto "OPCIONAL", que a SOMASE ignora).
+ * o subtotal deles é o texto "OPCIONAL", que a SOMASE ignora). Item sem valor
+ * unitário está "a definir" e também fica fora até alguém preencher.
  * As contas são feitas em ponto flutuante, como o Excel; o arredondamento
  * para centavos é só na hora de mostrar.
  */
@@ -23,7 +24,8 @@ export const BILLING_LABEL: Record<CostBilling, string> = {
 };
 
 export interface CostLine {
-  unitValue: number;
+  /** null = a definir. */
+  unitValue: number | null;
   quantity: number;
   frequency: number | null;
   optional: boolean;
@@ -39,8 +41,10 @@ export interface CostRates {
 
 export const DEFAULT_RATES: CostRates = { feePct: 15, invoiceTaxPct: 9.5, nfTaxPct: 17.5 };
 
-export const lineSubtotal = (i: Pick<CostLine, "unitValue" | "quantity" | "frequency">) =>
-  i.unitValue * i.quantity * (i.frequency ?? 1);
+/** Subtotal do item; null enquanto o valor estiver a definir. */
+export function lineSubtotal(i: Pick<CostLine, "unitValue" | "quantity" | "frequency">): number | null {
+  return i.unitValue === null ? null : i.unitValue * i.quantity * (i.frequency ?? 1);
+}
 
 /** "Por dentro": o valor que, tirado o encargo, sobra `base`. */
 const grossUp = (base: number, pct: number) => base / (1 - pct / 100) - base;
@@ -48,9 +52,11 @@ const grossUp = (base: number, pct: number) => base / (1 - pct / 100) - base;
 export function costTotals(items: CostLine[], rates: CostRates) {
   const by: Record<CostBilling, number> = { FATURA: 0, NOTA_FISCAL: 0, DIRETO: 0 };
   let optional = 0;
+  let undefinedCount = 0;
   for (const i of items) {
     const v = lineSubtotal(i);
-    if (i.optional) optional += v;
+    if (v === null) undefinedCount++;
+    else if (i.optional) optional += v;
     else by[i.billing] += v;
   }
   const suppliers = by.DIRETO + by.FATURA + by.NOTA_FISCAL;
@@ -72,6 +78,8 @@ export function costTotals(items: CostLine[], rates: CostRates) {
     total: by.DIRETO + invoiceTotal + nfTotal,
     /** Soma dos opcionais, se todos fossem contratados (só informativo). */
     optional,
+    /** Itens ainda sem valor ("a definir"), fora dos totais. */
+    undefinedCount,
   };
 }
 

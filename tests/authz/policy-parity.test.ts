@@ -6,6 +6,7 @@ import {
   canCreateOccurrence,
   canManageTeams,
   canReviewSla,
+  canSendToField,
   canUsePreProduction,
   canSeeArea,
   canSeeOccurrence,
@@ -69,6 +70,8 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_use_pre_production($1::uuid) AS r`, ev));
           check(`rever SLA em ${ev}`, canReviewSla(actor, ev),
             await q(`SELECT app.can_review_sla($1::uuid) AS r`, ev));
+          check(`enviar itens para o campo em ${ev}`, canSendToField(actor, ev),
+            await q(`SELECT app.can_send_to_field($1::uuid) AS r`, ev));
         }
 
         for (const o of Object.values(d.occurrences)) {

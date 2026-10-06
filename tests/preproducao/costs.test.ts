@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { actorFor, appDb, demo, expectPgError, expectStatus, type Person } from "../helpers";
 import { withUser, type Tx } from "@/server/db/with-user";
 import {
@@ -16,6 +16,17 @@ import {
   updateCostSheet,
 } from "@/modules/costs/costs.service";
 import { readMatrix } from "@/modules/costs/matrix";
+import {
+  addReceiptPhoto,
+  checkReceipt,
+  listReceipts,
+  receiptPhoto,
+  sendToField,
+  setItemReceiver,
+  setSectionReceiver,
+} from "@/modules/receipts/receipts.service";
+import { HIDDEN_VALUE } from "@/modules/receipts/field-text";
+import { memoryStorage, setStorageForTests } from "@/server/storage/storage";
 import { costTotals, DEFAULT_RATES } from "@/modules/costs/totals";
 
 /**
@@ -28,6 +39,7 @@ import { costTotals, DEFAULT_RATES } from "@/modules/costs/totals";
 const db = appDb();
 const d = demo();
 afterAll(() => db.$disconnect());
+beforeAll(() => setStorageForTests(memoryStorage()));
 
 const rock = d.events.rock.id;
 const congresso = d.events.congresso.id;
@@ -263,5 +275,124 @@ describe("o banco segura sozinho (RLS)", () => {
       as("admin", (tx) => tx.costItem.create({ data: { eventId: congresso, sectionId: otherSection.id, position: 1, name: "X", unitValue: -1, quantity: 1 } })),
       "23514",
     );
+  });
+});
+
+describe("itens da planilha no campo (sem valores)", () => {
+  const P = d.participants;
+
+  it("valor em branco fica 'a definir' e fora do total", async () => {
+    const marina = await actorFor(db, "marina");
+    const sheet = await getCostSheet(marina, rock);
+    const before = sheet.totals.total;
+    const item = await createCostItem(marina, sheet.sections[0].id, { name: "Gerador reserva", unitValue: null, quantity: 1 });
+    expect(item).toMatchObject({ unitValue: null, subtotal: null });
+    const after = await getCostSheet(marina, rock);
+    expect(after.totals.total).toBe(before);
+    expect(after.totals.undefinedCount).toBe(1);
+    await updateCostItem(marina, item.id, { unitValue: "2.000,00" });
+    expect((await getCostSheet(marina, rock)).totals.total).toBeGreaterThan(before);
+    await deleteCostItem(marina, item.id);
+  });
+
+  it("só o Gerente escolhe quem recebe, e precisa ser alguém do campo deste evento", async () => {
+    const marina = await actorFor(db, "marina");
+    const sofia = await actorFor(db, "sofia");
+    const [estrutura] = (await getCostSheet(marina, rock)).sections;
+    const item = estrutura.items[0];
+    await expectStatus(setItemReceiver(sofia, item.id, { participantId: P.joao.id }), 403);
+    await expectStatus(sendToField(sofia, rock), 403);
+    await expectPgError(as("sofia", (tx) => tx.costItem.update({ where: { id: item.id }, data: { receiverId: P.joao.id } })), "42501");
+    for (const bad of [P.claudia.id, P.sofia.id, P.joaoCongresso.id]) {
+      await expectStatus(setItemReceiver(marina, item.id, { participantId: bad }), 422);
+    }
+    await setItemReceiver(marina, item.id, { participantId: P.joao.id });
+  });
+
+  it("enviar para o campo: cada um vê só os seus itens, e nenhum valor sai da Pré-produção", async () => {
+    const marina = await actorFor(db, "marina");
+    const sheet = await getCostSheet(marina, rock);
+    const [, ativacoes] = sheet.sections;
+    await setSectionReceiver(marina, ativacoes.id, { participantId: P.carlos.id });
+    // Preço escrito no descritivo também não vai.
+    await updateCostItem(marina, sheet.sections[0].items[0].id, { description: "12 horas. Hora extra R$ 350,00 e diária US$ 1.200" });
+    const r = await sendToField(marina, rock);
+    expect(r.created).toBe(1 + ativacoes.items.length);
+
+    const joao = await listReceipts(await actorFor(db, "joao"), rock);
+    expect(joao.rows.map((x) => x.name)).toEqual([sheet.sections[0].items[0].name]);
+    const carlos = await listReceipts(await actorFor(db, "carlos"), rock);
+    expect(carlos.rows).toHaveLength(ativacoes.items.length);
+    expect((await listReceipts(await actorFor(db, "rafael"), rock)).rows).toEqual([]);
+    const everyone = (await listReceipts(marina, rock)).rows;
+    expect(everyone).toHaveLength(r.created);
+    // Na ordem da planilha, não em ordem alfabética.
+    expect(everyone.map((x) => x.name)).toEqual([sheet.sections[0].items[0], ...ativacoes.items].map((i) => i.name));
+    // Nada de preço no que o campo recebe.
+    const json = JSON.stringify([joao, carlos]);
+    for (const key of ["unitValue", "subtotal", "billing", "paymentTerms"]) expect(json).not.toContain(key);
+    expect(joao.rows[0].description).toBe(`12 horas. Hora extra ${HIDDEN_VALUE} e diária ${HIDDEN_VALUE}`);
+    expect((await getCostSheet(marina, rock)).sections[0].items[0].receipt?.stale).toBe(false);
+    // Nem direto no banco: quem recebe não lê a planilha.
+    expect(await as("joao", (tx) => tx.costItem.count({ where: { eventId: rock } }))).toBe(0);
+    expect(await as("joao", (tx) => tx.itemReceipt.count({ where: { eventId: rock } }))).toBe(1);
+    // A Pré-produção não abre os recebimentos do campo (ela acompanha pela planilha).
+    await expectStatus(listReceipts(await actorFor(db, "sofia"), rock), 404);
+  });
+
+  it("quem recebe confere; diferente pede explicação; ninguém confere item alheio", async () => {
+    const joao = await actorFor(db, "joao");
+    const carlos = await actorFor(db, "carlos");
+    const [mine] = (await listReceipts(joao, rock)).rows;
+    await expectStatus(checkReceipt(joao, mine.id, { status: "DIFERENTE", receivedQuantity: 1 }), 422);
+    await expectStatus(checkReceipt(carlos, mine.id, { status: "OK" }), 404);
+    const done = await checkReceipt(joao, mine.id, { status: "DIFERENTE", receivedQuantity: "1", receivedDescription: "Painel P3", note: "Faltou um painel" });
+    expect(done).toMatchObject({ status: "DIFERENTE", receivedQuantity: 1, note: "Faltou um painel" });
+    // Direto no banco: quem recebe não muda o item enviado nem assina por outra pessoa.
+    await expectPgError(as("joao", (tx) => tx.itemReceipt.update({ where: { id: mine.id }, data: { quantity: 99 } })), "42501");
+    await expectPgError(as("joao", (tx) => tx.itemReceipt.update({ where: { id: mine.id }, data: { receivedById: d.users.carlos! } })), "42501");
+
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...Array.from({ length: 64 }, (_, i) => i)]);
+    const photo = await addReceiptPhoto(joao, mine.id, jpeg);
+    expect((await receiptPhoto(await actorFor(db, "marina"), photo.id)).mimeType).toBe("image/jpeg");
+    await expectStatus(receiptPhoto(carlos, photo.id), 404);
+    await expectStatus(addReceiptPhoto(carlos, mine.id, jpeg), 404);
+
+    // A planilha mostra a conferência para a Pré-produção.
+    const sheet = await getCostSheet(await actorFor(db, "sofia"), rock);
+    const item = sheet.sections[0].items[0];
+    expect(item.receipt).toMatchObject({ status: "DIFERENTE", receivedQuantity: 1, stale: false });
+    expect(item.receipt!.photoIds).toEqual([photo.id]);
+    expect(sheet.field).toMatchObject({ different: 1, outdated: false });
+  });
+
+  it("item mudou depois do envio: reenviar volta a conferência para aguardando", async () => {
+    const marina = await actorFor(db, "marina");
+    const item = (await getCostSheet(marina, rock)).sections[0].items[0];
+    await updateCostItem(marina, item.id, { quantity: item.quantity + 1 });
+    const sheet = await getCostSheet(marina, rock);
+    expect(sheet.sections[0].items[0].receipt?.stale).toBe(true);
+    expect(sheet.field.outdated).toBe(true);
+    expect(await sendToField(marina, rock)).toMatchObject({ updated: 1, created: 0 });
+    const [mine] = (await listReceipts(await actorFor(db, "joao"), rock)).rows;
+    expect(mine).toMatchObject({ status: "PENDENTE", quantity: item.quantity + 1, note: null });
+  });
+
+  it("item já no campo: só o Gerente apaga ou importa por cima", async () => {
+    const marina = await actorFor(db, "marina");
+    const sofia = await actorFor(db, "sofia");
+    const item = (await getCostSheet(marina, rock)).sections[0].items[0];
+    await expectStatus(deleteCostItem(sofia, item.id), 409);
+    const { bytes } = await sampleMatrix();
+    const preview = await importCostSheet(sofia, rock, bytes, { confirm: false });
+    expect(preview).toMatchObject({ canReplaceSent: false });
+    expect(preview.sentToField).toBeGreaterThan(0);
+    await expectStatus(importCostSheet(sofia, rock, bytes, { confirm: true }), 409);
+    await expectPgError(as("marina", (tx) => tx.costItem.delete({ where: { id: item.id } })), "23503");
+
+    await deleteCostItem(marina, item.id);
+    expect((await listReceipts(await actorFor(db, "joao"), rock)).rows).toEqual([]);
+    await importCostSheet(marina, rock, bytes, { confirm: true });
+    expect((await listReceipts(marina, rock)).rows).toEqual([]);
   });
 });

@@ -39,7 +39,8 @@ export interface MatrixItem {
   name: string;
   description: string | null;
   paymentTerms: string | null;
-  unitValue: number;
+  /** Em branco na planilha = a definir. */
+  unitValue: number | null;
   quantity: number;
   frequency: number | null;
   optional: boolean;
@@ -290,16 +291,16 @@ export async function readMatrix(bytes: Uint8Array): Promise<ParsedMatrix> {
       name,
       description: clean(cell(row, cols.description).text, 5000),
       paymentTerms: clean(cell(row, cols.terms).text, 60),
-      unitValue: round(Math.max(0, unit.num ?? 0), 2),
+      unitValue: unit.num === null ? null : round(Math.max(0, unit.num), 2),
       quantity: round(Math.max(0, qty.num ?? 0), 3),
       frequency: frequency === null ? null : round(Math.max(0, frequency), 3),
       optional,
       billing,
     };
-    if (unit.num === null) warnings.push(`${where} (${name}): sem valor unitário; ficou R$ 0,00.`);
     if (unit.num !== null && unit.num !== item.unitValue) warnings.push(`${where} (${name}): valor unitário arredondado para centavos.`);
     // Subtotal digitado à mão (sem fórmula) e diferente da conta.
-    if (!optional && !sub.formula && sub.num !== null && Math.abs(sub.num - lineSubtotal(item)) > 0.005) {
+    const computed = lineSubtotal(item);
+    if (!optional && !sub.formula && sub.num !== null && computed !== null && Math.abs(sub.num - computed) > 0.005) {
       warnings.push(`${where} (${name}): o subtotal digitado (${sub.num}) não bate com unitário × quantidade × frequência; usei a conta.`);
     }
     sections[sections.length - 1].items.push(item);
@@ -397,12 +398,12 @@ export async function writeMatrix(m: Matrix): Promise<Uint8Array> {
       row.getCell(2).value = it.name;
       row.getCell(3).value = it.description ?? "";
       row.getCell(4).value = it.paymentTerms ?? "";
-      row.getCell(5).value = it.unitValue;
+      if (it.unitValue !== null) row.getCell(5).value = it.unitValue;
       row.getCell(6).value = it.quantity;
       if (it.frequency !== null) row.getCell(7).value = it.frequency;
       row.getCell(8).value = it.optional
         ? "OPCIONAL"
-        : { formula: it.frequency === null ? `E${r}*F${r}` : `E${r}*F${r}*G${r}`, result: lineSubtotal(it) };
+        : { formula: it.frequency === null ? `E${r}*F${r}` : `E${r}*F${r}*G${r}`, result: lineSubtotal(it) ?? 0 };
       row.getCell(9).value = BILLING_EXCEL[it.billing];
       row.getCell(5).numFmt = BRL;
       row.getCell(8).numFmt = BRL;

@@ -106,6 +106,15 @@ enum AuditAction {
   @@map("audit_action")
 }
 
+/// Conferência do item no campo.
+enum ReceiptStatus {
+  PENDENTE
+  OK
+  DIFERENTE
+
+  @@map("receipt_status")
+}
+
 /// Como o item é cobrado (coluna "Tipo de faturamento" da matriz de orçamento).
 enum CostBilling {
   FATURA
@@ -280,6 +289,8 @@ model Event {
   costSheet     CostSheet?
   costSections  CostSection[]
   costItems     CostItem[]
+  itemReceipts  ItemReceipt[]
+  receiptPhotos ReceiptPhoto[]
 
   @@index([clientId])
   @@index([status])
@@ -363,6 +374,8 @@ model Participant {
   responsibleOccurrences Occurrence[]        @relation("OccurrenceResponsible")
   invitations            Invitation[]
   serviceTypes           ServiceTypePerson[]
+  costItemsToReceive     CostItem[]          @relation("CostItemReceiver")
+  itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -720,6 +733,7 @@ model CostSection {
 
 /// Item do orçamento: subtotal = valor unitário × quantidade × frequência
 /// (sem frequência, conta 1). Opcional aparece mas fica fora dos totais.
+/// Sem valor unitário = "a definir": fica fora dos totais até ser preenchido.
 model CostItem {
   id           String      @id @default(uuid(7)) @db.Uuid
   eventId      String      @map("event_id") @db.Uuid
@@ -728,17 +742,79 @@ model CostItem {
   name         String
   description  String?
   paymentTerms String?     @map("payment_terms")
-  unitValue    Decimal     @map("unit_value") @db.Decimal(14, 2)
+  unitValue    Decimal?    @map("unit_value") @db.Decimal(14, 2)
   quantity     Decimal     @db.Decimal(12, 3)
   frequency    Decimal?    @db.Decimal(12, 3)
   optional     Boolean     @default(false)
   billing      CostBilling @default(FATURA)
+  /// Quem recebe o item no campo (escolhido pelo Gerente).
+  receiverId   String?     @map("receiver_id") @db.Uuid
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event   Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  section CostSection @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
+  event    Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  section  CostSection  @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
+  receiver Participant? @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
+  receipt  ItemReceipt?
 
+  @@unique([eventId, id])
   @@index([eventId, sectionId, position])
   @@map("cost_items")
+}
+
+// ─────────────── Itens no campo: recebimento (sem valores) ───────────────
+
+/// O que vai para o campo quando o Gerente "envia": cópia do item SEM valores
+/// (nome, descritivo, quantidade, seção) para quem recebe, e a conferência
+/// que essa pessoa faz. Os preços ficam só em cost_items (Pré-produção).
+model ItemReceipt {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  eventId             String        @map("event_id") @db.Uuid
+  costItemId          String        @unique @map("cost_item_id") @db.Uuid
+  receiverId          String        @map("receiver_id") @db.Uuid
+  sectionName         String        @map("section_name")
+  /// Ordem da planilha (seção, depois item) no último envio.
+  position            Int           @default(0)
+  name                String
+  description         String?
+  quantity            Decimal       @db.Decimal(12, 3)
+  status              ReceiptStatus @default(PENDENTE)
+  receivedQuantity    Decimal?      @map("received_quantity") @db.Decimal(12, 3)
+  receivedDescription String?       @map("received_description")
+  note                String?
+  receivedAt          DateTime?     @map("received_at") @db.Timestamptz(3)
+  receivedById        String?       @map("received_by") @db.Uuid
+  sentAt              DateTime      @default(now()) @map("sent_at") @db.Timestamptz(3)
+  sentById            String        @map("sent_by") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  costItem CostItem       @relation(fields: [eventId, costItemId], references: [eventId, id], onDelete: Restrict)
+  receiver Participant    @relation("ItemReceiptReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
+  photos   ReceiptPhoto[]
+
+  @@unique([eventId, id])
+  @@unique([eventId, costItemId])
+  @@index([eventId, receiverId])
+  @@map("item_receipts")
+}
+
+/// Foto da conferência (ex.: o item que chegou diferente).
+model ReceiptPhoto {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  eventId      String   @map("event_id") @db.Uuid
+  receiptId    String   @map("receipt_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  sha256       String
+  uploadedById String   @map("uploaded_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event   Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  receipt ItemReceipt @relation(fields: [eventId, receiptId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([receiptId, sha256])
+  @@map("receipt_photos")
 }

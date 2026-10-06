@@ -161,3 +161,14 @@ export function canReviewSla(a: Actor, eventId: string): boolean {
   if (a.isAdmin) return true;
   return membershipFor(a, eventId)?.role === "GERENTE";
 }
+
+/** Escolher quem recebe cada item da planilha e enviar para o campo: só o gestor. */
+export function canSendToField(a: Actor, eventId: string): boolean {
+  if (a.isAdmin) return true;
+  return membershipFor(a, eventId)?.role === "GERENTE";
+}
+
+/** A participação da pessoa logada neste evento é esta? (quem recebe um item) */
+export function isMe(a: Actor, eventId: string, participantId: string): boolean {
+  return membershipFor(a, eventId)?.participantId === participantId;
+}

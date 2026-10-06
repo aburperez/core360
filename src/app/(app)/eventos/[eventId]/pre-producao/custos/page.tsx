@@ -3,6 +3,7 @@ import { requireUser } from "@/server/http/session";
 import { canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getCostSheet } from "@/modules/costs/costs.service";
+import { listReceiverOptions } from "@/modules/receipts/receipts.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
@@ -15,14 +16,14 @@ export default async function CostsPage({ params }: PageProps<"/eventos/[eventId
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, sheet] = await Promise.all([getEvent(actor, eventId), getCostSheet(actor, eventId)]);
+  const [event, sheet, receivers] = await Promise.all([getEvent(actor, eventId), getCostSheet(actor, eventId), listReceiverOptions(actor, eventId)]);
 
   return (
     <>
       <TopBar title="Custos" subtitle={event.name} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
-        <CostsEditor eventId={eventId} sheet={sheet} />
+        <CostsEditor eventId={eventId} sheet={sheet} receivers={receivers} />
       </main>
     </>
   );

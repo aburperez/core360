@@ -9,6 +9,8 @@ type NavProps = {
   eventId: string; canCreate: boolean; canSeeTickets: boolean; canBuildTeam: boolean; canSwitchEvent: boolean;
   /** Pré-produtor não tem campo; Head, Operacional e Cliente não têm Pré-produção. */
   canUseField: boolean; canUsePre: boolean;
+  /** Itens da planilha enviados para conferir no campo (para esta pessoa, ou o gerente). */
+  hasReceipts: boolean;
 };
 
 type Item = { href: string; label: string; icon: string; active: boolean; primary?: boolean };
@@ -35,6 +37,7 @@ export function EventNav(props: NavProps) {
     ...(props.canSeeTickets ? [{ href: `${base}/ocorrencias`, label: "Chamados", icon: "☰", active: path.startsWith(`${base}/ocorrencias`) && !path.endsWith("/nova") }] : []),
     ...(props.canCreate ? [{ href: `${base}/ocorrencias/nova`, label: "Novo", icon: "+", active: path.endsWith("/nova"), primary: true }] : []),
     { href: `${base}/equipe`, label: props.canBuildTeam ? "Montar equipe" : "Equipe", icon: "👥", active: path.startsWith(`${base}/equipe`) },
+    ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", icon: "📦", active: path.startsWith(`${base}/recebimentos`) }] : []),
   ];
   const create = items.find((it) => it.primary);
   const links = items.filter((it) => !it.primary);
