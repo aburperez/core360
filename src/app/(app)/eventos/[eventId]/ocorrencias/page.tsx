@@ -3,7 +3,7 @@ import { requireUser } from "@/server/http/session";
 import { membershipFor } from "@/server/authz/actor";
 import { listOccurrences } from "@/modules/occurrences/occurrences.service";
 import { TopBar } from "@/components/top-bar";
-import { EmptyState, cx } from "@/components/ui";
+import { EmptyState, PAGE, cx } from "@/components/ui";
 import { OccurrenceCard } from "@/components/occurrence-card";
 import { STATUS_LABEL } from "@/lib/format";
 
@@ -32,14 +32,14 @@ export default async function OccurrencesPage({ params, searchParams }: PageProp
     <>
       <TopBar title="Chamados" subtitle={`${items.length} ${items.length === 1 ? "item" : "itens"}`} />
       <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-10 bg-background">
-        <div className="mx-auto flex max-w-2xl gap-2 overflow-x-auto px-4 py-2">
+        <div className={cx(PAGE, "flex gap-2 overflow-x-auto py-2")}>
           {FILTERS.map((f) => (
             <Link
               key={f.key}
               href={`?filtro=${f.key}`}
               className={cx(
                 "shrink-0 rounded-full border px-4 py-2 text-sm font-medium",
-                filter.key === f.key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface",
+                filter.key === f.key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface transition hover:border-primary/60",
               )}
             >
               {f.label}
@@ -47,11 +47,13 @@ export default async function OccurrencesPage({ params, searchParams }: PageProp
           ))}
         </div>
       </div>
-      <main className="mx-auto max-w-2xl space-y-3 px-4 py-2">
+      <main className={cx(PAGE, "grid gap-3 py-2 lg:grid-cols-2 lg:py-4 xl:grid-cols-3")}>
         {items.length === 0 && (
-          <EmptyState title={isClient ? "Ocorrências são internas da operação" : "Nada por aqui"}>
-            {isClient ? "Como cliente, você acompanha a estrutura e a equipe do evento." : `Nenhum chamado em "${filter.label ?? STATUS_LABEL[status as keyof typeof STATUS_LABEL]}".`}
-          </EmptyState>
+          <div className="lg:col-span-2 xl:col-span-3">
+            <EmptyState title={isClient ? "Ocorrências são internas da operação" : "Nada por aqui"}>
+              {isClient ? "Como cliente, você acompanha a estrutura e a equipe do evento." : `Nenhum chamado em "${filter.label ?? STATUS_LABEL[status as keyof typeof STATUS_LABEL]}".`}
+            </EmptyState>
+          </div>
         )}
         {items.map((o) => <OccurrenceCard key={o.id} o={o} eventId={eventId} />)}
       </main>

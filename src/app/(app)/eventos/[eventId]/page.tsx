@@ -2,8 +2,8 @@ import { requireUser } from "@/server/http/session";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { TopBar } from "@/components/top-bar";
-import { Card, EmptyState, LinkButton, SectionTitle, Stat } from "@/components/ui";
-import { OccurrenceCard } from "@/components/occurrence-card";
+import { Card, EmptyState, LinkButton, PAGE, SectionTitle, Stat, cx } from "@/components/ui";
+import { OccurrenceCard, type OccurrenceRow } from "@/components/occurrence-card";
 import { ROLE_LABEL, formatDuration } from "@/lib/format";
 
 export const metadata = { title: "Início" };
@@ -20,29 +20,23 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   return (
     <>
       <TopBar title={event.name} subtitle={`${ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
-      <main className="mx-auto max-w-2xl px-4 py-4">
+      <main className={cx(PAGE, "py-4 lg:py-6")}>
         {"structure" in dash ? (
           <>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-3 lg:max-w-2xl">
               <Stat label="Áreas" value={dash.structure.areas} />
               <Stat label="Equipes" value={dash.structure.teams} />
               <Stat label="Pessoas" value={dash.structure.people} />
             </div>
-            <LinkButton href={`${base}/equipe`} className="mt-4 w-full">Montar equipe</LinkButton>
+            <LinkButton href={`${base}/equipe`} className="mt-4 w-full lg:w-auto">Montar equipe</LinkButton>
           </>
         ) : (
           <>
-            {dash.mine.length > 0 && (
-              <>
-                <SectionTitle>Comigo agora</SectionTitle>
-                <div className="space-y-3">
-                  {dash.mine.map((o) => <OccurrenceCard key={o.id} o={o} eventId={eventId} />)}
-                </div>
-              </>
-            )}
+            {/* Celular: o que está com a pessoa vem antes dos números. */}
+            {dash.mine.length > 0 && <div className="lg:hidden"><Mine rows={dash.mine} eventId={eventId} /></div>}
 
             <SectionTitle>Ocorrências {scopeLabel}</SectionTitle>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
               <Stat label="Urgentes" value={dash.totals.urgente} tone={dash.totals.urgente ? "text-red-400" : undefined} href={`${base}/ocorrencias?status=URGENTE`} />
               <Stat label="Bloqueios" value={dash.totals.bloqueio} tone={dash.totals.bloqueio ? "text-purple-300" : undefined} href={`${base}/ocorrencias?status=BLOQUEIO`} />
               <Stat label="Pendentes" value={dash.totals.pendente} href={`${base}/ocorrencias?status=PENDENTE`} />
@@ -51,33 +45,58 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
               <Stat label="Total" value={dash.totals.total} href={`${base}/ocorrencias?filtro=todas`} />
             </div>
 
-            <SectionTitle>SLA</SectionTitle>
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Tempo médio" value={<span className="text-2xl">{formatDuration(dash.sla.avgSeconds)}</span>} />
-              <Stat label="No prazo" value={dash.sla.concluded ? `${Math.round((dash.sla.onTime / dash.sla.concluded) * 100)}%` : "—"} />
-              <Stat label="Atrasadas abertas" value={dash.sla.breachedOpen} tone={dash.sla.breachedOpen ? "text-red-400" : undefined} />
-            </div>
-
-            {dash.urgent.length > 0 && (
-              <>
-                <SectionTitle>Atenção</SectionTitle>
-                <div className="space-y-3">
-                  {dash.urgent.map((o) => <OccurrenceCard key={o.id} o={o} eventId={eventId} />)}
-                </div>
-              </>
-            )}
-
-            {dash.byArea.length > 1 && <Breakdown title="Por área" rows={dash.byArea} />}
-            {dash.byTeam.length > 0 && <Breakdown title="Por equipe" rows={dash.byTeam} />}
-
-            {dash.totals.total === 0 && (
-              <div className="mt-4">
-                <EmptyState title="Nenhuma ocorrência ainda">Use o botão + para abrir a primeira.</EmptyState>
+            {/* Computador: chamados à esquerda, indicadores à direita. */}
+            <div className="flex flex-col lg:grid lg:grid-cols-3 lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-6">
+              <div className="order-2 lg:col-span-2 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+                {dash.mine.length > 0 && <div className="hidden lg:block"><Mine rows={dash.mine} eventId={eventId} /></div>}
+                {dash.urgent.length > 0 && (
+                  <>
+                    <SectionTitle>Atenção</SectionTitle>
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {dash.urgent.map((o) => <OccurrenceCard key={o.id} o={o} eventId={eventId} />)}
+                    </div>
+                  </>
+                )}
+                {dash.totals.total === 0 && (
+                  <div className="mt-4 lg:mt-6">
+                    <EmptyState title="Nenhuma ocorrência ainda">Use o botão + para abrir a primeira.</EmptyState>
+                  </div>
+                )}
+                {dash.mine.length === 0 && dash.urgent.length === 0 && dash.totals.total > 0 && (
+                  <div className="mt-6 hidden lg:block">
+                    <EmptyState title="Nada urgente agora">Nenhum chamado urgente, bloqueado ou com você.</EmptyState>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div className="order-1 lg:col-start-3 lg:row-start-1">
+                <SectionTitle>SLA</SectionTitle>
+                <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
+                  <Stat label="Tempo médio" value={<span className="text-2xl">{formatDuration(dash.sla.avgSeconds)}</span>} />
+                  <Stat label="No prazo" value={dash.sla.concluded ? `${Math.round((dash.sla.onTime / dash.sla.concluded) * 100)}%` : "—"} />
+                  <Stat label="Atrasadas abertas" value={dash.sla.breachedOpen} tone={dash.sla.breachedOpen ? "text-red-400" : undefined} />
+                </div>
+              </div>
+
+              <div className="order-3 lg:col-start-3 lg:row-start-2">
+                {dash.byArea.length > 1 && <Breakdown title="Por área" rows={dash.byArea} />}
+                {dash.byTeam.length > 0 && <Breakdown title="Por equipe" rows={dash.byTeam} />}
+              </div>
+            </div>
           </>
         )}
       </main>
+    </>
+  );
+}
+
+function Mine({ rows, eventId }: { rows: OccurrenceRow[]; eventId: string }) {
+  return (
+    <>
+      <SectionTitle>Comigo agora</SectionTitle>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {rows.map((o) => <OccurrenceCard key={o.id} o={o} eventId={eventId} />)}
+      </div>
     </>
   );
 }

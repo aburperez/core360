@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { listEvents } from "@/modules/events/events.service";
 import { TopBar } from "@/components/top-bar";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, PAGE, cx } from "@/components/ui";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
 
 export const metadata = { title: "Eventos" };
@@ -23,12 +23,14 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   return (
     <>
       <TopBar title="Meus eventos" subtitle={actor.name} brand />
-      <main className="mx-auto max-w-2xl space-y-3 px-4 py-4">
+      <main className={cx(PAGE, "grid gap-3 py-4 lg:grid-cols-2 lg:py-6 xl:grid-cols-3")}>
         {events.length === 0 && (
-          <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>
+          <div className="lg:col-span-2 xl:col-span-3">
+            <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>
+          </div>
         )}
         {events.map((e) => (
-          <Link key={e.id} href={`/eventos/${e.id}`} className="block rounded-2xl border border-border bg-surface p-4 active:scale-[0.99] transition">
+          <Link key={e.id} href={`/eventos/${e.id}`} className="block rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.99]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-lg font-semibold">{e.name}</p>

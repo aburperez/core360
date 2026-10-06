@@ -20,7 +20,7 @@ export function OccurrenceCard({ o, eventId }: { o: OccurrenceRow; eventId: stri
   return (
     <Link
       href={`/eventos/${eventId}/ocorrencias/${o.id}`}
-      className="block rounded-2xl border border-border bg-surface p-4 active:scale-[0.99] transition"
+      className="block rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.99]"
     >
       <div className="flex items-start justify-between gap-3">
         <p className="min-w-0 font-semibold leading-snug">

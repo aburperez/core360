@@ -42,7 +42,20 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* No computador o mouse precisa de mãozinha e o teclado de foco visível. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--brand-cyan);
+    outline-offset: 2px;
+  }
+}
+
 /* Espaço para a barra inferior fixa + área segura do iPhone. */
-.pb-nav {
+@utility pb-nav {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }

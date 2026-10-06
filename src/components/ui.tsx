@@ -3,6 +3,12 @@ import type { ComponentProps, ReactNode } from "react";
 import type { OccurrenceStatus, Priority } from "../generated/prisma/enums";
 import { PRIORITY_LABEL, PRIORITY_STYLE, STATUS_LABEL, STATUS_STYLE, slaText } from "../lib/format";
 
+/**
+ * Largura das telas: uma coluna no celular; no computador (lg) a tela se abre
+ * até 6xl ao lado do menu lateral. Usada pela barra do topo e pelo conteúdo.
+ */
+export const PAGE = "mx-auto w-full max-w-2xl px-4 lg:max-w-6xl lg:px-8";
+
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
 }
@@ -65,7 +71,7 @@ const buttonStyles = {
 export function buttonClass(variant: keyof typeof buttonStyles = "primary", className?: string) {
   return cx(
     "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-base font-semibold",
-    "active:scale-[0.98] transition disabled:opacity-50 disabled:pointer-events-none",
+    "active:scale-[0.98] transition hover:brightness-110 disabled:opacity-50 disabled:pointer-events-none",
     buttonStyles[variant],
     className,
   );
@@ -87,7 +93,7 @@ export function Stat({ label, value, tone, href }: { label: string; value: React
     </>
   );
   return href ? (
-    <Link href={href} className="block rounded-2xl border border-border bg-surface p-4 active:scale-[0.98] transition">
+    <Link href={href} className="block rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.98]">
       {body}
     </Link>
   ) : (

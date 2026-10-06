@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { canSeeEvent, canBuildTeam } from "@/server/authz/policy";
 import { membershipFor } from "@/server/authz/actor";
-import { BottomNav } from "@/components/bottom-nav";
+import { EventNav } from "@/components/event-nav";
 
 export default async function EventLayout({ children, params }: LayoutProps<"/eventos/[eventId]">) {
   const actor = await requireUser();
@@ -10,9 +10,15 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
   if (!canSeeEvent(actor, eventId)) notFound();
   const role = actor.isAdmin ? "ADMIN" : membershipFor(actor, eventId)?.role;
   return (
-    <div className="pb-nav">
+    <div className="pb-nav lg:pb-0 lg:pl-60">
       {children}
-      <BottomNav eventId={eventId} canCreate={role !== "CLIENTE"} canSeeTickets={role !== "CLIENTE"} canBuildTeam={canBuildTeam(actor, eventId)} />
+      <EventNav
+        eventId={eventId}
+        canCreate={role !== "CLIENTE"}
+        canSeeTickets={role !== "CLIENTE"}
+        canBuildTeam={canBuildTeam(actor, eventId)}
+        canSwitchEvent={actor.memberships.length > 1 || actor.isAdmin}
+      />
     </div>
   );
 }

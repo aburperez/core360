@@ -11,7 +11,7 @@ export default async function NotificationsPage() {
   const [{ items, unread }, whatsapp] = await Promise.all([listNotifications(actor), getWhatsappSettings(actor)]);
   return (
     <>
-      <TopBar title="Avisos" subtitle={unread ? `${unread} não lidos` : "Tudo lido"} back="/eventos" />
+      <TopBar title="Avisos" subtitle={unread ? `${unread} não lidos` : "Tudo lido"} back="/eventos" narrow />
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-4">
         <NotificationList
           unread={unread}

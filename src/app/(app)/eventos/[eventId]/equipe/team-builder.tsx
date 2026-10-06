@@ -299,7 +299,7 @@ function InlineAdd({ label, placeholder, onSave, block }: { label: string; place
       : <button type="button" className="text-sm font-semibold text-primary" onClick={() => setOpen(true)}>{label}</button>;
   }
   return (
-    <form className={cx("flex gap-2", !block && "fixed inset-x-0 bottom-24 z-40 mx-auto max-w-2xl px-4")}
+    <form className={cx("flex gap-2", !block && "fixed inset-x-0 bottom-24 z-40 mx-auto max-w-2xl px-4 lg:bottom-8 lg:left-60")}
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);

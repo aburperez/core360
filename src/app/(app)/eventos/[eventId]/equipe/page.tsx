@@ -6,6 +6,7 @@ import { listAreas } from "@/modules/areas/areas.service";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listParticipants } from "@/modules/participants/participants.service";
 import { TopBar } from "@/components/top-bar";
+import { PAGE, cx } from "@/components/ui";
 import { TeamBuilder } from "./team-builder";
 
 export const metadata = { title: "Montar equipe" };
@@ -28,25 +29,27 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
   return (
     <>
       <TopBar title={assignableRoles(actor, eventId, me?.areaId).length ? "Montar equipe" : "Equipe"} subtitle={event.name} />
-      <main className="mx-auto max-w-2xl px-4 py-4">
-        <TeamBuilder
-          eventId={eventId}
-          myUserId={actor.userId}
-          canAddArea={canManageAreas(actor, eventId)}
-          areas={areas.map((a) => ({
-            id: a.id,
-            name: a.name,
-            canAddTeam: canManageTeams(actor, { eventId, areaId: a.id }),
-            roles: assignableRoles(actor, eventId, a.id),
-          }))}
-          eventRoles={assignableRoles(actor, eventId, null)}
-          teams={teams.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId }))}
-          people={people.map((p) => ({
-            id: p.id, name: p.name, email: p.email, phone: p.phone, jobTitle: p.jobTitle, role: p.role,
-            areaId: p.areaId, teamId: p.teamId, active: p.active, joined: !!p.userId, invited: !!p.invitedAt,
-            mine: p.userId === actor.userId,
-          }))}
-        />
+      <main className={cx(PAGE, "py-4 lg:py-6")}>
+        <div className="lg:max-w-3xl">
+          <TeamBuilder
+            eventId={eventId}
+            myUserId={actor.userId}
+            canAddArea={canManageAreas(actor, eventId)}
+            areas={areas.map((a) => ({
+              id: a.id,
+              name: a.name,
+              canAddTeam: canManageTeams(actor, { eventId, areaId: a.id }),
+              roles: assignableRoles(actor, eventId, a.id),
+            }))}
+            eventRoles={assignableRoles(actor, eventId, null)}
+            teams={teams.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId }))}
+            people={people.map((p) => ({
+              id: p.id, name: p.name, email: p.email, phone: p.phone, jobTitle: p.jobTitle, role: p.role,
+              areaId: p.areaId, teamId: p.teamId, active: p.active, joined: !!p.userId, invited: !!p.invitedAt,
+              mine: p.userId === actor.userId,
+            }))}
+          />
+        </div>
       </main>
     </>
   );

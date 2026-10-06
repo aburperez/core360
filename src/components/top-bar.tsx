@@ -3,15 +3,19 @@ import { LogoutButton } from "./logout-button";
 import { ConnectionBanner } from "./connection-banner";
 import { NotificationBell } from "./notification-bell";
 import { BrandWordmark } from "./brand";
+import { PAGE, cx } from "./ui";
 
-/** Barra do topo na cor da marca. `brand` mostra o logo no lugar do título (tela inicial). */
-export function TopBar({ title, subtitle, back, brand }: { title: string; subtitle?: string; back?: string; brand?: boolean }) {
+/**
+ * Barra do topo na cor da marca. `brand` mostra o logo no lugar do título (tela inicial).
+ * `narrow` mantém a coluna estreita no computador (telas fora do evento, como Avisos).
+ */
+export function TopBar({ title, subtitle, back, brand, narrow }: { title: string; subtitle?: string; back?: string; brand?: boolean; narrow?: boolean }) {
   return (
     <header className="sticky top-0 z-20 bg-brand-navy text-white pt-[env(safe-area-inset-top)]">
       <ConnectionBanner />
-      <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-3">
+      <div className={cx("flex items-center gap-2 py-3", narrow ? "mx-auto max-w-2xl px-4" : PAGE)}>
         {back && (
-          <Link href={back} aria-label="Voltar" className="-ml-2 flex h-11 w-11 items-center justify-center rounded-xl text-2xl text-white">
+          <Link href={back} aria-label="Voltar" className="-ml-2 flex h-11 w-11 items-center justify-center rounded-xl text-2xl text-white transition hover:bg-white/10">
             ‹
           </Link>
         )}
