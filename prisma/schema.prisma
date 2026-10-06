@@ -187,6 +187,8 @@ model User {
   slaReviewed          SlaProposal[]    @relation("SlaProposalReviewedBy")
   briefingsUpdated     Briefing[]       @relation("BriefingUpdatedBy")
   dailyNotesUpdated    DailyNote[]      @relation("DailyNoteUpdatedBy")
+  director             Director?        @relation("DirectorUser")
+  directorsCreated     Director[]       @relation("DirectorCreatedBy")
 
   @@map("users")
 }
@@ -364,15 +366,18 @@ model Participant {
   invitedAt   DateTime?       @map("invited_at") @db.Timestamptz(3)
   joinedAt    DateTime?       @map("joined_at") @db.Timestamptz(3)
   createdById String?         @map("created_by") @db.Uuid
+  /// Diretor de produção: participação criada sozinha pelo banco (veja Director).
+  directorId  String?         @map("director_id") @db.Uuid
   createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(3)
 
-  event     Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  user      User? @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
-  area      Area? @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction)
-  team      Team? @relation("ParticipantTeam", fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: NoAction)
-  createdBy User? @relation("ParticipantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user      User?     @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
+  director  Director? @relation(fields: [directorId], references: [id], onDelete: Restrict)
+  area      Area?     @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction)
+  team      Team?     @relation("ParticipantTeam", fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: NoAction)
+  createdBy User?     @relation("ParticipantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   leadsTeams             Team[]              @relation("TeamLeader")
   responsibleOccurrences Occurrence[]        @relation("OccurrenceResponsible")
@@ -385,7 +390,31 @@ model Participant {
   @@unique([eventId, email])
   @@unique([eventId, id])
   @@index([eventId, areaId, teamId])
+  @@index([directorId])
   @@map("participants")
+}
+
+/// Diretor de produção da agência: o Admin cadastra uma vez e o banco o põe
+/// como Gerente em todos os eventos abertos, inclusive os criados depois.
+/// A função continua sendo por evento (uma participação em cada um).
+model Director {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  email       String   @unique @db.Citext
+  phone       String?
+  jobTitle    String?  @map("job_title")
+  /// Preenchido quando o diretor aceita o convite; liga todas as participações.
+  userId      String?  @unique @map("user_id") @db.Uuid
+  active      Boolean  @default(true)
+  createdById String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user         User?         @relation("DirectorUser", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy    User          @relation("DirectorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  participants Participant[]
+
+  @@map("directors")
 }
 
 /// Convite de acesso. Guarda só o hash do token; o link é mostrado uma única vez.

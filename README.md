@@ -119,4 +119,5 @@ tests/         db (constraints), auth, authz (paridade), security (10 cenários:
 - [x] Pré-produção 3: planilha de custos no formato da matriz de orçamento (seções, itens, opcionais, fatura/NF/direto, honorários e encargos), importação do .xlsx com prévia e "Baixar Excel" com as fórmulas
 - [x] Itens da planilha no campo: o Gerente escolhe quem recebe cada item (ou seção) e envia; quem recebe confere em "Recebimentos" (chegou certo ou diferente, com foto). O campo nunca recebe valores. Valor em branco = "a definir"
 - [x] Pré-produção 2: briefing por pessoa (a Pré-produção escreve, a pessoa lê em "Meu briefing" e confirma; tipos e contatos entram sozinhos) e relatório diário (chamados e recebimentos do dia, observações do Gerente, "Baixar Excel")
+- [x] Diretores de produção: o Admin cadastra uma vez (Meus eventos › Diretores de produção) e a pessoa entra como Gerente em todos os eventos abertos e nos novos. Um convite liga a conta em todos; desativar tira de todos
 - [ ] Etapa 10: PWA instalável, revisão de segurança e deploy
