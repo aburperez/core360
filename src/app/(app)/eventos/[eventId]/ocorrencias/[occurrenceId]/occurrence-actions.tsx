@@ -76,7 +76,7 @@ export function OccurrenceActions({
               <Button variant="secondary" onClick={() => setStatus("BLOQUEIO")} disabled={!!busy}>Bloqueio</Button>
             )}
             {o.status !== "URGENTE" && (
-              <Button variant="secondary" className="text-red-600" onClick={() => setStatus("URGENTE")} disabled={!!busy}>Urgente</Button>
+              <Button variant="secondary" className="text-red-600 dark:text-red-400" onClick={() => setStatus("URGENTE")} disabled={!!busy}>Urgente</Button>
             )}
           </div>
         </Card>

@@ -35,7 +35,7 @@ export function NotificationBell() {
     <Link href="/avisos" aria-label={label} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-xl">
       <span aria-hidden>🔔</span>
       {count > 0 && (
-        <span className="absolute right-0.5 top-0.5 min-w-5 rounded-full bg-accent px-1 text-center text-xs font-bold leading-5 text-white">
+        <span className="absolute right-0.5 top-0.5 min-w-5 rounded-full bg-accent px-1 text-center text-xs font-bold leading-5 text-accent-foreground">
           {count > 99 ? "99+" : count}
         </span>
       )}

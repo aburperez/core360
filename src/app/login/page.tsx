@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { currentActor } from "@/server/http/session";
 import { LoginForm } from "./login-form";
+import { BrandHero } from "@/components/brand";
 
 export const metadata = { title: "Entrar" };
 
@@ -13,16 +14,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const next = safeNext((await searchParams).next);
   if (await currentActor()) redirect(next);
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-5 py-10">
-      <div className="mb-8 flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="" className="h-12 w-12" />
-        <div>
-          <h1 className="text-2xl font-bold">CORE 360</h1>
-          <p className="text-sm text-muted">Gestão de campo</p>
-        </div>
+    <main className="min-h-dvh">
+      <BrandHero>
+        <h1 className="sr-only">CORE 360</h1>
+        <p className="mt-3 text-sm font-medium tracking-wide text-brand-cyan">Gestão de campo</p>
+      </BrandHero>
+      <div className="mx-auto max-w-sm px-5 py-8">
+        <LoginForm next={next} />
       </div>
-      <LoginForm next={next} />
     </main>
   );
 }

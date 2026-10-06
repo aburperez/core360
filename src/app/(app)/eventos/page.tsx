@@ -22,7 +22,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
 
   return (
     <>
-      <TopBar title="Meus eventos" subtitle={actor.name} />
+      <TopBar title="Meus eventos" subtitle={actor.name} brand />
       <main className="mx-auto max-w-2xl space-y-3 px-4 py-4">
         {events.length === 0 && (
           <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>

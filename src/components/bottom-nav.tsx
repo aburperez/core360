@@ -27,7 +27,7 @@ export function BottomNav({ eventId, canCreate, canSeeTickets, canBuildTeam }: {
               )}
             >
               {"primary" in it && it.primary ? (
-                <span className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-3xl font-bold text-white shadow-lg">
+                <span className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-3xl font-bold text-accent-foreground shadow-lg ring-4 ring-surface">
                   +
                 </span>
               ) : (

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: { default: "CORE 360", template: "%s · CORE 360" },
   description: "Gestão de campo para eventos: equipes, ocorrências, SLA e evidências.",
   applicationName: "CORE 360",
-  appleWebApp: { capable: true, title: "CORE 360", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "CORE 360", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
@@ -17,8 +17,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f5f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0f17" },
+    // A barra do topo é azul-marinho nos dois temas, então a barra do celular acompanha.
+    { media: "(prefers-color-scheme: light)", color: "#043246" },
+    { media: "(prefers-color-scheme: dark)", color: "#043246" },
   ],
 };
 

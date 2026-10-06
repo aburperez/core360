@@ -1,27 +1,36 @@
 @import "tailwindcss";
 
-/* CORE 360 — alto contraste para uso em campo (sol, pressa, uma mão só). */
+/*
+ * CORE 360 — cores da marca (logo): azul-marinho #043246, ciano #00E5ED e branco.
+ * Alto contraste para uso em campo (sol, pressa, uma mão só): o ciano nunca é
+ * usado como texto sobre branco (contraste baixo); no claro ele é fundo com
+ * texto marinho, no escuro vira a cor principal.
+ */
 :root {
-  --background: #f4f5f7;
+  --brand-navy: #043246;
+  --brand-cyan: #00e5ed;
+  --background: #f1f5f7;
   --surface: #ffffff;
-  --foreground: #111827;
-  --muted: #5b6472;
-  --border: #dde1e7;
-  --primary: #1f3a8a;
+  --foreground: #0a1f2b;
+  --muted: #4d6270;
+  --border: #d3dee4;
+  --primary: #043246;
   --primary-foreground: #ffffff;
-  --accent: #ea580c;
+  --accent: #00e5ed;
+  --accent-foreground: #043246;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0f17;
-    --surface: #151b26;
-    --foreground: #f1f4f9;
-    --muted: #9aa4b2;
-    --border: #273042;
-    --primary: #7aa2ff;
-    --primary-foreground: #0b0f17;
-    --accent: #fb923c;
+    --background: #021c28;
+    --surface: #062b3c;
+    --foreground: #eef7fa;
+    --muted: #94adb9;
+    --border: #15435a;
+    --primary: #00e5ed;
+    --primary-foreground: #043246;
+    --accent: #00e5ed;
+    --accent-foreground: #043246;
   }
 }
 
@@ -34,6 +43,9 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-cyan: var(--brand-cyan);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

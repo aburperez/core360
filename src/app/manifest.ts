@@ -7,9 +7,13 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Ocorrências, equipes e SLA de eventos.",
     start_url: "/eventos",
     display: "standalone",
-    background_color: "#f4f5f7",
-    theme_color: "#1f3a8a",
+    background_color: "#043246",
+    theme_color: "#043246",
     lang: "pt-BR",
-    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
   };
 }
