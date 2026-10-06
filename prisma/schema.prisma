@@ -106,6 +106,15 @@ enum AuditAction {
   @@map("audit_action")
 }
 
+/// Como o item é cobrado (coluna "Tipo de faturamento" da matriz de orçamento).
+enum CostBilling {
+  FATURA
+  NOTA_FISCAL
+  DIRETO
+
+  @@map("cost_billing")
+}
+
 enum SlaProposalStatus {
   PENDENTE
   APROVADA
@@ -155,18 +164,18 @@ model User {
 
   sessions             Session[]
   accounts             Account[]
-  participations       Participant[]      @relation("ParticipantUser")
-  participantsCreated  Participant[]      @relation("ParticipantCreatedBy")
+  participations       Participant[]    @relation("ParticipantUser")
+  participantsCreated  Participant[]    @relation("ParticipantCreatedBy")
   invitationsCreated   Invitation[]
-  occurrencesCreated   Occurrence[]       @relation("OccurrenceCreatedBy")
-  occurrencesConcluded Occurrence[]       @relation("OccurrenceConcludedBy")
-  occurrencesValidated Occurrence[]       @relation("OccurrenceValidatedBy")
+  occurrencesCreated   Occurrence[]     @relation("OccurrenceCreatedBy")
+  occurrencesConcluded Occurrence[]     @relation("OccurrenceConcludedBy")
+  occurrencesValidated Occurrence[]     @relation("OccurrenceValidatedBy")
   attachments          Attachment[]
   notifications        Notification[]
   whatsapp             WhatsappContact?
-  serviceTypesCreated  ServiceType[]      @relation("ServiceTypeCreatedBy")
-  slaProposed          SlaProposal[]      @relation("SlaProposalProposedBy")
-  slaReviewed          SlaProposal[]      @relation("SlaProposalReviewedBy")
+  serviceTypesCreated  ServiceType[]    @relation("ServiceTypeCreatedBy")
+  slaProposed          SlaProposal[]    @relation("SlaProposalProposedBy")
+  slaReviewed          SlaProposal[]    @relation("SlaProposalReviewedBy")
 
   @@map("users")
 }
@@ -268,6 +277,9 @@ model Event {
   notifications Notification[]
   invitations   Invitation[]
   serviceTypes  ServiceType[]
+  costSheet     CostSheet?
+  costSections  CostSection[]
+  costItems     CostItem[]
 
   @@index([clientId])
   @@index([status])
@@ -322,33 +334,33 @@ model Team {
 
 /// A pessoa dentro de um evento. É daqui que vem o escopo de acesso.
 model Participant {
-  id        String          @id @default(uuid(7)) @db.Uuid
-  eventId   String          @map("event_id") @db.Uuid
+  id          String          @id @default(uuid(7)) @db.Uuid
+  eventId     String          @map("event_id") @db.Uuid
   /// Preenchido quando a pessoa aceita o convite / faz login com este e-mail.
-  userId    String?         @map("user_id") @db.Uuid
-  name      String
-  email     String          @db.Citext
-  phone     String?
-  jobTitle  String?         @map("job_title")
-  role      ParticipantRole
-  areaId    String?         @map("area_id") @db.Uuid
-  teamId    String?         @map("team_id") @db.Uuid
-  active    Boolean         @default(true)
-  invitedAt DateTime?       @map("invited_at") @db.Timestamptz(3)
-  joinedAt  DateTime?       @map("joined_at") @db.Timestamptz(3)
-  createdById String?       @map("created_by") @db.Uuid
-  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  userId      String?         @map("user_id") @db.Uuid
+  name        String
+  email       String          @db.Citext
+  phone       String?
+  jobTitle    String?         @map("job_title")
+  role        ParticipantRole
+  areaId      String?         @map("area_id") @db.Uuid
+  teamId      String?         @map("team_id") @db.Uuid
+  active      Boolean         @default(true)
+  invitedAt   DateTime?       @map("invited_at") @db.Timestamptz(3)
+  joinedAt    DateTime?       @map("joined_at") @db.Timestamptz(3)
+  createdById String?         @map("created_by") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(3)
 
-  event     Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  user      User?  @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
-  area      Area?  @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction)
-  team      Team?  @relation("ParticipantTeam", fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: NoAction)
-  createdBy User?  @relation("ParticipantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  event     Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user      User? @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
+  area      Area? @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction)
+  team      Team? @relation("ParticipantTeam", fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: NoAction)
+  createdBy User? @relation("ParticipantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  leadsTeams             Team[]       @relation("TeamLeader")
-  responsibleOccurrences Occurrence[] @relation("OccurrenceResponsible")
+  leadsTeams             Team[]              @relation("TeamLeader")
+  responsibleOccurrences Occurrence[]        @relation("OccurrenceResponsible")
   invitations            Invitation[]
   serviceTypes           ServiceTypePerson[]
 
@@ -413,18 +425,18 @@ model Occurrence {
   createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  client      Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  event       Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  area        Area         @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: Restrict)
-  team        Team         @relation(fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: Restrict)
-  responsible Participant? @relation("OccurrenceResponsible", fields: [eventId, responsibleParticipantId], references: [eventId, id], onDelete: NoAction)
-  concludedBy User?        @relation("OccurrenceConcludedBy", fields: [concludedById], references: [id], onDelete: Restrict)
-  validatedBy User?        @relation("OccurrenceValidatedBy", fields: [validatedById], references: [id], onDelete: Restrict)
-  createdBy   User         @relation("OccurrenceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  serviceType ServiceType? @relation(fields: [eventId, areaId, teamId, serviceTypeId], references: [eventId, areaId, teamId, id], onDelete: NoAction)
-  attachments Attachment[]
+  client        Client             @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  area          Area               @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: Restrict)
+  team          Team               @relation(fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: Restrict)
+  responsible   Participant?       @relation("OccurrenceResponsible", fields: [eventId, responsibleParticipantId], references: [eventId, id], onDelete: NoAction)
+  concludedBy   User?              @relation("OccurrenceConcludedBy", fields: [concludedById], references: [id], onDelete: Restrict)
+  validatedBy   User?              @relation("OccurrenceValidatedBy", fields: [validatedById], references: [id], onDelete: Restrict)
+  createdBy     User               @relation("OccurrenceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  serviceType   ServiceType?       @relation(fields: [eventId, areaId, teamId, serviceTypeId], references: [eventId, areaId, teamId, id], onDelete: NoAction)
+  attachments   Attachment[]
   notifications Notification[]
-  changes     OccurrenceChange[]
+  changes       OccurrenceChange[]
 
   @@unique([eventId, number])
   @@unique([eventId, id])
@@ -511,9 +523,9 @@ model Notification {
   readAt       DateTime?        @map("read_at") @db.Timestamptz(3)
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event      Event?      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  occurrence Occurrence? @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      Event?                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  occurrence Occurrence?            @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
   deliveries NotificationDelivery[]
 
   @@unique([userId, dedupeKey])
@@ -548,11 +560,11 @@ model NotificationDelivery {
 
 /// Número de WhatsApp da pessoa e o aceite para receber avisos.
 model WhatsappContact {
-  userId     String    @id @map("user_id") @db.Uuid
-  phone      String
+  userId    String    @id @map("user_id") @db.Uuid
+  phone     String
   /// null = não quer receber avisos no WhatsApp.
-  optedInAt  DateTime? @map("opted_in_at") @db.Timestamptz(3)
-  updatedAt  DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  optedInAt DateTime? @map("opted_in_at") @db.Timestamptz(3)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -663,4 +675,70 @@ model ServiceTypePerson {
   @@id([serviceTypeId, participantId])
   @@index([eventId, participantId])
   @@map("service_type_people")
+}
+
+// ─────────────────── Pré-produção: planilha de custos ───────────────────
+
+/// Cabeçalho e percentuais do orçamento do evento (um por evento).
+/// Totais seguem a matriz: honorários sobre o subtotal de fornecedores;
+/// encargos "por dentro" (valor / (1 - %) - valor) na fatura e na NF.
+model CostSheet {
+  eventId            String   @id @map("event_id") @db.Uuid
+  title              String?
+  clientName         String?  @map("client_name")
+  projectName        String?  @map("project_name")
+  period             String?
+  clientPaymentTerms String?  @map("client_payment_terms")
+  author             String?
+  feePct             Decimal  @default(15) @map("fee_pct") @db.Decimal(5, 2)
+  invoiceTaxPct      Decimal  @default(9.5) @map("invoice_tax_pct") @db.Decimal(5, 2)
+  nfTaxPct           Decimal  @default(17.5) @map("nf_tax_pct") @db.Decimal(5, 2)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@map("cost_sheets")
+}
+
+/// Seção do orçamento (Estrutura, Cenografia, A&B...).
+model CostSection {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  position  Int
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event Event      @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  items CostItem[]
+
+  @@unique([eventId, id])
+  @@index([eventId, position])
+  @@map("cost_sections")
+}
+
+/// Item do orçamento: subtotal = valor unitário × quantidade × frequência
+/// (sem frequência, conta 1). Opcional aparece mas fica fora dos totais.
+model CostItem {
+  id           String      @id @default(uuid(7)) @db.Uuid
+  eventId      String      @map("event_id") @db.Uuid
+  sectionId    String      @map("section_id") @db.Uuid
+  position     Int
+  name         String
+  description  String?
+  paymentTerms String?     @map("payment_terms")
+  unitValue    Decimal     @map("unit_value") @db.Decimal(14, 2)
+  quantity     Decimal     @db.Decimal(12, 3)
+  frequency    Decimal?    @db.Decimal(12, 3)
+  optional     Boolean     @default(false)
+  billing      CostBilling @default(FATURA)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event   Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  section CostSection @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
+
+  @@index([eventId, sectionId, position])
+  @@map("cost_items")
 }

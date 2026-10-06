@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Lê e gera .xlsx (planilha de custos) com o require do Node, sem empacotar.
+  serverExternalPackages: ["exceljs"],
 };
 
 export default nextConfig;

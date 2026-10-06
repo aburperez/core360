@@ -116,6 +116,6 @@ tests/         db (constraints), auth, authz (paridade), security (10 cenários:
 - [x] Painel organizado para o computador (menu lateral a partir de 1024 px)
 - [x] Pré-produção 1: tipos de atendimento por equipe, SLA por tipo (proposto pelo pré-produtor, aprovado/ajustado/recusado pelo gerente com comentário) e planilha "quem faz o quê"
 - [x] Pré-produção separada do campo: papel Pré-produtor; só ele e o Gerente entram. O campo só lê nome e prazo dos tipos ao abrir chamado
+- [x] Pré-produção 3: planilha de custos no formato da matriz de orçamento (seções, itens, opcionais, fatura/NF/direto, honorários e encargos), importação do .xlsx com prévia e "Baixar Excel" com as fórmulas
 - [ ] Pré-produção 2: briefing por pessoa e relatório diário
-- [ ] Pré-produção 3: planilha de custos com exportação para Excel
 - [ ] Etapa 10: PWA instalável, revisão de segurança e deploy

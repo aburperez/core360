@@ -27,6 +27,7 @@ export function EventNav(props: NavProps) {
   const preItems: Item[] = [
     { href: pre, label: "Tipos e SLA", icon: "⏱", active: path === pre || path.startsWith(`${pre}/tipos`) },
     { href: `${pre}/quem-faz`, label: "Quem faz o quê", icon: "▦", active: path.startsWith(`${pre}/quem-faz`) },
+    { href: `${pre}/custos`, label: "Custos", icon: "$", active: path.startsWith(`${pre}/custos`) },
   ];
   const items: Item[] = [
     { href: base, label: "Início", icon: "◉", active: path === base },
