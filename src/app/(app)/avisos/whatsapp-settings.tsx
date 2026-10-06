@@ -45,7 +45,7 @@ export function WhatsappSettings({ initial }: { initial: { phone: string | null;
             onChange={(e) => { setPhone(e.target.value); setSaved(false); }} />
         </label>
         <FormError message={error} />
-        {saved && <p role="status" className="text-sm font-medium text-green-700 dark:text-green-400">{state.enabled ? "Avisos no WhatsApp ligados." : "Avisos no WhatsApp desligados."}</p>}
+        {saved && <p role="status" className="text-sm font-medium text-green-400">{state.enabled ? "Avisos no WhatsApp ligados." : "Avisos no WhatsApp desligados."}</p>}
         <div className="flex flex-wrap gap-2">
           {state.enabled ? (
             <>

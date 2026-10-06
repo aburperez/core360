@@ -76,7 +76,7 @@ export function OccurrenceActions({
               <Button variant="secondary" onClick={() => setStatus("BLOQUEIO")} disabled={!!busy}>Bloqueio</Button>
             )}
             {o.status !== "URGENTE" && (
-              <Button variant="secondary" className="text-red-600 dark:text-red-400" onClick={() => setStatus("URGENTE")} disabled={!!busy}>Urgente</Button>
+              <Button variant="secondary" className="text-red-400" onClick={() => setStatus("URGENTE")} disabled={!!busy}>Urgente</Button>
             )}
           </div>
         </Card>
@@ -123,7 +123,7 @@ export function OccurrenceActions({
               ))}
             </Select>
           </label>
-          <Button variant="ghost" className="w-full text-red-600" disabled={!!busy}
+          <Button variant="ghost" className="w-full text-red-400" disabled={!!busy}
             onClick={() => { if (confirm("Cancelar este chamado?")) setStatus("CANCELADO"); }}>
             Cancelar chamado
           </Button>

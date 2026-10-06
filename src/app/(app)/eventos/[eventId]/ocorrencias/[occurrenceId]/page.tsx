@@ -64,7 +64,7 @@ export default async function OccurrencePage({ params }: PageProps<"/eventos/[ev
             {o.concludedAt && (
               <Info
                 label="Duração"
-                value={<>{formatDuration(o.durationSeconds)} {o.slaBreached ? <span className="text-red-600">· fora do SLA</span> : <span className="text-emerald-600">· no prazo</span>}</>}
+                value={<>{formatDuration(o.durationSeconds)} {o.slaBreached ? <span className="text-red-400">· fora do SLA</span> : <span className="text-emerald-300">· no prazo</span>}</>}
               />
             )}
             {o.validationStatus !== "PENDENTE" && (

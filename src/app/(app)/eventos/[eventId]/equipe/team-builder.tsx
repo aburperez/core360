@@ -173,7 +173,7 @@ function PersonRow({ p, areaName, guard, canManage }: {
           </p>
         </div>
         <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-xs",
-          state === "Com acesso" ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200" : "bg-border text-muted")}>
+          state === "Com acesso" ? "bg-emerald-500/20 text-emerald-200" : "bg-border text-muted")}>
           {state}
         </span>
       </div>

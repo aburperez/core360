@@ -37,9 +37,9 @@ export function SlaPill({ dueAt, closed }: { dueAt: Date | string | null; closed
   const s = slaText(dueAt);
   if (s.tone === "none") return null;
   const tone = {
-    ok: "text-emerald-700 dark:text-emerald-300",
-    warn: "text-orange-600 dark:text-orange-300",
-    late: "text-red-600 dark:text-red-400 font-semibold",
+    ok: "text-emerald-300",
+    warn: "text-orange-300",
+    late: "text-red-400 font-semibold",
     none: "",
   }[s.tone];
   return <span className={cx("text-xs", tone)}>⏱ {s.text}</span>;

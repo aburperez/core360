@@ -1,37 +1,23 @@
 @import "tailwindcss";
 
 /*
- * CORE 360 — cores da marca (logo): azul-marinho #043246, ciano #00E5ED e branco.
- * Alto contraste para uso em campo (sol, pressa, uma mão só): o ciano nunca é
- * usado como texto sobre branco (contraste baixo); no claro ele é fundo com
- * texto marinho, no escuro vira a cor principal.
+ * CORE 360 — tema único, escuro, nas cores da marca (logo): azul-marinho
+ * #043246, ciano #00E5ED e branco. Não há tema claro: o app fica escuro mesmo
+ * com o celular no modo claro. O ciano é a cor de ação, com texto marinho.
  */
 :root {
+  color-scheme: dark;
   --brand-navy: #043246;
   --brand-cyan: #00e5ed;
-  --background: #f1f5f7;
-  --surface: #ffffff;
-  --foreground: #0a1f2b;
-  --muted: #4d6270;
-  --border: #d3dee4;
-  --primary: #043246;
-  --primary-foreground: #ffffff;
+  --background: #021c28;
+  --surface: #062b3c;
+  --foreground: #eef7fa;
+  --muted: #94adb9;
+  --border: #15435a;
+  --primary: #00e5ed;
+  --primary-foreground: #043246;
   --accent: #00e5ed;
   --accent-foreground: #043246;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #021c28;
-    --surface: #062b3c;
-    --foreground: #eef7fa;
-    --muted: #94adb9;
-    --border: #15435a;
-    --primary: #00e5ed;
-    --primary-foreground: #043246;
-    --accent: #00e5ed;
-    --accent-foreground: #043246;
-  }
 }
 
 @theme inline {

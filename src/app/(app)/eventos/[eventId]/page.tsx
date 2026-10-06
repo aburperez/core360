@@ -43,8 +43,8 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
 
             <SectionTitle>Ocorrências {scopeLabel}</SectionTitle>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Stat label="Urgentes" value={dash.totals.urgente} tone={dash.totals.urgente ? "text-red-600 dark:text-red-400" : undefined} href={`${base}/ocorrencias?status=URGENTE`} />
-              <Stat label="Bloqueios" value={dash.totals.bloqueio} tone={dash.totals.bloqueio ? "text-purple-700 dark:text-purple-300" : undefined} href={`${base}/ocorrencias?status=BLOQUEIO`} />
+              <Stat label="Urgentes" value={dash.totals.urgente} tone={dash.totals.urgente ? "text-red-400" : undefined} href={`${base}/ocorrencias?status=URGENTE`} />
+              <Stat label="Bloqueios" value={dash.totals.bloqueio} tone={dash.totals.bloqueio ? "text-purple-300" : undefined} href={`${base}/ocorrencias?status=BLOQUEIO`} />
               <Stat label="Pendentes" value={dash.totals.pendente} href={`${base}/ocorrencias?status=PENDENTE`} />
               <Stat label="Em andamento" value={dash.totals.emAndamento} href={`${base}/ocorrencias?status=EM_ANDAMENTO`} />
               <Stat label="Concluídas" value={dash.totals.concluido} href={`${base}/ocorrencias?status=CONCLUIDO`} />
@@ -55,7 +55,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
             <div className="grid grid-cols-3 gap-3">
               <Stat label="Tempo médio" value={<span className="text-2xl">{formatDuration(dash.sla.avgSeconds)}</span>} />
               <Stat label="No prazo" value={dash.sla.concluded ? `${Math.round((dash.sla.onTime / dash.sla.concluded) * 100)}%` : "—"} />
-              <Stat label="Atrasadas abertas" value={dash.sla.breachedOpen} tone={dash.sla.breachedOpen ? "text-red-600 dark:text-red-400" : undefined} />
+              <Stat label="Atrasadas abertas" value={dash.sla.breachedOpen} tone={dash.sla.breachedOpen ? "text-red-400" : undefined} />
             </div>
 
             {dash.urgent.length > 0 && (

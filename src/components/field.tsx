@@ -28,7 +28,7 @@ export function Textarea({ className, ...p }: ComponentProps<"textarea">) {
 export function FormError({ message }: { message?: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-500/15 dark:text-red-200">
+    <p role="alert" className="rounded-xl px-3 py-2 text-sm bg-red-500/15 text-red-200">
       {message}
     </p>
   );

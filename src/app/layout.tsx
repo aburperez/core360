@@ -16,11 +16,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    // A barra do topo é azul-marinho nos dois temas, então a barra do celular acompanha.
-    { media: "(prefers-color-scheme: light)", color: "#043246" },
-    { media: "(prefers-color-scheme: dark)", color: "#043246" },
-  ],
+  // App só no tema escuro; a barra do celular acompanha a barra do topo.
+  themeColor: "#043246",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
