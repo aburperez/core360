@@ -4,8 +4,14 @@ import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Entrar" };
 
-export default async function LoginPage() {
-  if (await currentActor()) redirect("/eventos");
+/** Só caminhos internos: evita mandar a pessoa para outro site depois do login. */
+function safeNext(v: string | string[] | undefined) {
+  return typeof v === "string" && v.startsWith("/") && !v.startsWith("//") && !v.includes("\\") ? v : "/eventos";
+}
+
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const next = safeNext((await searchParams).next);
+  if (await currentActor()) redirect(next);
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-5 py-10">
       <div className="mb-8 flex items-center gap-3">
@@ -16,7 +22,7 @@ export default async function LoginPage() {
           <p className="text-sm text-muted">Gestão de campo</p>
         </div>
       </div>
-      <LoginForm />
+      <LoginForm next={next} />
     </main>
   );
 }

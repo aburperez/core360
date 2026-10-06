@@ -15,8 +15,9 @@ export const currentActor = cache(async (): Promise<Actor | null> => {
   return loadActor(appPrisma(), session.user.id, { ip: ip && isIP(ip) ? ip : null, userAgent: h.get("user-agent") });
 });
 
-export async function requireUser(): Promise<Actor> {
+/** `next`: para onde voltar depois do login (ex.: link de um aviso). */
+export async function requireUser(next?: string): Promise<Actor> {
   const actor = await currentActor();
-  if (!actor) redirect("/login");
+  if (!actor) redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
   return actor;
 }

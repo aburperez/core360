@@ -111,8 +111,19 @@ enum NotificationType {
   SLA_PROXIMO
   SLA_ESTOURADO
   CONCLUIDA
+  ATRIBUIDA
+  REPROVADA
 
   @@map("notification_type")
+}
+
+enum DeliveryStatus {
+  PENDENTE
+  ENVIADO
+  FALHOU
+  IGNORADO
+
+  @@map("delivery_status")
 }
 
 // ─────────────────────── Identidade e sessão ───────────────────────
@@ -140,6 +151,7 @@ model User {
   occurrencesValidated Occurrence[]       @relation("OccurrenceValidatedBy")
   attachments          Attachment[]
   notifications        Notification[]
+  whatsapp             WhatsappContact?
 
   @@map("users")
 }
@@ -391,6 +403,7 @@ model Occurrence {
   createdBy   User         @relation("OccurrenceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   attachments Attachment[]
   notifications Notification[]
+  changes     OccurrenceChange[]
 
   @@unique([eventId, number])
   @@unique([eventId, id])
@@ -471,13 +484,73 @@ model Notification {
   type         NotificationType
   title        String
   body         String?
+  /// Evita o mesmo aviso duas vezes para a mesma pessoa (ex.: "urgente:<chamado>").
+  dedupeKey    String           @default(dbgenerated("(gen_random_uuid())::text")) @map("dedupe_key")
   readAt       DateTime?        @map("read_at") @db.Timestamptz(3)
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   event      Event?      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   occurrence Occurrence? @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
 
+  @@unique([userId, dedupeKey])
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+/// Envio de um aviso por um canal externo (hoje só WhatsApp).
+model NotificationDelivery {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  notificationId    String         @map("notification_id") @db.Uuid
+  channel           String         @default("WHATSAPP")
+  toPhone           String         @map("to_phone")
+  template          String
+  status            DeliveryStatus @default(PENDENTE)
+  attempts          Int            @default(0)
+  nextAttemptAt     DateTime       @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  providerMessageId String?        @map("provider_message_id")
+  lastError         String?        @map("last_error")
+  /// Botão "Assumir" já usado: cada mensagem vale uma vez.
+  actionUsedAt      DateTime?      @map("action_used_at") @db.Timestamptz(3)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  sentAt            DateTime?      @map("sent_at") @db.Timestamptz(3)
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel])
+  @@index([status, nextAttemptAt])
+  @@index([providerMessageId])
+  @@map("notification_deliveries")
+}
+
+/// Número de WhatsApp da pessoa e o aceite para receber avisos.
+model WhatsappContact {
+  userId     String    @id @map("user_id") @db.Uuid
+  phone      String
+  /// null = não quer receber avisos no WhatsApp.
+  optedInAt  DateTime? @map("opted_in_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_contacts")
+}
+
+/// Fila de mudanças nos chamados, gravada por trigger na mesma transação.
+/// O despacho de avisos lê daqui (padrão "outbox").
+model OccurrenceChange {
+  id           BigInt    @id @default(autoincrement())
+  occurrenceId String    @map("occurrence_id") @db.Uuid
+  eventId      String    @map("event_id") @db.Uuid
+  actorUserId  String?   @map("actor_user_id") @db.Uuid
+  kind         String
+  old          Json?
+  new          Json
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  processedAt  DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@map("occurrence_changes")
 }

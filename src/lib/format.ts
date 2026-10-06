@@ -69,3 +69,7 @@ export function formatDateTime(d: Date | string | null | undefined): string {
 export function formatDate(d: Date | string): string {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Sao_Paulo" }).format(new Date(d));
 }
+
+export function formatTime(d: Date | string): string {
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(d));
+}

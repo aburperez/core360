@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { FormError, Input, Label } from "@/components/field";
 
-export function LoginForm() {
+export function LoginForm({ next = "/eventos" }: { next?: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,7 +23,7 @@ export function LoginForm() {
       });
       if (res.status === 429) throw new Error("Muitas tentativas. Aguarde um minuto e tente de novo.");
       if (!res.ok) throw new Error("E-mail ou senha inválidos, ou acesso desativado.");
-      router.replace("/eventos");
+      router.replace(next);
       router.refresh();
     } catch (err) {
       setError(err instanceof TypeError ? "Sem conexão com o servidor." : (err as Error).message);

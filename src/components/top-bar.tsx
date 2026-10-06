@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LogoutButton } from "./logout-button";
 import { ConnectionBanner } from "./connection-banner";
+import { NotificationBell } from "./notification-bell";
 
 export function TopBar({ title, subtitle, back }: { title: string; subtitle?: string; back?: string }) {
   return (
@@ -16,6 +17,7 @@ export function TopBar({ title, subtitle, back }: { title: string; subtitle?: st
           <h1 className="truncate text-lg font-bold leading-tight">{title}</h1>
           {subtitle && <p className="truncate text-sm text-muted">{subtitle}</p>}
         </div>
+        <NotificationBell />
         <LogoutButton />
       </div>
     </header>

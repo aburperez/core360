@@ -9,6 +9,7 @@ export { pgCode };
 export const ownerDb = () => createPrismaClient(inject("ownerUrl"));
 export const appDb = () => createPrismaClient(inject("appUrl"));
 export const authDb = () => createPrismaClient(inject("authUrl"));
+export const workerDb = () => createPrismaClient(inject("workerUrl"));
 
 /** IDs do cenário Rock Festival 2027, criado uma vez por execução (global-setup). */
 export const demo = (): DemoData => inject("demo");

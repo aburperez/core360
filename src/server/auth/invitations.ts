@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { isIP } from "node:net";
 import { hashToken } from "../../lib/tokens";
+import { normalizePhone } from "../../lib/phone";
 import { parse } from "../../lib/validation";
 import { ValidationError } from "../errors";
 import { MIN_PASSWORD_LENGTH } from "./auth";
@@ -10,6 +11,8 @@ import { MIN_PASSWORD_LENGTH } from "./auth";
 const acceptSchema = z.object({
   token: z.string().min(20).max(200),
   password: z.string().min(MIN_PASSWORD_LENGTH, `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres`).max(128),
+  /** Aceite para receber avisos no WhatsApp (opcional). */
+  whatsapp: z.object({ phone: z.string().max(30), enabled: z.boolean() }).optional(),
 });
 
 const INVALID = "Convite inválido ou expirado";
@@ -18,13 +21,18 @@ const INVALID = "Convite inválido ou expirado";
 export async function previewInvitation(db: PrismaClient, token: string) {
   const inv = await db.invitation.findUnique({
     where: { tokenHash: hashToken(token) },
-    include: { participant: { select: { name: true, email: true, active: true, deletedAt: true } } },
+    include: { participant: { select: { name: true, email: true, phone: true, active: true, deletedAt: true } } },
   });
   if (!inv || inv.usedAt || inv.expiresAt < new Date() || !inv.participant.active || inv.participant.deletedAt) {
     throw new ValidationError(INVALID);
   }
   const existing = await db.user.findUnique({ where: { email: inv.participant.email }, select: { id: true } });
-  return { name: inv.participant.name, email: inv.participant.email, hasAccount: !!existing };
+  return {
+    name: inv.participant.name,
+    email: inv.participant.email,
+    phone: normalizePhone(inv.participant.phone),
+    hasAccount: !!existing,
+  };
 }
 
 /**
@@ -36,6 +44,10 @@ export async function previewInvitation(db: PrismaClient, token: string) {
 export async function acceptInvitation(db: PrismaClient, input: unknown, meta: { ip?: string | null } = {}) {
   const data = parse(acceptSchema, input);
   const tokenHash = hashToken(data.token);
+  const whatsappPhone = data.whatsapp?.enabled ? normalizePhone(data.whatsapp.phone) : null;
+  if (data.whatsapp?.enabled && !whatsappPhone) {
+    throw new ValidationError("Telefone inválido para o WhatsApp. Use DDD + número, ex.: (11) 98765-4321");
+  }
 
   return db.$transaction(async (tx) => {
     // Trava o convite para que dois aceites simultâneos não passem os dois.
@@ -67,10 +79,17 @@ export async function acceptInvitation(db: PrismaClient, input: unknown, meta: {
       data: { userId: user.id, joinedAt: inv.participant.joinedAt ?? new Date() },
     });
     await tx.invitation.update({ where: { id: inv.id }, data: { usedAt: new Date() } });
+    if (whatsappPhone) {
+      await tx.whatsappContact.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, phone: whatsappPhone, optedInAt: new Date() },
+        update: { phone: whatsappPhone, optedInAt: new Date(), updatedAt: new Date() },
+      });
+    }
     await tx.auditLog.createMany({
       data: {
         actorUserId: user.id, eventId: inv.eventId, entity: "participant", entityId: inv.participantId,
-        action: "UPDATE", after: { invitationAccepted: true }, ip: meta.ip && isIP(meta.ip) ? meta.ip : null,
+        action: "UPDATE", after: { invitationAccepted: true, whatsapp: !!whatsappPhone }, ip: meta.ip && isIP(meta.ip) ? meta.ip : null,
       },
     });
     return { email, userId: user.id, newAccount };

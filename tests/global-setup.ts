@@ -19,6 +19,7 @@ declare module "vitest" {
     ownerUrl: string;
     appUrl: string;
     authUrl: string;
+    workerUrl: string;
     demo: DemoData;
   }
 }
@@ -34,9 +35,10 @@ export default async function setup(project: TestProject) {
     owner: process.env.TEST_DATABASE_URL,
     app: process.env.TEST_APP_DATABASE_URL,
     auth: process.env.TEST_AUTH_DATABASE_URL,
+    worker: process.env.TEST_WORKER_DATABASE_URL,
   };
-  if (!base.owner || !base.app || !base.auth) {
-    throw new Error("Defina TEST_DATABASE_URL, TEST_APP_DATABASE_URL e TEST_AUTH_DATABASE_URL (veja .env.example)");
+  if (!base.owner || !base.app || !base.auth || !base.worker) {
+    throw new Error("Defina TEST_DATABASE_URL, TEST_APP_DATABASE_URL, TEST_AUTH_DATABASE_URL e TEST_WORKER_DATABASE_URL (veja .env.example)");
   }
 
   const dbName = `core360_test_${randomBytes(4).toString("hex")}`;
@@ -54,6 +56,7 @@ export default async function setup(project: TestProject) {
   project.provide("ownerUrl", ownerUrl);
   project.provide("appUrl", withDatabase(base.app, dbName));
   project.provide("authUrl", withDatabase(base.auth, dbName));
+  project.provide("workerUrl", withDatabase(base.worker, dbName));
   project.provide("demo", JSON.parse(JSON.stringify(demo)));
 
   return async () => {

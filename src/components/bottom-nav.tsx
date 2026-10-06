@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "./ui";
 
-export function BottomNav({ eventId, canCreate, canBuildTeam }: { eventId: string; canCreate: boolean; canBuildTeam: boolean }) {
+export function BottomNav({ eventId, canCreate, canSeeTickets, canBuildTeam }: { eventId: string; canCreate: boolean; canSeeTickets: boolean; canBuildTeam: boolean }) {
   const path = usePathname();
   const base = `/eventos/${eventId}`;
   const items = [
     { href: base, label: "Início", icon: "◉", active: path === base },
-    { href: `${base}/ocorrencias`, label: "Chamados", icon: "☰", active: path.startsWith(`${base}/ocorrencias`) && !path.endsWith("/nova") },
+    // O Cliente não vê chamados (padrão da proposta), então o atalho some para ele.
+    ...(canSeeTickets ? [{ href: `${base}/ocorrencias`, label: "Chamados", icon: "☰", active: path.startsWith(`${base}/ocorrencias`) && !path.endsWith("/nova") }] : []),
     ...(canCreate ? [{ href: `${base}/ocorrencias/nova`, label: "Novo", icon: "+", active: path.endsWith("/nova"), primary: true }] : []),
     { href: `${base}/equipe`, label: canBuildTeam ? "Montar equipe" : "Equipe", icon: "👥", active: path.startsWith(`${base}/equipe`) },
   ];

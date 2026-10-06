@@ -12,7 +12,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
   return (
     <div className="pb-nav">
       {children}
-      <BottomNav eventId={eventId} canCreate={role !== "CLIENTE"} canBuildTeam={canBuildTeam(actor, eventId)} />
+      <BottomNav eventId={eventId} canCreate={role !== "CLIENTE"} canSeeTickets={role !== "CLIENTE"} canBuildTeam={canBuildTeam(actor, eventId)} />
     </div>
   );
 }

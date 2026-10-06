@@ -19,7 +19,7 @@ export default async function InvitePage({ params }: PageProps<"/convite/[token]
             <strong className="text-foreground">{invite.email}</strong>.
           </p>
           <div className="mt-6">
-            <AcceptForm token={token} hasAccount={invite.hasAccount} email={invite.email} />
+            <AcceptForm token={token} hasAccount={invite.hasAccount} email={invite.email} phone={invite.phone} />
           </div>
         </>
       ) : (

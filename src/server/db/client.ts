@@ -6,13 +6,15 @@ import { PrismaClient } from "../../generated/prisma/client";
  *  - app:   papel "core_app" (sem BYPASSRLS). Usado por TODA requisição de usuário,
  *           sempre dentro de withUser() (src/server/db/with-user.ts).
  *  - auth:  papel "core_auth". Só login, sessão e convites; enxerga apenas identidade.
+ *  - worker: papel "core_worker". Só o despacho de avisos: lê chamados e pessoas,
+ *           grava avisos e envios. Não lê sessões, senhas nem fotos.
  *  - owner: dono das tabelas. Só migrations e seed.
  */
 export function createPrismaClient(connectionString: string): PrismaClient {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
-const cache = globalThis as unknown as { appPrisma?: PrismaClient; authPrisma?: PrismaClient };
+const cache = globalThis as unknown as { appPrisma?: PrismaClient; authPrisma?: PrismaClient; workerPrisma?: PrismaClient };
 
 function required(name: string): string {
   const v = process.env[name];
@@ -28,4 +30,9 @@ export function appPrisma(): PrismaClient {
 export function authPrisma(): PrismaClient {
   cache.authPrisma ??= createPrismaClient(required("AUTH_DATABASE_URL"));
   return cache.authPrisma;
+}
+
+export function workerPrisma(): PrismaClient {
+  cache.workerPrisma ??= createPrismaClient(required("WORKER_DATABASE_URL"));
+  return cache.workerPrisma;
 }

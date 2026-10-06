@@ -38,6 +38,7 @@ Contas de demonstração (só dev): senha `core360-demo` para todos, por exemplo
 | `core_owner` | Dono das tabelas. Só migrations e seed (`DATABASE_URL`). |
 | `core_app` | Usado pela aplicação (`APP_DATABASE_URL`). Não é dono, não tem `BYPASSRLS`, não apaga dados de negócio, não altera a auditoria e não toca nas sessões. Toda consulta roda com `app.user_id` definido e passa pela RLS. |
 | `core_auth` | Usado só pelo login e pelos convites (`AUTH_DATABASE_URL`). Enxerga apenas tabelas de identidade. |
+| `core_worker` | Despacho de avisos (`WORKER_DATABASE_URL`). Lê chamados e pessoas, grava avisos e envios. Não lê senhas, sessões nem fotos, e não apaga nada. |
 
 Em produção, crie os três papéis antes da primeira migration (veja `docker/init-roles.sql`, com senhas próprias).
 
@@ -73,6 +74,11 @@ Em produção, crie os três papéis antes da primeira migration (veja `docker/i
 | POST | `/api/occurrences/:id/claim` | Operacional assume chamado sem responsável da própria equipe |
 | POST | `/api/occurrences/:id/attachments` | Enviar foto (multipart, campo `file`, até 10 MB; o servidor confere se é imagem de verdade) |
 | GET | `/api/attachments/:id` | Ver foto (redireciona para link assinado de curta duração) |
+| GET | `/api/notifications` | Meus avisos e quantos não li (`/unread` só a contagem) |
+| POST | `/api/notifications/read` | Marcar avisos como lidos (`{ ids }` ou todos) |
+| GET/PUT | `/api/me/whatsapp` | Ligar ou desligar avisos no WhatsApp |
+| GET/POST | `/api/whatsapp/webhook` | Webhook da Meta (assinado): botão "Assumir" e status de entrega |
+| GET | `/api/cron/dispatch` | Despacho de avisos e SLA, a cada minuto (`Authorization: Bearer CRON_SECRET`) |
 
 ## Testes
 
@@ -104,5 +110,5 @@ tests/         db (constraints), auth, authz (paridade), security (10 cenários:
 - [x] Etapa 7: evidências (fotos com compressão no celular, verificação no servidor, links assinados)
 - [x] Etapa 8: telas mobile-first (login, convite, painel por papel, chamados, novo chamado, detalhe, Montar equipe)
 - [x] Dashboard por papel
-- [ ] Etapa 9: notificações internas e alertas de SLA
+- [x] Etapa 9: avisos no app (sino) e no WhatsApp, alertas de SLA, botão "Assumir" pelo WhatsApp ([docs/whatsapp.md](docs/whatsapp.md))
 - [ ] Etapa 10: PWA instalável, revisão de segurança e deploy

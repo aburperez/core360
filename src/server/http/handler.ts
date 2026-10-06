@@ -3,6 +3,7 @@ import { loadActor, type Actor } from "../authz/actor";
 import { getAuth } from "../auth/auth";
 import { appPrisma } from "../db/client";
 import { AppError, UnauthenticatedError } from "../errors";
+import { scheduleDispatch } from "../notify/kick";
 
 function clientIp(req: Request): string | null {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip");
@@ -45,6 +46,8 @@ export function authed<P extends Params = Params>(
       const actor = await requireActor(req);
       const params = ((await ctx?.params) ?? {}) as P;
       const result = await fn({ req, actor, params });
+      // Alterações podem gerar avisos (chamado urgente, atribuído etc.).
+      if (req.method !== "GET") scheduleDispatch();
       return Response.json({ data: result }, { status: opts.status ?? 200 });
     } catch (err) {
       return errorResponse(err);
