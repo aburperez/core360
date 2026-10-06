@@ -1,0 +1,461 @@
+// CORE 360 — schema do banco.
+// Regras que o Prisma não expressa (CHECKs, índices parciais, triggers,
+// auditoria imutável e, na etapa 4, RLS) ficam em SQL nas migrations.
+// Proposta de referência: docs/01-arquitetura-e-modelo-de-dados.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("record_status")
+}
+
+enum EventStatus {
+  PLANEJAMENTO
+  PRE_PRODUCAO
+  MONTAGEM
+  OPERACAO
+  DESMONTAGEM
+  FINALIZADO
+  CANCELADO
+
+  @@map("event_status")
+}
+
+/// Papéis por evento. ADMIN não existe aqui de propósito: é global (users.is_admin).
+enum ParticipantRole {
+  GERENTE
+  HEAD
+  OPERACIONAL
+  CLIENTE
+
+  @@map("participant_role")
+}
+
+enum OccurrenceType {
+  OCORRENCIA
+  TAREFA
+
+  @@map("occurrence_type")
+}
+
+enum OccurrenceStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  URGENTE
+  BLOQUEIO
+  CONCLUIDO
+  CANCELADO
+
+  @@map("occurrence_status")
+}
+
+enum Priority {
+  BAIXA
+  NORMAL
+  ALTA
+  CRITICA
+
+  @@map("priority")
+}
+
+enum ValidationStatus {
+  PENDENTE
+  APROVADA
+  REPROVADA
+
+  @@map("validation_status")
+}
+
+enum AttachmentKind {
+  EVIDENCIA
+  CONCLUSAO
+
+  @@map("attachment_kind")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  STATUS_CHANGE
+  CONCLUDE
+  CANCEL
+  REASSIGN
+  TEAM_CHANGE
+  ROLE_CHANGE
+  VALIDATE
+  ACTIVATE
+  DEACTIVATE
+  DELETE
+  LOGIN
+  LOGIN_DENIED
+
+  @@map("audit_action")
+}
+
+enum NotificationType {
+  NOVA
+  URGENTE
+  BLOQUEIO
+  SLA_PROXIMO
+  SLA_ESTOURADO
+  CONCLUIDA
+
+  @@map("notification_type")
+}
+
+// ─────────────────────── Identidade e sessão ───────────────────────
+// users guarda só a identidade. O que a pessoa pode ver vem de participants.
+// Session/Account/Verification seguem o formato do Better Auth (etapa 2).
+
+model User {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  email         String   @unique @db.Citext
+  name          String
+  emailVerified Boolean  @default(false) @map("email_verified")
+  image         String?
+  isAdmin       Boolean  @default(false) @map("is_admin")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions             Session[]
+  accounts             Account[]
+  participations       Participant[]      @relation("ParticipantUser")
+  participantsCreated  Participant[]      @relation("ParticipantCreatedBy")
+  occurrencesCreated   Occurrence[]       @relation("OccurrenceCreatedBy")
+  occurrencesConcluded Occurrence[]       @relation("OccurrenceConcludedBy")
+  occurrencesValidated Occurrence[]       @relation("OccurrenceValidatedBy")
+  attachments          Attachment[]
+  notifications        Notification[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// ───────────────────────── Estrutura do evento ─────────────────────────
+
+model Client {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  name        String
+  document    String?
+  contactName String?      @map("contact_name")
+  email       String?      @db.Citext
+  phone       String?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  events      Event[]
+  occurrences Occurrence[]
+
+  @@map("clients")
+}
+
+model Event {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  clientId      String      @map("client_id") @db.Uuid
+  name          String
+  description   String?
+  startsAt      DateTime    @map("starts_at") @db.Timestamptz(3)
+  endsAt        DateTime    @map("ends_at") @db.Timestamptz(3)
+  venue         String?
+  address       String?
+  timezone      String      @default("America/Sao_Paulo")
+  status        EventStatus @default(PLANEJAMENTO)
+  /// Contador do número curto das ocorrências (#142). Mantido por trigger.
+  occurrenceSeq Int         @default(0) @map("occurrence_seq")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz(3)
+
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  areas         Area[]
+  teams         Team[]
+  participants  Participant[]
+  occurrences   Occurrence[]
+  attachments   Attachment[]
+  slaPolicies   SlaPolicy[]
+  notifications Notification[]
+
+  @@index([clientId])
+  @@index([status])
+  @@map("events")
+}
+
+model Area {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  eventId     String       @map("event_id") @db.Uuid
+  name        String
+  description String?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  teams        Team[]
+  participants Participant[]
+  occurrences  Occurrence[]
+
+  /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
+  @@unique([eventId, id])
+  @@index([eventId])
+  @@map("areas")
+}
+
+model Team {
+  id                  String       @id @default(uuid(7)) @db.Uuid
+  eventId             String       @map("event_id") @db.Uuid
+  areaId              String       @map("area_id") @db.Uuid
+  name                String
+  description         String?
+  /// Líder da equipe: apenas informativo, não concede permissão.
+  leaderParticipantId String?      @map("leader_participant_id") @db.Uuid
+  status              RecordStatus @default(ACTIVE)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  area         Area          @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: Restrict)
+  leader       Participant?  @relation("TeamLeader", fields: [eventId, leaderParticipantId], references: [eventId, id], onDelete: NoAction)
+  participants Participant[] @relation("ParticipantTeam")
+  occurrences  Occurrence[]
+
+  @@unique([eventId, areaId, id])
+  @@index([eventId, areaId])
+  @@map("teams")
+}
+
+/// A pessoa dentro de um evento. É daqui que vem o escopo de acesso.
+model Participant {
+  id        String          @id @default(uuid(7)) @db.Uuid
+  eventId   String          @map("event_id") @db.Uuid
+  /// Preenchido quando a pessoa aceita o convite / faz login com este e-mail.
+  userId    String?         @map("user_id") @db.Uuid
+  name      String
+  email     String          @db.Citext
+  phone     String?
+  jobTitle  String?         @map("job_title")
+  role      ParticipantRole
+  areaId    String?         @map("area_id") @db.Uuid
+  teamId    String?         @map("team_id") @db.Uuid
+  active    Boolean         @default(true)
+  invitedAt DateTime?       @map("invited_at") @db.Timestamptz(3)
+  joinedAt  DateTime?       @map("joined_at") @db.Timestamptz(3)
+  createdById String?       @map("created_by") @db.Uuid
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?       @map("deleted_at") @db.Timestamptz(3)
+
+  event     Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  user      User?  @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
+  area      Area?  @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction)
+  team      Team?  @relation("ParticipantTeam", fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: NoAction)
+  createdBy User?  @relation("ParticipantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  leadsTeams             Team[]       @relation("TeamLeader")
+  responsibleOccurrences Occurrence[] @relation("OccurrenceResponsible")
+
+  @@unique([eventId, email])
+  @@unique([eventId, id])
+  @@index([eventId, areaId, teamId])
+  @@map("participants")
+}
+
+// ─────────────────────────── Ocorrências ───────────────────────────
+
+model Occurrence {
+  id                       String           @id @default(uuid(7)) @db.Uuid
+  /// Número curto por evento (#142). Definido por trigger na inserção.
+  number                   Int              @default(0)
+  type                     OccurrenceType   @default(OCORRENCIA)
+  /// Copiado do evento por trigger: nunca vem do navegador.
+  clientId                 String           @map("client_id") @db.Uuid
+  eventId                  String           @map("event_id") @db.Uuid
+  areaId                   String           @map("area_id") @db.Uuid
+  teamId                   String           @map("team_id") @db.Uuid
+  responsibleParticipantId String?          @map("responsible_participant_id") @db.Uuid
+  title                    String
+  process                  String?
+  description              String?
+  status                   OccurrenceStatus @default(PENDENTE)
+  priority                 Priority         @default(NORMAL)
+  openedAt                 DateTime         @default(now()) @map("opened_at") @db.Timestamptz(3)
+  slaDueAt                 DateTime?        @map("sla_due_at") @db.Timestamptz(3)
+  concludedAt              DateTime?        @map("concluded_at") @db.Timestamptz(3)
+  concludedById            String?          @map("concluded_by") @db.Uuid
+  /// concluded_at − opened_at, calculado por trigger.
+  durationSeconds          Int?             @map("duration_seconds")
+  slaBreached              Boolean?         @map("sla_breached")
+  validationStatus         ValidationStatus @default(PENDENTE) @map("validation_status")
+  validatedById            String?          @map("validated_by") @db.Uuid
+  validatedAt              DateTime?        @map("validated_at") @db.Timestamptz(3)
+  createdById              String           @map("created_by") @db.Uuid
+  /// Controle de concorrência otimista (edições offline/simultâneas).
+  version                  Int              @default(1)
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  area        Area         @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: Restrict)
+  team        Team         @relation(fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: Restrict)
+  responsible Participant? @relation("OccurrenceResponsible", fields: [eventId, responsibleParticipantId], references: [eventId, id], onDelete: NoAction)
+  concludedBy User?        @relation("OccurrenceConcludedBy", fields: [concludedById], references: [id], onDelete: Restrict)
+  validatedBy User?        @relation("OccurrenceValidatedBy", fields: [validatedById], references: [id], onDelete: Restrict)
+  createdBy   User         @relation("OccurrenceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  attachments Attachment[]
+  notifications Notification[]
+
+  @@unique([eventId, number])
+  @@unique([eventId, id])
+  @@index([eventId, status])
+  @@index([eventId, areaId, status])
+  @@index([eventId, teamId, status])
+  @@index([responsibleParticipantId, status])
+  @@index([clientId])
+  @@map("occurrences")
+}
+
+model Attachment {
+  id           String         @id @default(uuid(7)) @db.Uuid
+  occurrenceId String         @map("occurrence_id") @db.Uuid
+  eventId      String         @map("event_id") @db.Uuid
+  storageKey   String         @unique @map("storage_key")
+  mimeType     String         @map("mime_type")
+  sizeBytes    Int            @map("size_bytes")
+  width        Int?
+  height       Int?
+  sha256       String
+  kind         AttachmentKind @default(EVIDENCIA)
+  uploadedById String         @map("uploaded_by") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz(3)
+
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  occurrence Occurrence @relation(fields: [eventId, occurrenceId], references: [eventId, id], onDelete: Restrict)
+  uploadedBy User       @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  /// Re-sincronizar a mesma foto não duplica.
+  @@unique([occurrenceId, sha256])
+  @@index([occurrenceId])
+  @@map("attachments")
+}
+
+model SlaPolicy {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  priority      Priority
+  targetMinutes Int      @map("target_minutes")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, priority])
+  @@map("sla_policies")
+}
+
+// ─────────────────────── Auditoria e alertas ───────────────────────
+
+/// Append-only. UPDATE/DELETE são bloqueados por trigger e por GRANT.
+model AuditLog {
+  id          BigInt      @id @default(autoincrement())
+  occurredAt  DateTime    @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  actorUserId String?     @map("actor_user_id") @db.Uuid
+  eventId     String?     @map("event_id") @db.Uuid
+  entity      String
+  entityId    String?     @map("entity_id") @db.Uuid
+  action      AuditAction
+  before      Json?
+  after       Json?
+  ip          String?     @db.Inet
+  userAgent   String?     @map("user_agent")
+
+  @@index([entity, entityId])
+  @@index([eventId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("audit_log")
+}
+
+model Notification {
+  id           String           @id @default(uuid(7)) @db.Uuid
+  userId       String           @map("user_id") @db.Uuid
+  eventId      String?          @map("event_id") @db.Uuid
+  occurrenceId String?          @map("occurrence_id") @db.Uuid
+  type         NotificationType
+  title        String
+  body         String?
+  readAt       DateTime?        @map("read_at") @db.Timestamptz(3)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      Event?      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  occurrence Occurrence? @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}

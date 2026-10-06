@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CORE 360 — Gestão de Campo
 
-## Getting Started
+Aplicação de gestão operacional de eventos: cliente → evento → área → equipe →
+participantes → ocorrências, com controle de acesso hierárquico e isolamento de
+dados validados no backend e no banco.
 
-First, run the development server:
+A proposta aprovada (arquitetura, modelo de dados, segurança e plano do MVP)
+está em [`docs/01-arquitetura-e-modelo-de-dados.md`](docs/01-arquitetura-e-modelo-de-dados.md).
+
+## Stack
+
+Next.js 16 (App Router) · TypeScript · PostgreSQL 16 · Prisma 7 · Zod · Vitest.
+Próximas etapas: Better Auth (login), RLS do Postgres, storage S3 (R2/MinIO).
+
+## Rodando localmente
+
+Pré-requisitos: Node 22, pnpm 10 e Docker.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+docker compose up -d          # Postgres (com papéis core_owner/core_app) + MinIO
+cp .env.example .env
+pnpm install
+pnpm db:migrate               # aplica as migrations
+pnpm db:seed                  # cenário "Rock Festival 2027"
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Papéis do banco
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Papel | Uso |
+|---|---|
+| `core_owner` | Dono das tabelas. Só migrations e seed (`DATABASE_URL`). |
+| `core_app` | Usado pela aplicação (`APP_DATABASE_URL`). Não é dono, não tem `BYPASSRLS`, não apaga dados de negócio e não altera a auditoria. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Em produção, crie os dois papéis antes da primeira migration (veja `docker/init-roles.sql`, com senhas próprias).
 
-## Learn More
+## Testes
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm test
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Cada execução cria um banco temporário `core360_test_<id>`, aplica as migrations,
+roda os testes e apaga esse banco no final. Nenhum banco existente é alterado.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Estrutura
 
-## Deploy on Vercel
+```
+prisma/        schema, migrations (SQL com CHECKs, triggers, auditoria), seed
+src/server/    infraestrutura do backend (db, auth, authz, audit, storage)
+src/modules/   regras de negócio por domínio (a partir da etapa 3)
+src/app/       telas e rotas Next.js (a partir da etapa 8)
+tests/         testes de banco, segurança e e2e
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Status do MVP
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [x] Etapa 0: fundação
+- [x] Etapa 1: schema, migrations e seed
+- [ ] Etapa 2: autenticação
+- [ ] Etapa 3: autorização (RBAC)
+- [ ] Etapa 4: isolamento (RLS) e os 10 cenários de segurança
+- [ ] Etapas 5–10: módulos, ocorrências, evidências, telas, dashboard, deploy
