@@ -16,7 +16,8 @@ import type { Tx } from "../../server/db/with-user";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
 import { getTeam } from "../teams/teams.service";
-import { slaDueAt } from "./sla";
+import { serviceTypeForOccurrence } from "../service-types/service-types.service";
+import { slaDueAt, targetMinutes } from "./sla";
 
 const STATUSES = ["PENDENTE", "EM_ANDAMENTO", "URGENTE", "BLOQUEIO", "CONCLUIDO", "CANCELADO"] as const;
 const PRIORITIES = ["BAIXA", "NORMAL", "ALTA", "CRITICA"] as const;
@@ -41,10 +42,11 @@ export function occurrenceScope(actor: Actor, eventId: string): Prisma.Occurrenc
 
 const listFields = {
   id: true, number: true, type: true, eventId: true, areaId: true, teamId: true,
-  responsibleParticipantId: true, title: true, status: true, priority: true,
+  responsibleParticipantId: true, serviceTypeId: true, title: true, status: true, priority: true,
   openedAt: true, slaDueAt: true, concludedAt: true, durationSeconds: true, slaBreached: true,
   validationStatus: true, version: true,
   area: { select: { id: true, name: true } },
+  serviceType: { select: { id: true, name: true, slaMinutes: true } },
   team: { select: { id: true, name: true } },
   responsible: { select: { id: true, name: true } },
   _count: { select: { attachments: { where: { deletedAt: null } } } },
@@ -140,6 +142,8 @@ const createSchema = z.object({
   priority: z.enum(PRIORITIES).default("NORMAL"),
   status: z.enum(["PENDENTE", "URGENTE", "BLOQUEIO"]).default("PENDENTE"),
   responsibleParticipantId: uuid.optional().nullable(),
+  /** Tipo de atendimento da mesma equipe: define o prazo quando tem SLA aprovado. */
+  serviceTypeId: uuid.optional().nullable(),
 });
 
 /**
@@ -168,6 +172,7 @@ export async function createOccurrence(actor: Actor, input: unknown) {
       if (!r) throw new ValidationError("Responsável não encontrado neste evento");
     }
 
+    const type = data.serviceTypeId ? await serviceTypeForOccurrence(tx, data.serviceTypeId, team.id) : null;
     const openedAt = new Date();
     const policy = await tx.slaPolicy.findUnique({
       where: { eventId_priority: { eventId: team.eventId, priority: data.priority } },
@@ -178,13 +183,13 @@ export async function createOccurrence(actor: Actor, input: unknown) {
         ...scope,
         clientId: membershipFor(actor, team.eventId)?.clientId ?? (await clientOf(tx, team.eventId)),
         openedAt,
-        slaDueAt: slaDueAt(openedAt, policy?.targetMinutes),
+        slaDueAt: slaDueAt(openedAt, targetMinutes(data.priority, policy?.targetMinutes, type?.slaMinutes)),
         createdById: actor.userId,
       },
     });
     await audit(tx, actor, {
       eventId: o.eventId, entity: "occurrence", entityId: o.id, action: "CREATE",
-      after: { title: o.title, status: o.status, priority: o.priority, teamId: o.teamId, responsibleParticipantId: o.responsibleParticipantId },
+      after: { title: o.title, status: o.status, priority: o.priority, teamId: o.teamId, responsibleParticipantId: o.responsibleParticipantId, serviceTypeId: o.serviceTypeId },
     });
     return o;
   });
@@ -343,6 +348,8 @@ export async function reassignOccurrence(actor: Actor, id: string, input: unknow
     }
     const patch = {
       ...target,
+      // O tipo de atendimento é da equipe: mudou de equipe, o chamado fica sem tipo.
+      ...(target.teamId !== current.teamId && { serviceTypeId: null }),
       ...(data.responsibleParticipantId !== undefined && { responsibleParticipantId: data.responsibleParticipantId }),
       ...(data.priority && { priority: data.priority }),
     };

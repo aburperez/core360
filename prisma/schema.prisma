@@ -104,6 +104,15 @@ enum AuditAction {
   @@map("audit_action")
 }
 
+enum SlaProposalStatus {
+  PENDENTE
+  APROVADA
+  AJUSTADA
+  RECUSADA
+
+  @@map("sla_proposal_status")
+}
+
 enum NotificationType {
   NOVA
   URGENTE
@@ -153,6 +162,9 @@ model User {
   attachments          Attachment[]
   notifications        Notification[]
   whatsapp             WhatsappContact?
+  serviceTypesCreated  ServiceType[]      @relation("ServiceTypeCreatedBy")
+  slaProposed          SlaProposal[]      @relation("SlaProposalProposedBy")
+  slaReviewed          SlaProposal[]      @relation("SlaProposalReviewedBy")
 
   @@map("users")
 }
@@ -253,6 +265,7 @@ model Event {
   slaPolicies   SlaPolicy[]
   notifications Notification[]
   invitations   Invitation[]
+  serviceTypes  ServiceType[]
 
   @@index([clientId])
   @@index([status])
@@ -298,6 +311,7 @@ model Team {
   leader       Participant?  @relation("TeamLeader", fields: [eventId, leaderParticipantId], references: [eventId, id], onDelete: NoAction)
   participants Participant[] @relation("ParticipantTeam")
   occurrences  Occurrence[]
+  serviceTypes ServiceType[]
 
   @@unique([eventId, areaId, id])
   @@index([eventId, areaId])
@@ -334,6 +348,7 @@ model Participant {
   leadsTeams             Team[]       @relation("TeamLeader")
   responsibleOccurrences Occurrence[] @relation("OccurrenceResponsible")
   invitations            Invitation[]
+  serviceTypes           ServiceTypePerson[]
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -373,6 +388,8 @@ model Occurrence {
   areaId                   String           @map("area_id") @db.Uuid
   teamId                   String           @map("team_id") @db.Uuid
   responsibleParticipantId String?          @map("responsible_participant_id") @db.Uuid
+  /// Tipo de atendimento (pré-produção). Sempre da mesma equipe do chamado.
+  serviceTypeId            String?          @map("service_type_id") @db.Uuid
   title                    String
   process                  String?
   description              String?
@@ -402,6 +419,7 @@ model Occurrence {
   concludedBy User?        @relation("OccurrenceConcludedBy", fields: [concludedById], references: [id], onDelete: Restrict)
   validatedBy User?        @relation("OccurrenceValidatedBy", fields: [validatedById], references: [id], onDelete: Restrict)
   createdBy   User         @relation("OccurrenceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  serviceType ServiceType? @relation(fields: [eventId, areaId, teamId, serviceTypeId], references: [eventId, areaId, teamId, id], onDelete: NoAction)
   attachments Attachment[]
   notifications Notification[]
   changes     OccurrenceChange[]
@@ -413,6 +431,7 @@ model Occurrence {
   @@index([eventId, teamId, status])
   @@index([responsibleParticipantId, status])
   @@index([clientId])
+  @@index([serviceTypeId])
   @@map("occurrences")
 }
 
@@ -567,4 +586,79 @@ model StoredFile {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@map("stored_files")
+}
+
+// ─────────────────────── Pré-produção ───────────────────────
+
+/// Tipo de atendimento que uma equipe faz (ex.: "Troca de lâmpada"). O SLA
+/// aprovado aqui vira o prazo dos chamados deste tipo.
+model ServiceType {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  eventId     String    @map("event_id") @db.Uuid
+  areaId      String    @map("area_id") @db.Uuid
+  teamId      String    @map("team_id") @db.Uuid
+  name        String
+  description String?
+  /// Prazo aprovado pelo gestor, em minutos. Vazio: vale o prazo da prioridade.
+  slaMinutes  Int?      @map("sla_minutes")
+  createdById String    @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  event       Event               @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  team        Team                @relation(fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: Restrict)
+  createdBy   User                @relation("ServiceTypeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  proposals   SlaProposal[]
+  people      ServiceTypePerson[]
+  occurrences Occurrence[]
+
+  @@unique([eventId, areaId, teamId, id])
+  @@index([eventId, areaId, teamId])
+  @@map("service_types")
+}
+
+/// SLA de um tipo: proposto por quem executa, aprovado/ajustado/recusado pelo
+/// gestor com comentário. O histórico fica aqui.
+model SlaProposal {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  eventId         String            @map("event_id") @db.Uuid
+  areaId          String            @map("area_id") @db.Uuid
+  teamId          String            @map("team_id") @db.Uuid
+  serviceTypeId   String            @map("service_type_id") @db.Uuid
+  minutes         Int
+  note            String?
+  status          SlaProposalStatus @default(PENDENTE)
+  approvedMinutes Int?              @map("approved_minutes")
+  feedback        String?
+  proposedById    String            @map("proposed_by") @db.Uuid
+  reviewedById    String?           @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime?         @map("reviewed_at") @db.Timestamptz(3)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  serviceType ServiceType @relation(fields: [eventId, areaId, teamId, serviceTypeId], references: [eventId, areaId, teamId, id], onDelete: Restrict)
+  proposedBy  User        @relation("SlaProposalProposedBy", fields: [proposedById], references: [id], onDelete: Restrict)
+  reviewedBy  User?       @relation("SlaProposalReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@index([serviceTypeId, createdAt])
+  @@index([eventId, status])
+  @@map("sla_proposals")
+}
+
+/// Quem faz cada tipo de atendimento (a planilha "quem faz o quê").
+model ServiceTypePerson {
+  eventId       String   @map("event_id") @db.Uuid
+  areaId        String   @map("area_id") @db.Uuid
+  teamId        String   @map("team_id") @db.Uuid
+  serviceTypeId String   @map("service_type_id") @db.Uuid
+  participantId String   @map("participant_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  serviceType ServiceType @relation(fields: [eventId, areaId, teamId, serviceTypeId], references: [eventId, areaId, teamId, id], onDelete: Restrict)
+  participant Participant @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Restrict)
+
+  @@id([serviceTypeId, participantId])
+  @@index([eventId, participantId])
+  @@map("service_type_people")
 }

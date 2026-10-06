@@ -31,7 +31,10 @@ export async function seedTraining(
     user = await db.user.update({ where: { id: user.id }, data: { isAdmin: true, active: true } });
   }
 
-  if (await db.event.findFirst({ where: { name: TRAINING_EVENT, deletedAt: null } })) {
+  const existing = await db.event.findFirst({ where: { name: TRAINING_EVENT, deletedAt: null } });
+  if (existing) {
+    // Evento criado antes da Pré-produção: ganha os tipos de exemplo uma vez.
+    await seedTrainingTypes(db, existing.id, user.id);
     return { adminCreated, eventCreated: false };
   }
 
@@ -74,6 +77,37 @@ export async function seedTraining(
   await occurrence(infra.id, eletrica.id, "Tomada do camarim 1 sem energia", "NORMAL");
   await occurrence(infra.id, eletrica.id, "Refletor da entrada piscando", "BAIXA");
   await occurrence(palco.id, cenografia.id, "Painel do fundo do palco solto", "ALTA");
+  await seedTrainingTypes(db, event.id, user.id);
 
   return { adminCreated, eventCreated: true };
+}
+
+/** Tipos de atendimento de exemplo (Pré-produção), só se o evento ainda não tem nenhum. */
+async function seedTrainingTypes(db: PrismaClient, eventId: string, adminId: string) {
+  if (await db.serviceType.count({ where: { eventId } })) return;
+  const teams = await db.team.findMany({ where: { eventId, deletedAt: null } });
+  const byName = new Map(teams.map((t) => [t.name, t]));
+  const examples: [team: string, name: string, sla: number | null][] = [
+    ["Elétrica", "Tomada sem energia", 20],
+    ["Elétrica", "Troca de lâmpada", 30],
+    ["Elétrica", "Quadro desarmado", 15],
+    ["Limpeza", "Limpeza de banheiro", 20],
+    ["Limpeza", "Recolher lixo", null],
+    ["Cenografia", "Reparo de painel", 60],
+  ];
+  const now = new Date();
+  for (const [teamName, name, sla] of examples) {
+    const team = byName.get(teamName);
+    if (!team) continue;
+    const scope = { eventId, areaId: team.areaId, teamId: team.id };
+    const t = await db.serviceType.create({ data: { ...scope, name, slaMinutes: sla, createdById: adminId } });
+    if (sla) {
+      await db.slaProposal.create({
+        data: {
+          ...scope, serviceTypeId: t.id, minutes: sla, status: "APROVADA", approvedMinutes: sla,
+          proposedById: adminId, reviewedById: adminId, reviewedAt: now,
+        },
+      });
+    }
+  }
 }

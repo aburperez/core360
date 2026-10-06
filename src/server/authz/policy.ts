@@ -135,3 +135,19 @@ export function canClaimOccurrence(a: Actor, o: OccScope & { status?: Occurrence
   const m = membershipFor(a, o.eventId);
   return m?.role === "OPERACIONAL" && m.teamId === o.teamId;
 }
+
+// ─────────────────────── Pré-produção ───────────────────────
+
+/** Criar e editar tipos de atendimento, definir e rever SLA, marcar quem faz o quê. */
+export function canManageServiceTypes(a: Actor, s: Scope): boolean {
+  if (a.isAdmin) return true;
+  const m = membershipFor(a, s.eventId);
+  return m?.role === "GERENTE" || (m?.role === "HEAD" && m.areaId === s.areaId);
+}
+
+/** Propor um SLA: o gestor ou quem é da equipe que executa o tipo. */
+export function canProposeSla(a: Actor, s: Scope): boolean {
+  if (canManageServiceTypes(a, s)) return true;
+  const m = membershipFor(a, s.eventId);
+  return m?.role === "OPERACIONAL" && m.teamId === s.teamId;
+}

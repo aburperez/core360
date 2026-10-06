@@ -113,4 +113,8 @@ tests/         db (constraints), auth, authz (paridade), security (10 cenários:
 - [x] Etapa 9: avisos no app (sino) e no WhatsApp, alertas de SLA, botão "Assumir" pelo WhatsApp ([docs/whatsapp.md](docs/whatsapp.md))
 - [x] Ambiente de teste na Vercel + Neon ([docs/deploy-vercel.md](docs/deploy-vercel.md))
 - [x] Urgente no WhatsApp só para o encarregado da área, com novo alerta a cada 5 minutos sem resposta (até 3)
+- [x] Painel organizado para o computador (menu lateral a partir de 1024 px)
+- [x] Pré-produção 1: tipos de atendimento por equipe, SLA por tipo (proposto por quem executa, aprovado/ajustado/recusado pelo gestor com comentário) e planilha "quem faz o quê"
+- [ ] Pré-produção 2: briefing por pessoa e relatório diário
+- [ ] Pré-produção 3: planilha de custos com exportação para Excel
 - [ ] Etapa 10: PWA instalável, revisão de segurança e deploy

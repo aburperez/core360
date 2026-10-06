@@ -2,6 +2,7 @@ import { requireUser } from "@/server/http/session";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { TopBar } from "@/components/top-bar";
+import { EventTabs } from "@/components/event-nav";
 import { Card, EmptyState, LinkButton, PAGE, SectionTitle, Stat, cx } from "@/components/ui";
 import { OccurrenceCard, type OccurrenceRow } from "@/components/occurrence-card";
 import { ROLE_LABEL, formatDuration } from "@/lib/format";
@@ -20,6 +21,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   return (
     <>
       <TopBar title={event.name} subtitle={`${ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
+      <EventTabs eventId={eventId} active="campo" />
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         {"structure" in dash ? (
           <>

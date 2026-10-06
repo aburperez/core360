@@ -79,6 +79,10 @@ describe("evento de treino", () => {
     expect(event.areas.map((a) => a.name).sort()).toEqual(["Infraestrutura", "Palco"]);
     expect(event.teams.map((t) => t.name).sort()).toEqual(["Cenografia", "Elétrica", "Limpeza"]);
     expect(await owner.occurrence.count({ where: { eventId: event.id } })).toBe(3);
+    // Tipos de atendimento de exemplo (Pré-produção), sem duplicar a cada deploy.
+    expect(await owner.serviceType.count({ where: { eventId: event.id } })).toBe(6);
+    await seedTraining(owner, admin);
+    expect(await owner.serviceType.count({ where: { eventId: event.id } })).toBe(6);
     expect(await owner.user.findUniqueOrThrow({ where: { email: "abu.teste@agencia.dev" } })).toMatchObject({ isAdmin: true, active: true });
   });
 });

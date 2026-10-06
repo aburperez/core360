@@ -3,6 +3,7 @@ import { membershipFor } from "@/server/authz/actor";
 import { canCreateOccurrence } from "@/server/authz/policy";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listParticipants } from "@/modules/participants/participants.service";
+import { listServiceTypes } from "@/modules/service-types/service-types.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { NewOccurrenceForm } from "./new-occurrence-form";
@@ -17,6 +18,7 @@ export default async function NewOccurrencePage({ params }: PageProps<"/eventos/
     canCreateOccurrence(actor, { eventId, areaId: t.areaId, teamId: t.id }),
   );
   const people = (await listParticipants(actor, eventId)).filter((p) => p.userId || p.teamId);
+  const types = await listServiceTypes(actor, eventId);
 
   return (
     <>
@@ -32,6 +34,7 @@ export default async function NewOccurrencePage({ params }: PageProps<"/eventos/
               defaultTeamId={me?.teamId ?? (teams.length === 1 ? teams[0].id : "")}
               people={people.map((p) => ({ id: p.id, name: p.name, teamId: p.teamId, jobTitle: p.jobTitle }))}
               meParticipantId={me?.participantId ?? null}
+              types={types.map((t) => ({ id: t.id, name: t.name, teamId: t.teamId, slaMinutes: t.slaMinutes }))}
             />
           )}
         </div>

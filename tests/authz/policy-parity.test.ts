@@ -4,7 +4,9 @@ import { withUser } from "@/server/db/with-user";
 import {
   canAssignRole,
   canCreateOccurrence,
+  canManageServiceTypes,
   canManageTeams,
+  canProposeSla,
   canSeeArea,
   canSeeOccurrence,
   canSeeTeam,
@@ -51,6 +53,8 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_see_area($1::uuid, $2::uuid) AS r`, rock, areaId));
           check(`gerir equipes da área ${areaId}`, canManageTeams(actor, { eventId: rock, areaId }),
             await q(`SELECT app.can_manage_team($1::uuid, $2::uuid) AS r`, rock, areaId));
+          check(`gerir tipos de atendimento da área ${areaId}`, canManageServiceTypes(actor, { eventId: rock, areaId }),
+            await q(`SELECT app.can_manage_service_type($1::uuid, $2::uuid) AS r`, rock, areaId));
         }
 
         for (const t of teams) {
@@ -59,6 +63,8 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_see_team($1::uuid, $2::uuid, $3::uuid) AS r`, rock, t.areaId, t.id));
           check(`abrir ocorrência em ${t.name}`, canCreateOccurrence(actor, s),
             await q(`SELECT app.can_write_occurrence($1::uuid, $2::uuid, $3::uuid) AS r`, rock, t.areaId, t.id));
+          check(`propor SLA em ${t.name}`, canProposeSla(actor, s),
+            await q(`SELECT app.can_propose_sla($1::uuid, $2::uuid, $3::uuid) AS r`, rock, t.areaId, t.id));
         }
 
         for (const o of Object.values(d.occurrences)) {

@@ -7,9 +7,11 @@ import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { PhotoPicker } from "@/components/photo-picker";
 import { api } from "@/components/api-client";
 import { uploadPhoto } from "@/components/photo";
+import { formatDuration } from "@/lib/format";
 
 type Team = { id: string; name: string; area: string };
 type Person = { id: string; name: string; teamId: string | null; jobTitle: string | null };
+type ServiceType = { id: string; name: string; teamId: string; slaMinutes: number | null };
 
 const PRIORITIES = [
   { v: "BAIXA", l: "Baixa" },
@@ -29,6 +31,7 @@ export function NewOccurrenceForm(props: {
   defaultTeamId: string;
   people: Person[];
   meParticipantId: string | null;
+  types: ServiceType[];
 }) {
   const router = useRouter();
   const id = useRef(crypto.randomUUID());
@@ -39,7 +42,10 @@ export function NewOccurrenceForm(props: {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"idle" | "saving" | "photos">("idle");
 
+  const [serviceTypeId, setServiceTypeId] = useState("");
   const teamPeople = useMemo(() => props.people.filter((p) => p.teamId === teamId), [props.people, teamId]);
+  const teamTypes = useMemo(() => props.types.filter((t) => t.teamId === teamId), [props.types, teamId]);
+  const chosenType = teamTypes.find((t) => t.id === serviceTypeId);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -58,6 +64,7 @@ export function NewOccurrenceForm(props: {
           priority,
           status: f.get("blocked") ? "BLOQUEIO" : priority === "CRITICA" ? "URGENTE" : "PENDENTE",
           responsibleParticipantId: f.get("responsible") || null,
+          serviceTypeId: chosenType?.id ?? null,
         },
       });
       setStep("photos");
@@ -104,7 +111,7 @@ export function NewOccurrenceForm(props: {
       {props.teams.length > 1 || !props.defaultTeamId ? (
         <label className="block">
           <Label>Equipe</Label>
-          <Select value={teamId} onChange={(e) => setTeamId(e.target.value)} required>
+          <Select value={teamId} onChange={(e) => { setTeamId(e.target.value); setServiceTypeId(""); }} required>
             <option value="" disabled>Escolha a equipe</option>
             {props.teams.map((t) => (
               <option key={t.id} value={t.id}>{t.area} › {t.name}</option>
@@ -113,6 +120,23 @@ export function NewOccurrenceForm(props: {
         </label>
       ) : (
         <p className="text-sm text-muted">Equipe: <strong className="text-foreground">{props.teams.find((t) => t.id === teamId)?.area} › {props.teams.find((t) => t.id === teamId)?.name}</strong></p>
+      )}
+
+      {teamTypes.length > 0 && (
+        <label className="block">
+          <Label hint="(opcional)">Tipo de atendimento</Label>
+          <Select value={serviceTypeId} onChange={(e) => setServiceTypeId(e.target.value)}>
+            <option value="">Outro / não sei</option>
+            {teamTypes.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}{t.slaMinutes ? ` · SLA ${formatDuration(t.slaMinutes * 60)}` : ""}</option>
+            ))}
+          </Select>
+          {chosenType?.slaMinutes && (
+            <span className="mt-1 block text-xs text-muted">
+              Prazo deste tipo: {formatDuration(chosenType.slaMinutes * 60)}{priority === "CRITICA" ? " (ou o prazo de Crítica, se for menor)" : ""}.
+            </span>
+          )}
+        </label>
       )}
 
       <button type="button" onClick={() => setMore(!more)} className="text-sm font-medium text-primary">

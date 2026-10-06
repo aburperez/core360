@@ -57,6 +57,12 @@ export default async function OccurrencePage({ params }: PageProps<"/eventos/[ev
             </div>
             {o.description && <p className="mt-3 whitespace-pre-wrap">{o.description}</p>}
             {o.process && <p className="mt-2 text-sm text-muted">Processo: {o.process}</p>}
+            {o.serviceType && (
+              <p className="mt-2 text-sm text-muted">
+                Tipo de atendimento: <strong className="text-foreground">{o.serviceType.name}</strong>
+                {o.serviceType.slaMinutes ? ` · SLA ${formatDuration(o.serviceType.slaMinutes * 60)}` : ""}
+              </p>
+            )}
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <Info label="Responsável" value={o.responsible?.name ?? "Equipe"} />
               <Info label="Aberto por" value={o.createdBy?.name ?? "—"} />
