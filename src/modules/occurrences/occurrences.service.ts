@@ -3,6 +3,7 @@ import type { Prisma } from "../../generated/prisma/client";
 import type { OccurrenceStatus } from "../../generated/prisma/enums";
 import { membershipFor, type Actor } from "../../server/authz/actor";
 import {
+  canClaimOccurrence,
   canCreateOccurrence,
   canManageOccurrence,
   canSeeOccurrence,
@@ -22,7 +23,7 @@ const PRIORITIES = ["BAIXA", "NORMAL", "ALTA", "CRITICA"] as const;
 const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];
 
 /** Filtro de escopo no backend; a RLS do banco aplica o mesmo perímetro. */
-function scopeWhere(actor: Actor, eventId: string): Prisma.OccurrenceWhereInput {
+export function occurrenceScope(actor: Actor, eventId: string): Prisma.OccurrenceWhereInput {
   if (actor.isAdmin) return { eventId };
   const m = membershipFor(actor, eventId);
   switch (m?.role) {
@@ -66,7 +67,7 @@ export async function listOccurrences(actor: Actor, eventId: string, filters: un
     tx.occurrence.findMany({
       where: {
         AND: [
-          scopeWhere(actor, eventId),
+          occurrenceScope(actor, eventId),
           f.status ? { status: f.status } : {},
           f.priority ? { priority: f.priority } : {},
           f.areaId ? { areaId: f.areaId } : {},
@@ -122,6 +123,7 @@ export async function getOccurrence(actor: Actor, id: string) {
         manage: canManageOccurrence(actor, base),
         validate: canValidateOccurrence(actor, base) && base.status === "CONCLUIDO",
         conclude: canWorkOccurrence(actor, base) && !CLOSED.includes(base.status),
+        claim: canClaimOccurrence(actor, base),
       },
     };
   });
@@ -285,6 +287,26 @@ export async function validateOccurrence(actor: Actor, id: string, input: unknow
       eventId: o.eventId, entity: "occurrence", entityId: o.id, action: "VALIDATE",
       before: { validationStatus: o.validationStatus, status: o.status },
       after: { validationStatus: updated.validationStatus, status: updated.status },
+    });
+    return updated;
+  });
+}
+
+/** "Assumir": o Operacional vira o responsável por um chamado livre da equipe. */
+export async function claimOccurrence(actor: Actor, id: string, input: unknown = {}) {
+  const data = parse(concludeSchema, input);
+  return actor.run(async (tx) => {
+    const o = await load(actor, tx, id);
+    if (!canClaimOccurrence(actor, o)) throw new ForbiddenError("Este chamado já tem responsável ou não é da sua equipe");
+    const me = membershipFor(actor, o.eventId)!;
+    const updated = await updateVersioned(tx, o.id, data.expectedVersion, o, {
+      responsibleParticipantId: me.participantId,
+      ...(o.status === "PENDENTE" && { status: "EM_ANDAMENTO" }),
+    });
+    await audit(tx, actor, {
+      eventId: o.eventId, entity: "occurrence", entityId: o.id, action: "REASSIGN",
+      before: { responsibleParticipantId: null, status: o.status },
+      after: { responsibleParticipantId: me.participantId, status: updated.status },
     });
     return updated;
   });

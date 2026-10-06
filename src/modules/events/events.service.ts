@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Actor } from "../../server/authz/actor";
+import type { Actor, EventRole } from "../../server/authz/actor";
 import { membershipFor } from "../../server/authz/actor";
 import { canSeeEvent } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
@@ -14,6 +14,10 @@ export function requireEventAccess(actor: Actor, eventId: string): void {
   }
 }
 
+function myRole(actor: Actor, eventId: string): EventRole | "ADMIN" | null {
+  return actor.isAdmin ? "ADMIN" : (membershipFor(actor, eventId)?.role ?? null);
+}
+
 export async function listEvents(actor: Actor) {
   const events = await actor.run((tx) =>
     tx.event.findMany({
@@ -22,7 +26,7 @@ export async function listEvents(actor: Actor) {
       include: { client: { select: { id: true, name: true } } },
     }),
   );
-  return events.map((e) => ({ ...e, myRole: actor.isAdmin ? "ADMIN" : membershipFor(actor, e.id)?.role ?? null }));
+  return events.map((e) => ({ ...e, myRole: myRole(actor, e.id) }));
 }
 
 export async function getEvent(actor: Actor, eventId: string) {
@@ -40,7 +44,7 @@ export async function getEvent(actor: Actor, eventId: string) {
       select: { id: true, name: true, phone: true, email: true },
     }),
   );
-  return { ...event, managers, myRole: actor.isAdmin ? "ADMIN" : membershipFor(actor, eventId)?.role ?? null };
+  return { ...event, managers, myRole: myRole(actor, eventId) };
 }
 
 const createEventSchema = z

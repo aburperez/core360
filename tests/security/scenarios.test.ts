@@ -292,3 +292,37 @@ describe("Cenário 10 (serviço): IDs forjados não ampliam o acesso", () => {
     await expectStatus(getEvent(marina, "../../etc"), 404);
   });
 });
+
+describe("contatos e assumir chamado", () => {
+  it("Operacional vê o Head da própria área e o Gerente, mas não o Head de outra área", async () => {
+    const joao = await actorFor(db, "joao");
+    const people = ids(await listParticipants(joao, d.events.rock.id));
+    expect(people).toEqual(expect.arrayContaining([d.participants.rafael.id, d.participants.marina.id]));
+    expect(people).not.toContain(d.participants.beatriz.id);
+    expect(people).not.toContain(d.participants.ana.id);
+    expect(people).not.toContain(d.participants.claudia.id);
+  });
+
+  it("Operacional assume chamado livre da própria equipe, e não o de outra", async () => {
+    const { claimOccurrence } = await import("@/modules/occurrences/occurrences.service");
+    const rafael = await actorFor(db, "rafael");
+    const free = await createOccurrence(rafael, { teamId: d.teams.eletrica.id, title: "Sem dono" });
+    const carlos = await actorFor(db, "carlos");
+    expect((await getOccurrence(carlos, free.id)).can.claim).toBe(true);
+    const claimed = await claimOccurrence(carlos, free.id);
+    expect(claimed).toMatchObject({ responsibleParticipantId: d.participants.carlos.id, status: "EM_ANDAMENTO" });
+    // Já tem dono: ninguém mais "assume".
+    await expectStatus(claimOccurrence(await actorFor(db, "pedro"), free.id), 403);
+    // Agora o Carlos pode concluir.
+    expect((await concludeOccurrence(carlos, free.id)).status).toBe("CONCLUIDO");
+
+    const other = await createOccurrence(rafael, { teamId: d.teams.cenografia.id, title: "Outra equipe" });
+    await expectStatus(claimOccurrence(carlos, other.id), 404);
+  });
+
+  it("Operacional vê o nome de quem abriu o chamado", async () => {
+    const joao = await actorFor(db, "joao");
+    const o = await getOccurrence(joao, d.occurrences.quadroEletrico.id);
+    expect(o.createdBy?.name).toBe("Rafael Head Infra");
+  });
+});

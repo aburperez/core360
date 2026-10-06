@@ -10,7 +10,8 @@ está em [`docs/01-arquitetura-e-modelo-de-dados.md`](docs/01-arquitetura-e-mode
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · PostgreSQL 16 (com Row Level Security) ·
-Prisma 7 · Better Auth · Zod · Vitest. Próximas etapas: storage S3 (R2/MinIO) e telas.
+Prisma 7 · Better Auth · Zod · Vitest · Tailwind 4. Fotos em storage S3 (Cloudflare R2 em produção,
+MinIO no desenvolvimento, `STORAGE_DRIVER=memory` nos testes).
 
 ## Rodando localmente
 
@@ -69,6 +70,9 @@ Em produção, crie os três papéis antes da primeira migration (veja `docker/i
 | POST | `/api/occurrences/:id/conclude` | CONCLUIR CHAMADO |
 | POST | `/api/occurrences/:id/validate` | Validação do gestor |
 | POST | `/api/occurrences/:id/assign` | Reatribuir, mudar equipe/prioridade |
+| POST | `/api/occurrences/:id/claim` | Operacional assume chamado sem responsável da própria equipe |
+| POST | `/api/occurrences/:id/attachments` | Enviar foto (multipart, campo `file`, até 10 MB; o servidor confere se é imagem de verdade) |
+| GET | `/api/attachments/:id` | Ver foto (redireciona para link assinado de curta duração) |
 
 ## Testes
 
@@ -84,7 +88,7 @@ roda os testes e apaga esse banco no final. Nenhum banco existente é alterado.
 ```
 prisma/        schema, migrations (CHECKs, triggers, auditoria, RLS), seed
 src/server/    infraestrutura do backend (db, auth, authz, audit, http)
-src/modules/   regras de negócio por domínio (events, areas, teams, participants, occurrences)
+src/modules/   regras de negócio por domínio (events, areas, teams, participants, occurrences, attachments, dashboard)
 src/app/api/   rotas HTTP finas: autenticam, chamam o serviço, traduzem erros
 tests/         db (constraints), auth, authz (paridade), security (10 cenários: serviço, RLS e HTTP)
 ```
@@ -97,6 +101,8 @@ tests/         db (constraints), auth, authz (paridade), security (10 cenários:
 - [x] Etapa 3: autorização (contexto de acesso e matriz de papéis)
 - [x] Etapa 4: isolamento (RLS) e os 10 cenários de segurança
 - [x] Etapas 5 e 6 (API): cadastros, montar equipe, ocorrências, conclusão, SLA, validação
-- [ ] Etapa 7: evidências (fotos)
-- [ ] Etapa 8: telas mobile-first
-- [ ] Etapas 9–10: dashboard, alertas, PWA e deploy
+- [x] Etapa 7: evidências (fotos com compressão no celular, verificação no servidor, links assinados)
+- [x] Etapa 8: telas mobile-first (login, convite, painel por papel, chamados, novo chamado, detalhe, Montar equipe)
+- [x] Dashboard por papel
+- [ ] Etapa 9: notificações internas e alertas de SLA
+- [ ] Etapa 10: PWA instalável, revisão de segurança e deploy

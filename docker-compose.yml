@@ -22,6 +22,17 @@ services:
     volumes:
       - miniodata:/data
 
+  # Cria o bucket privado de evidências no MinIO.
+  minio-setup:
+    image: minio/mc:latest
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 core360 core360-dev-secret; do sleep 1; done;
+      mc mb --ignore-existing local/core360-evidencias;
+      mc anonymous set none local/core360-evidencias;
+      "
+
 volumes:
   pgdata:
   miniodata:

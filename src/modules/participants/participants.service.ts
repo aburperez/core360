@@ -31,9 +31,13 @@ function scopeWhere(actor: Actor, eventId: string): Prisma.ParticipantWhereInput
     case "CLIENTE":
       return { eventId };
     case "HEAD":
-      return { eventId, OR: [{ areaId: m.areaId }, { userId: actor.userId }] };
+      return { eventId, OR: [{ areaId: m.areaId }, { role: "GERENTE" }, { userId: actor.userId }] };
     case "OPERACIONAL":
-      return { eventId, OR: [{ teamId: m.teamId }, { userId: actor.userId }] };
+      // A própria equipe + contatos de coordenação (Head da área e Gerentes).
+      return {
+        eventId,
+        OR: [{ teamId: m.teamId }, { role: "GERENTE" }, { role: "HEAD", areaId: m.areaId }, { userId: actor.userId }],
+      };
     default:
       return { id: { in: [] } };
   }

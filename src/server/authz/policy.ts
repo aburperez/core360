@@ -128,3 +128,10 @@ export function canWorkOccurrence(a: Actor, o: OccScope, to?: OccurrenceStatus):
 }
 
 export const canValidateOccurrence = canManageOccurrence;
+
+/** Operacional "assume" um chamado da própria equipe que está sem responsável. */
+export function canClaimOccurrence(a: Actor, o: OccScope & { status?: OccurrenceStatus }): boolean {
+  if (o.responsibleParticipantId || o.status === "CONCLUIDO" || o.status === "CANCELADO") return false;
+  const m = membershipFor(a, o.eventId);
+  return m?.role === "OPERACIONAL" && m.teamId === o.teamId;
+}
