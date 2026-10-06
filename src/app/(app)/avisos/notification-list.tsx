@@ -19,6 +19,7 @@ interface Item {
 
 const TONE: Record<string, string> = {
   URGENTE: "bg-red-600",
+  LEMBRETE: "bg-red-600",
   SLA_ESTOURADO: "bg-red-600",
   BLOQUEIO: "bg-amber-500",
   SLA_PROXIMO: "bg-amber-500",

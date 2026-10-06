@@ -113,6 +113,7 @@ enum NotificationType {
   CONCLUIDA
   ATRIBUIDA
   REPROVADA
+  LEMBRETE
 
   @@map("notification_type")
 }

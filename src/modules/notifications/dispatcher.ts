@@ -3,15 +3,16 @@ import type { NotificationType } from "../../generated/prisma/enums";
 import { signClaim } from "../../server/whatsapp/actions";
 import { TEMPLATE_ALERT, TEMPLATE_ALERT_CLAIM, type WhatsApp } from "../../server/whatsapp/whatsapp";
 import {
-  HEADLINE, WHATSAPP_TYPES, personCanClaim, personCanSee, planForChange, planForSla,
-  type Change, type OccInfo, type Person, type Planned, type Snapshot,
+  HEADLINE, MAX_REMINDERS, REMINDER_EVERY_MS, WHATSAPP_TYPES, personCanClaim, personCanSee,
+  planForChange, planForSla, planUrgentReminder, type Change, type OccInfo, type Person, type Planned, type Snapshot,
 } from "./rules";
 
 /**
  * Despacho de avisos. Roda com o papel core_worker (src/server/db/client.ts):
  *  1. lê a fila de mudanças dos chamados (gravada por trigger) e cria os avisos;
  *  2. procura chamados com SLA perto de vencer ou vencido;
- *  3. envia pelo WhatsApp os avisos de quem aceitou, com novas tentativas.
+ *  3. reenvia o urgente ao encarregado que não respondeu em 5 minutos;
+ *  4. envia pelo WhatsApp os avisos de quem aceitou, com novas tentativas.
  * Pode rodar várias vezes ao mesmo tempo: a fila usa SKIP LOCKED e cada aviso
  * tem uma chave que impede repetição.
  */
@@ -71,7 +72,7 @@ async function store(tx: WTx, planned: Planned[], occ: OccInfo, people: Person[]
       RETURNING id`;
     if (!rows[0]) continue;
     created++;
-    if (!WHATSAPP_TYPES.has(p.type)) continue;
+    if (!(p.whatsapp ?? WHATSAPP_TYPES.has(p.type))) continue;
     const contact = await tx.whatsappContact.findUnique({ where: { userId: p.userId } });
     if (!contact?.optedInAt) continue;
     const person = people.find((x) => x.userId === p.userId && x.eventId === occ.eventId);
@@ -144,11 +145,56 @@ export async function scanSla({ db, now = () => new Date() }: DispatchDeps): Pro
   }, { timeout: 30_000 });
 }
 
+/**
+ * 3. Urgente sem resposta. "Responder" é abrir o chamado (pelo botão do WhatsApp
+ * ou pelo app, o que marca os avisos dele como lidos) ou mexer nele. Para quando
+ * o chamado fecha ou deixa de ser urgente, e depois de 3 lembretes.
+ */
+export async function scanUrgentReminders({ db, now = () => new Date() }: DispatchDeps): Promise<number> {
+  const at = now();
+  return db.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<{ user_id: string; occurrence_id: string; created_at: Date }[]>`
+      SELECT n.user_id, n.occurrence_id, n.created_at
+        FROM notifications n
+        JOIN occurrences o ON o.id = n.occurrence_id
+       WHERE n.type = 'URGENTE' AND n.read_at IS NULL
+         AND n.dedupe_key = 'urgente:' || n.occurrence_id::text
+         AND n.created_at <= ${at}::timestamptz - ${REMINDER_EVERY_MS}::int * interval '1 millisecond'
+         AND n.created_at > ${at}::timestamptz - ${REMINDER_EVERY_MS * (MAX_REMINDERS + 1)}::int * interval '1 millisecond'
+         AND o.status NOT IN ('CONCLUIDO', 'CANCELADO')
+         AND (o.status = 'URGENTE' OR o.priority = 'CRITICA')
+         AND NOT EXISTS (
+           SELECT 1 FROM notifications r
+            WHERE r.user_id = n.user_id AND r.occurrence_id = n.occurrence_id
+              AND r.read_at IS NOT NULL AND r.created_at >= n.created_at)
+         AND NOT EXISTS (
+           SELECT 1 FROM occurrence_changes c
+            WHERE c.occurrence_id = n.occurrence_id AND c.actor_user_id = n.user_id
+              AND c.created_at >= n.created_at)
+       ORDER BY n.created_at
+       LIMIT 500`;
+    if (rows.length === 0) return 0;
+    const occs = (await tx.occurrence.findMany({
+      where: { id: { in: [...new Set(rows.map((r) => r.occurrence_id))] } }, select: occSelect,
+    })).map(toInfo);
+    const byId = new Map(occs.map((o) => [o.id, o]));
+    const people = await loadPeople(tx, [...new Set(occs.map((o) => o.eventId))]);
+    let created = 0;
+    for (const r of rows) {
+      const occ = byId.get(r.occurrence_id);
+      if (!occ) continue;
+      const n = Math.floor((at.getTime() - r.created_at.getTime()) / REMINDER_EVERY_MS);
+      created += await store(tx, planUrgentReminder(occ, people, r.user_id, n), occ, people);
+    }
+    return created;
+  }, { timeout: 30_000 });
+}
+
 export function appUrl() {
   return (process.env.APP_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
-/** 3. Envio pelo WhatsApp, com até 4 tentativas. */
+/** 4. Envio pelo WhatsApp, com até 4 tentativas. */
 export async function sendPending({ db, whatsapp, now = () => new Date() }: DispatchDeps): Promise<{ sent: number; skipped: number; failed: number }> {
   const stats = { sent: 0, skipped: 0, failed: 0 };
   if (!whatsapp) return stats;
@@ -223,6 +269,7 @@ export async function sendPending({ db, whatsapp, now = () => new Date() }: Disp
 export async function dispatch(deps: DispatchDeps) {
   const created = await processOutbox(deps);
   const sla = await scanSla(deps);
+  const reminders = await scanUrgentReminders(deps);
   const whatsapp = await sendPending(deps);
-  return { created, sla, whatsapp };
+  return { created, sla, reminders, whatsapp };
 }

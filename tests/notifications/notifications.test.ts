@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { inject } from "vitest";
 import { createHmac } from "node:crypto";
 import { actorFor, appDb, authDb, demo, expectPgError, ownerDb, workerDb, type Person } from "../helpers";
-import { dispatch, processOutbox, scanSla, sendPending } from "@/modules/notifications/dispatcher";
+import { dispatch, processOutbox, scanSla, scanUrgentReminders, sendPending } from "@/modules/notifications/dispatcher";
 import { handleWhatsAppWebhook } from "@/modules/notifications/whatsapp-webhook";
 import {
-  getWhatsappSettings, listNotifications, markRead, setWhatsappSettings,
+  getWhatsappSettings, listNotifications, markOccurrenceRead, markRead, setWhatsappSettings,
 } from "@/modules/notifications/notifications.service";
 import {
   changeStatus, concludeOccurrence, createOccurrence, getOccurrence, reassignOccurrence, validateOccurrence,
@@ -21,7 +21,8 @@ import { normalizePhone } from "@/lib/phone";
 
 /**
  * Etapa 9: avisos no app e no WhatsApp. O despacho roda com o papel
- * core_worker; o WhatsApp é simulado em memória.
+ * core_worker; o WhatsApp é simulado em memória. Urgente vai para o WhatsApp
+ * só do encarregado da área, com novo alerta a cada 5 minutos sem resposta.
  */
 
 process.env.WHATSAPP_ACTION_SECRET = "s".repeat(40);
@@ -161,23 +162,58 @@ describe("WhatsApp", () => {
     return { o, msgs };
   }
 
-  it("só quem aceitou recebe; Operacional que pode assumir ganha o botão Assumir", async () => {
+  /** SLA perto de vencer num chamado sem responsável: a equipe recebe, com o botão Assumir. */
+  async function slaWithWhatsApp() {
+    const o = await newOccurrence("rafael", { teamId: d.teams.eletrica.id, priority: "ALTA" });
+    await dispatch(deps);
+    const due = (await owner.occurrence.findUniqueOrThrow({ where: { id: o.id } })).slaDueAt!;
+    const from = wa.templates.length;
+    await scanSla({ ...deps, now: () => new Date(due.getTime() - 60_000) });
+    await sendPending(deps);
+    const msgs = wa.templates.slice(from).filter((m) => m.urlSuffix === o.id);
+    return { o, msgs };
+  }
+
+  it("urgente vai para o WhatsApp só do encarregado da área, com o botão Abrir no app", async () => {
     const { o, msgs } = await urgentWithWhatsApp();
+    // João e Pedro (equipe) também aceitaram o WhatsApp, mas o urgente fica no app para eles.
+    expect(msgs.map((m) => [m.to, m.template])).toEqual([[normalizePhone(phones.rafael)!, TEMPLATE_ALERT]]);
+    expect(msgs[0].body).toEqual(["Chamado urgente", String(o.number), o.title, "Elétrica · Infraestrutura"]);
+    expect(msgs[0].claimPayload).toBeUndefined();
+    expect(await recipients(o.id, "URGENTE")).toEqual(["joao", "marina", "pedro", "rafael"]);
+    const deliveries = await owner.notificationDelivery.findMany({ where: { notification: { occurrenceId: o.id } } });
+    expect(deliveries.map((x) => [x.toPhone, x.status])).toEqual([[normalizePhone(phones.rafael)!, "ENVIADO"]]);
+  });
+
+  it("área sem Head: o encarregado é o Gerente", async () => {
+    const marina = await actorFor(app, "marina");
+    await setWhatsappSettings(marina, { phone: "(11) 98888-0005", enabled: true });
+    await owner.participant.update({ where: { id: d.participants.rafael.id }, data: { active: false } });
+    try {
+      const { msgs } = await urgentWithWhatsApp();
+      expect(msgs.map((m) => m.to)).toEqual(["+5511988880005"]);
+    } finally {
+      await owner.participant.update({ where: { id: d.participants.rafael.id }, data: { active: true } });
+      await setWhatsappSettings(marina, { enabled: false });
+    }
+  });
+
+  it("SLA sem responsável: só quem aceitou recebe; Operacional que pode assumir ganha o botão Assumir", async () => {
+    const { o, msgs } = await slaWithWhatsApp();
     const byPhone = Object.fromEntries(msgs.map((m) => [m.to, m.template]));
     expect(byPhone).toEqual({
       [normalizePhone(phones.joao)!]: TEMPLATE_ALERT_CLAIM,
       [normalizePhone(phones.pedro)!]: TEMPLATE_ALERT_CLAIM,
       [normalizePhone(phones.rafael)!]: TEMPLATE_ALERT,
     });
-    // Marina não ligou o WhatsApp; Cláudia (Cliente) nem recebe o aviso.
+    // Cláudia (Cliente) nem recebe o aviso.
     expect(msgs.every((m) => m.to !== normalizePhone(phones.claudia))).toBe(true);
-    expect(msgs[0].body).toEqual(["Chamado urgente", String(o.number), o.title, "Elétrica · Infraestrutura"]);
-    const deliveries = await owner.notificationDelivery.findMany({ where: { notification: { occurrenceId: o.id } } });
-    expect(deliveries.every((x) => x.status === "ENVIADO" && x.providerMessageId)).toBe(true);
+    expect(msgs[0].body[0]).toBe("SLA perto de estourar");
+    expect(msgs[0].body[1]).toBe(String(o.number));
   });
 
   it("Assumir pelo WhatsApp: funciona uma vez, só do número que recebeu, e fica no histórico", async () => {
-    const { o, msgs } = await urgentWithWhatsApp();
+    const { o, msgs } = await slaWithWhatsApp();
     const toJoao = msgs.find((m) => m.to === normalizePhone(phones.joao))!;
     const button = (payload: string, from: string) => ({
       entry: [{ changes: [{ value: { messages: [{ from, type: "button", button: { payload, text: "Assumir" } }] } }] }],
@@ -210,7 +246,7 @@ describe("WhatsApp", () => {
   });
 
   it("botão assinado para um envio não serve para outro", async () => {
-    const { msgs } = await urgentWithWhatsApp();
+    const { msgs } = await slaWithWhatsApp();
     const toJoao = msgs.find((m) => m.to === normalizePhone(phones.joao))!;
     const otherId = "00000000-0000-4000-8000-000000000000";
     const mac = toJoao.claimPayload!.split(":")[2];
@@ -224,7 +260,7 @@ describe("WhatsApp", () => {
   });
 
   it("quem foi desativado não assume pelo WhatsApp", async () => {
-    const { msgs } = await urgentWithWhatsApp();
+    const { msgs } = await slaWithWhatsApp();
     const toPedro = msgs.find((m) => m.to === normalizePhone(phones.pedro))!;
     await owner.user.update({ where: { id: d.users.pedro! }, data: { active: false } });
     try {
@@ -293,6 +329,76 @@ describe("WhatsApp", () => {
     expect(verifyWebhookSignature(raw + " ", sig, secret)).toBe(false);
     expect(verifyWebhookSignature(raw, sig, "outro")).toBe(false);
     expect(verifyWebhookSignature(raw, null, secret)).toBe(false);
+  });
+});
+
+describe("urgente sem resposta", () => {
+  const rafaelPhone = normalizePhone(phones.rafael)!;
+
+  /** Abre um urgente e devolve uma função que simula o despacho `min` minutos depois do aviso. */
+  async function urgent() {
+    const o = await newOccurrence("carlos", { teamId: d.teams.eletrica.id, status: "URGENTE" });
+    await dispatch(deps);
+    const first = await owner.notification.findFirstOrThrow({ where: { occurrenceId: o.id, userId: d.users.rafael!, type: "URGENTE" } });
+    const later = async (min: number) => {
+      const now = () => new Date(first.createdAt.getTime() + min * 60_000);
+      const from = wa.templates.length;
+      await scanUrgentReminders({ ...deps, now });
+      await sendPending({ ...deps, now });
+      return wa.templates.slice(from).filter((m) => m.urlSuffix === o.id);
+    };
+    return { o, later };
+  }
+
+  it("encarregado que não abre o chamado recebe novo alerta a cada 5 minutos, até 3 vezes", async () => {
+    const { o, later } = await urgent();
+    expect(await later(4)).toEqual([]);
+
+    const first = await later(5);
+    expect(first.map((m) => [m.to, m.template])).toEqual([[rafaelPhone, TEMPLATE_ALERT]]);
+    expect(first[0].body).toEqual(["Urgente sem resposta", String(o.number), o.title, "Sem resposta há 5 min · Elétrica · Infraestrutura"]);
+    // Rodar de novo na mesma janela não repete.
+    expect(await later(7)).toEqual([]);
+
+    expect((await later(10)).map((m) => m.body[3])).toEqual(["Sem resposta há 10 min · Elétrica · Infraestrutura"]);
+    expect((await later(15)).length).toBe(1);
+    expect(await later(20)).toEqual([]);
+    // Só o encarregado recebe lembrete; a equipe e o Gerente não.
+    expect(await recipients(o.id, "LEMBRETE")).toEqual(["rafael", "rafael", "rafael"]);
+  });
+
+  it("abrir o chamado (pelo botão do WhatsApp ou pelo app) para os lembretes", async () => {
+    const { o, later } = await urgent();
+    expect((await later(5)).length).toBe(1);
+    expect(await markOccurrenceRead(await actorFor(app, "rafael"), o.id)).toEqual({ updated: 2 });
+    expect(await later(10)).toEqual([]);
+    expect(await later(15)).toEqual([]);
+  });
+
+  it("mexer no chamado também conta como resposta", async () => {
+    const { o, later } = await urgent();
+    await reassignOccurrence(await actorFor(app, "rafael"), o.id, { responsibleParticipantId: d.participants.joao.id });
+    expect(await later(5)).toEqual([]);
+  });
+
+  it("chamado resolvido por outra pessoa para os lembretes", async () => {
+    const { o, later } = await urgent();
+    await reassignOccurrence(await actorFor(app, "marina"), o.id, { responsibleParticipantId: d.participants.joao.id });
+    expect((await later(5)).length).toBe(1);
+    await concludeOccurrence(await actorFor(app, "joao"), o.id);
+    expect(await later(10)).toEqual([]);
+  });
+
+  it("o lembrete respeita o desligamento do WhatsApp, mas continua no app", async () => {
+    const rafael = await actorFor(app, "rafael");
+    const { o, later } = await urgent();
+    await setWhatsappSettings(rafael, { enabled: false });
+    try {
+      expect(await later(5)).toEqual([]);
+      expect(await recipients(o.id, "LEMBRETE")).toEqual(["rafael"]);
+    } finally {
+      await setWhatsappSettings(rafael, { phone: phones.rafael, enabled: true });
+    }
   });
 });
 
@@ -398,9 +504,7 @@ describe("aceite no convite e telefone", () => {
     const from = wa.templates.length;
     await Promise.all([dispatch(deps), dispatch(deps), dispatch(deps)]);
     const msgs = wa.templates.slice(from).filter((m) => m.urlSuffix === o.id);
-    expect(msgs.map((m) => m.to).sort()).toEqual(
-      [phones.joao, phones.pedro, phones.rafael].map((p) => normalizePhone(p)!).sort(),
-    );
+    expect(msgs.map((m) => m.to)).toEqual([normalizePhone(phones.rafael)!]);
     expect(await owner.notification.count({ where: { occurrenceId: o.id, type: "URGENTE" } })).toBe(4);
   });
 });

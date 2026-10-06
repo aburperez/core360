@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { getOccurrence } from "@/modules/occurrences/occurrences.service";
 import { listParticipants } from "@/modules/participants/participants.service";
+import { markOccurrenceRead } from "@/modules/notifications/notifications.service";
 import { NotFoundError } from "@/server/errors";
 import { TopBar } from "@/components/top-bar";
 import { Card, PriorityText, SectionTitle, SlaPill, StatusBadge } from "@/components/ui";
@@ -29,6 +30,8 @@ export default async function OccurrencePage({ params }: PageProps<"/eventos/[ev
     throw e;
   });
   if (o.eventId !== eventId) notFound();
+  // Abrir o chamado responde aos avisos dele (e para os lembretes do urgente).
+  await markOccurrenceRead(actor, occurrenceId);
 
   const people = o.can.manage ? await listParticipants(actor, eventId, { areaId: o.areaId }) : [];
   const names = new Map<string, string>([

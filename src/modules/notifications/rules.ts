@@ -59,16 +59,27 @@ export interface Planned {
   title: string;
   body: string;
   dedupeKey: string;
+  /** Vai também para o WhatsApp (se a pessoa aceitou). Sem isso, vale WHATSAPP_TYPES. */
+  whatsapp?: boolean;
 }
 
-/** Avisos que também vão para o WhatsApp de quem aceitou. Os demais ficam só no app. */
+/**
+ * Avisos que também vão para o WhatsApp de quem aceitou. Os demais ficam só no app.
+ * Urgente e lembrete não estão aqui: no WhatsApp eles vão só para o encarregado
+ * da área (ver planForChange e planUrgentReminders).
+ */
 export const WHATSAPP_TYPES = new Set<NotificationType>([
-  "URGENTE", "BLOQUEIO", "ATRIBUIDA", "SLA_PROXIMO", "SLA_ESTOURADO", "REPROVADA",
+  "BLOQUEIO", "ATRIBUIDA", "SLA_PROXIMO", "SLA_ESTOURADO", "REPROVADA",
 ]);
+
+/** Sem resposta do encarregado, o urgente é reenviado a cada 5 minutos, até 3 vezes. */
+export const REMINDER_EVERY_MS = 5 * 60_000;
+export const MAX_REMINDERS = 3;
 
 export const HEADLINE: Record<NotificationType, string> = {
   NOVA: "Novo chamado na sua equipe",
   URGENTE: "Chamado urgente",
+  LEMBRETE: "Urgente sem resposta",
   BLOQUEIO: "Chamado bloqueado",
   ATRIBUIDA: "Chamado atribuído a você",
   SLA_PROXIMO: "SLA perto de estourar",
@@ -107,16 +118,25 @@ function audience(people: Person[], occ: { areaId: string; teamId: string; respo
   };
 }
 
+/** Encarregado do setor: o Head da área do chamado. Área sem Head: o Gerente do evento. */
+function encarregados(a: ReturnType<typeof audience>) {
+  return a.heads.length ? a.heads : a.gerentes;
+}
+
 function build(occ: OccInfo, exclude: string | null) {
   const out = new Map<string, Planned>();
   const subject = `#${occ.number} ${occ.title}`;
   const where = `${occ.teamName} · ${occ.areaName}`;
   return {
-    add(list: Person[], type: NotificationType, key: string, body = where) {
+    where,
+    add(list: Person[], type: NotificationType, key: string, body = where, whatsapp?: boolean) {
       for (const p of list) {
         if (p.userId === exclude || out.has(`${p.userId}:${key}`)) continue;
         if (!personCanSee(p, occ)) continue;
-        out.set(`${p.userId}:${key}`, { userId: p.userId, type, title: `${HEADLINE[type]}: ${subject}`, body, dedupeKey: key });
+        out.set(`${p.userId}:${key}`, {
+          userId: p.userId, type, title: `${HEADLINE[type]}: ${subject}`, body, dedupeKey: key,
+          ...(whatsapp !== undefined && { whatsapp }),
+        });
       }
     },
     result: () => [...out.values()],
@@ -133,8 +153,11 @@ export function planForChange(change: Change, occ: OccInfo, people: Person[]): P
   const open = !CLOSED.includes(now.status);
 
   if (open && isUrgent(now) && !isUrgent(before)) {
-    // Sem responsável, a equipe toda fica sabendo para alguém assumir.
-    b.add([...a.gerentes, ...a.heads, ...(now.responsible ? a.responsible : a.team)], "URGENTE", `urgente:${occ.id}`);
+    const key = `urgente:${occ.id}`;
+    // WhatsApp: só o encarregado do setor. Se ele não abrir o chamado, planUrgentReminders reenvia.
+    b.add(encarregados(a), "URGENTE", key, b.where, true);
+    // No app (sino), todos que respondem pelo chamado ficam sabendo. Sem responsável, a equipe toda.
+    b.add([...a.gerentes, ...a.heads, ...(now.responsible ? a.responsible : a.team)], "URGENTE", key, b.where, false);
   }
   if (open && now.status === "BLOQUEIO" && before?.status !== "BLOQUEIO") {
     b.add([...a.gerentes, ...a.heads, ...a.responsible], "BLOQUEIO", `bloqueio:${occ.id}:${change.id}`);
@@ -167,5 +190,22 @@ export function planForSla(occ: OccInfo, people: Person[], late: boolean): Plann
   } else {
     b.add([...who, ...a.heads], "SLA_PROXIMO", `sla-proximo:${occ.id}:${due}`, `Vence às ${at} · ${occ.teamName}`);
   }
+  return b.result();
+}
+
+/**
+ * Lembrete do urgente: o encarregado recebeu o aviso há `n` × 5 minutos e ainda
+ * não abriu nem mexeu no chamado (quem confere isso é o despacho). Só vale para
+ * quem continua sendo o encarregado da área do chamado.
+ */
+export function planUrgentReminder(occ: OccInfo, people: Person[], userId: string, n: number): Planned[] {
+  if (CLOSED.includes(occ.status) || n < 1 || n > MAX_REMINDERS) return [];
+  const b = build(occ, null);
+  const a = audience(people.filter((p) => p.eventId === occ.eventId), { ...occ, responsible: occ.responsibleParticipantId });
+  const minutes = (n * REMINDER_EVERY_MS) / 60_000;
+  b.add(
+    encarregados(a).filter((p) => p.userId === userId),
+    "LEMBRETE", `urgente-lembrete:${occ.id}:${n}`, `Sem resposta há ${minutes} min · ${b.where}`, true,
+  );
   return b.result();
 }

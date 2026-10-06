@@ -42,6 +42,22 @@ export async function markRead(actor: Actor, input: unknown) {
   });
 }
 
+/**
+ * Abrir um chamado conta como resposta aos avisos dele: marca como lidos e
+ * para os lembretes do urgente. Chamado pela tela do chamado (inclusive quando
+ * a pessoa chega pelo botão do WhatsApp).
+ */
+export async function markOccurrenceRead(actor: Actor, occurrenceId: string) {
+  const id = parse(uuid, occurrenceId);
+  return actor.run(async (tx) => {
+    const r = await tx.notification.updateMany({
+      where: { userId: actor.userId, occurrenceId: id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return { updated: r.count };
+  });
+}
+
 /** Número de WhatsApp e se a pessoa quer receber avisos por lá. */
 export async function getWhatsappSettings(actor: Actor) {
   return actor.run(async (tx) => {
