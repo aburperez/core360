@@ -1,5 +1,9 @@
+import { hashPassword } from "better-auth/crypto";
 import type { PrismaClient } from "../src/generated/prisma/client";
 import type { ParticipantRole, Priority } from "../src/generated/prisma/enums";
+import { DEFAULT_SLA_MINUTES } from "../src/modules/occurrences/sla";
+
+export { DEFAULT_SLA_MINUTES };
 
 /**
  * Cenário de demonstração do briefing (item 16) e base dos testes de segurança.
@@ -10,12 +14,6 @@ import type { ParticipantRole, Priority } from "../src/generated/prisma/enums";
  * Congresso Saúde 2027 (cliente Instituto Saúde) — "outro evento/cliente"
  *   Infraestrutura: Elétrica. João é HEAD aqui (mesma pessoa, papel diferente).
  */
-export const DEFAULT_SLA_MINUTES: Record<Priority, number> = {
-  CRITICA: 15,
-  ALTA: 60,
-  NORMAL: 240,
-  BAIXA: 1440,
-};
 
 type PersonKey =
   | "admin" | "marina" | "paulo" | "rafael" | "beatriz" | "claudia"
@@ -39,8 +37,12 @@ const PEOPLE: Record<PersonKey, { name: string; email: string; login: boolean; i
   inativo: { name: "Usuário Inativo", email: "inativo@rockfestival.dev", login: true, active: false },
 };
 
+/** Senha das contas de demonstração (somente dev/teste). */
+export const DEMO_PASSWORD = "core360-demo";
+
 export async function seedDemo(db: PrismaClient) {
   const users = {} as Record<PersonKey, string | null>;
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
   for (const [key, p] of Object.entries(PEOPLE) as [PersonKey, (typeof PEOPLE)[PersonKey]][]) {
     if (!p.login) {
       users[key] = null;
@@ -52,6 +54,11 @@ export async function seedDemo(db: PrismaClient) {
       create: { email: p.email, name: p.name, isAdmin: p.isAdmin ?? false, active: p.active ?? true, emailVerified: true },
     });
     users[key] = u.id;
+    await db.account.upsert({
+      where: { providerId_accountId: { providerId: "credential", accountId: u.id } },
+      update: {},
+      create: { userId: u.id, accountId: u.id, providerId: "credential", password: passwordHash },
+    });
   }
 
   const rockClient = await db.client.create({

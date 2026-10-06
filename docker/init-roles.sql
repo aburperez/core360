@@ -1,8 +1,10 @@
 -- Executado uma única vez na criação do banco (dev/teste).
 -- core_owner: dono das tabelas, usado só pelas migrations.
 -- core_app:   usado pela aplicação; não é dono e não tem BYPASSRLS.
+-- core_auth:  usado só pelo login/convites; enxerga apenas tabelas de identidade.
 CREATE ROLE core_owner LOGIN PASSWORD 'core_owner_dev' CREATEDB;
 CREATE ROLE core_app   LOGIN PASSWORD 'core_app_dev' NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE core_auth  LOGIN PASSWORD 'core_auth_dev' NOSUPERUSER NOBYPASSRLS;
 CREATE DATABASE core360 OWNER core_owner;
 CREATE DATABASE core360_test OWNER core_owner;
 \c core360

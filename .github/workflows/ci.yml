@@ -21,6 +21,7 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://core_owner:core_owner_dev@localhost:5432/core360_test
       TEST_APP_DATABASE_URL: postgresql://core_app:core_app_dev@localhost:5432/core360_test
+      TEST_AUTH_DATABASE_URL: postgresql://core_auth:core_auth_dev@localhost:5432/core360_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -34,3 +35,4 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm build

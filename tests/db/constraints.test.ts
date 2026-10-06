@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appDb, demo, expectPgError, ownerDb } from "../helpers";
+import { withUser } from "@/server/db/with-user";
 import type { DemoData } from "../../prisma/demo-data";
 
 // Estes testes rodam como DONO das tabelas, de propósito: provam que as regras
@@ -14,8 +15,8 @@ const DENIED = "42501";
 const db = ownerDb();
 let d: DemoData;
 
-beforeAll(async () => {
-  d = await demo(db);
+beforeAll(() => {
+  d = demo();
 });
 
 afterAll(async () => {
@@ -90,7 +91,7 @@ describe("participantes e papéis", () => {
   });
 
   it("a mesma pessoa pode ter papéis diferentes em eventos diferentes", async () => {
-    const joao = await db.participant.findMany({ where: { userId: d.users.joao! }, orderBy: { role: "asc" } });
+    const joao = await db.participant.findMany({ where: { userId: d.users.joao! } });
     expect(joao.map((p) => p.role).sort()).toEqual(["HEAD", "OPERACIONAL"]);
     expect(new Set(joao.map((p) => p.eventId)).size).toBe(2);
   });
@@ -237,12 +238,14 @@ describe("papel da aplicação (core_app)", () => {
   });
 
   it("consegue abrir ocorrência (trigger de numeração roda com privilégio próprio)", async () => {
-    const o = await app.occurrence.create({
-      data: {
-        eventId: d.events.rock.id, areaId: d.areas.ab.id, teamId: d.teams.cozinha.id,
-        title: "Fogão industrial sem gás", createdById: d.users.beatriz!, clientId: d.clients.rock.id,
-      },
-    });
+    const o = await withUser(app, d.users.beatriz!, (tx) =>
+      tx.occurrence.create({
+        data: {
+          eventId: d.events.rock.id, areaId: d.areas.ab.id, teamId: d.teams.cozinha.id,
+          title: "Fogão industrial sem gás", createdById: d.users.beatriz!, clientId: d.clients.rock.id,
+        },
+      }),
+    );
     expect(o.number).toBeGreaterThan(0);
   });
 
