@@ -5,7 +5,11 @@ import { usePathname } from "next/navigation";
 import { BrandWordmark } from "./brand";
 import { cx } from "./ui";
 
-type NavProps = { eventId: string; canCreate: boolean; canSeeTickets: boolean; canBuildTeam: boolean; canSwitchEvent: boolean };
+type NavProps = {
+  eventId: string; canCreate: boolean; canSeeTickets: boolean; canBuildTeam: boolean; canSwitchEvent: boolean;
+  /** Pré-produtor não tem campo; Head, Operacional e Cliente não têm Pré-produção. */
+  canUseField: boolean; canUsePre: boolean;
+};
 
 type Item = { href: string; label: string; icon: string; active: boolean; primary?: boolean };
 
@@ -33,7 +37,9 @@ export function EventNav(props: NavProps) {
   ];
   const create = items.find((it) => it.primary);
   const links = items.filter((it) => !it.primary);
-  const mobile: Item[] = inPre ? [...preItems, { href: base, label: "Campo", icon: "◉", active: false }] : items;
+  const mobile: Item[] = !props.canUseField ? preItems
+    : inPre && props.canUsePre ? [...preItems, { href: base, label: "Campo", icon: "◉", active: false }]
+    : items;
 
   return (
     <>
@@ -66,7 +72,7 @@ export function EventNav(props: NavProps) {
         <Link href={base} className="flex h-17 shrink-0 items-center px-6" aria-label="Início do evento">
           <BrandWordmark className="h-5 w-auto" />
         </Link>
-        {create && (
+        {create && props.canUseField && (
           <Link
             href={create.href}
             className="mx-4 mt-2 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-accent px-4 font-semibold text-accent-foreground transition hover:brightness-110"
@@ -75,8 +81,8 @@ export function EventNav(props: NavProps) {
           </Link>
         )}
         <nav className="mt-4 flex-1 overflow-y-auto px-3">
-          <SideGroup title="Gestão de campo" items={links} />
-          <SideGroup title="Pré-produção" items={preItems} />
+          {props.canUseField && <SideGroup title="Gestão de campo" items={links} />}
+          {props.canUsePre && <SideGroup title="Pré-produção" items={preItems} />}
         </nav>
         <div className="space-y-1 border-t border-white/10 p-3">
           <Link href="/avisos" className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-white/75 transition hover:bg-white/5 hover:text-white">

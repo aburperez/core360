@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/server/http/session";
-import { canManageServiceTypes } from "@/server/authz/policy";
+import { notFound } from "next/navigation";
+import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
@@ -16,15 +17,16 @@ export const metadata = { title: "Pré-produção" };
 export default async function PreProductionPage({ params }: PageProps<"/eventos/[eventId]/pre-producao">) {
   const actor = await requireUser();
   const { eventId } = await params;
+  if (!canUsePreProduction(actor, eventId)) notFound();
   const [event, types, teams] = await Promise.all([getEvent(actor, eventId), listServiceTypes(actor, eventId), listTeams(actor, eventId)]);
   const base = `/eventos/${eventId}/pre-producao`;
-  const creatable = teams.filter((t) => canManageServiceTypes(actor, { eventId, areaId: t.areaId }));
-  const toReview = types.filter((t) => t.pending && t.can.manage);
+  const creatable = teams;
+  const toReview = canReviewSla(actor, eventId) ? types.filter((t) => t.pending) : [];
 
   return (
     <>
       <TopBar title="Pré-produção" subtitle={event.name} />
-      <EventTabs eventId={eventId} active="pre" />
+      {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         {toReview.length > 0 && (
           <>
@@ -46,7 +48,7 @@ export default async function PreProductionPage({ params }: PageProps<"/eventos/
 
         <SectionTitle>Tipos de atendimento e SLA</SectionTitle>
         <p className="mb-3 px-1 text-sm text-muted">
-          O SLA de cada tipo vira o prazo do chamado. Quem executa propõe, e o gerente ou o head da área aprova ou ajusta.
+          O SLA de cada tipo vira o prazo do chamado de campo. O pré-produtor propõe e o gerente aprova, ajusta ou recusa.
           Sem SLA aprovado, vale o prazo da prioridade.
         </p>
         {creatable.length > 0 && (
@@ -57,7 +59,7 @@ export default async function PreProductionPage({ params }: PageProps<"/eventos/
 
         {types.length === 0 ? (
           <EmptyState title="Nenhum tipo de atendimento ainda">
-            {creatable.length ? "Crie o primeiro, por exemplo “Troca de lâmpada” na equipe de Elétrica." : "O gerente ou o head da área cadastra os tipos."}
+            {creatable.length ? "Crie o primeiro, por exemplo “Troca de lâmpada” na equipe de Elétrica." : "Monte as equipes primeiro em Montar equipe."}
           </EmptyState>
         ) : (
           <>

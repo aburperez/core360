@@ -39,6 +39,8 @@ enum ParticipantRole {
   HEAD
   OPERACIONAL
   CLIENTE
+  /// Só a Pré-produção do evento (sem campo).
+  PRE_PRODUTOR
 
   @@map("participant_role")
 }

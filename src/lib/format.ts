@@ -38,6 +38,7 @@ export const ROLE_LABEL: Record<ParticipantRole | "ADMIN", string> = {
   HEAD: "Head",
   OPERACIONAL: "Operacional",
   CLIENTE: "Cliente",
+  PRE_PRODUTOR: "Pré-produtor",
 };
 
 export function formatDuration(seconds: number | null | undefined): string {

@@ -59,23 +59,23 @@ export default async function ServiceTypePage({ params }: PageProps<"/eventos/[e
                 </p>
                 {pending.note && <p className="mt-1 text-sm text-muted">&ldquo;{pending.note}&rdquo;</p>}
                 <p className="mt-1 text-xs text-muted">{formatDateTime(pending.createdAt)}</p>
-                {t.can.manage ? (
+                {t.can.review ? (
                   <div className="mt-4"><ReviewForm proposalId={pending.id} proposed={pending.minutes} /></div>
                 ) : (
-                  <p className="mt-3 text-sm text-muted">O gerente ou o head da área vai aprovar, ajustar ou recusar com um comentário.</p>
+                  <p className="mt-3 text-sm text-muted">O gerente vai aprovar, ajustar ou recusar com um comentário.</p>
                 )}
               </Card>
             </>
           )}
 
-          {t.can.propose && !pending && (
+          {!pending && (
             <>
-              <SectionTitle>{t.can.manage ? "SLA" : "Propor SLA"}</SectionTitle>
-              <Card><ProposeForm typeId={t.id} manager={t.can.manage} current={t.slaMinutes} /></Card>
+              <SectionTitle>{t.can.review ? "SLA" : "Propor SLA"}</SectionTitle>
+              <Card><ProposeForm typeId={t.id} manager={t.can.review} current={t.slaMinutes} /></Card>
             </>
           )}
 
-          <SectionTitle action={<Link href={`${base}/quem-faz?equipe=${t.teamId}`} className="text-sm font-semibold text-primary">{t.can.manage ? "Editar" : "Ver planilha"}</Link>}>
+          <SectionTitle action={<Link href={`${base}/quem-faz?equipe=${t.teamId}`} className="text-sm font-semibold text-primary">Editar</Link>}>
             Quem faz
           </SectionTitle>
           {t.people.length === 0 ? (

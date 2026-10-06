@@ -4,9 +4,9 @@ import { withUser } from "@/server/db/with-user";
 import {
   canAssignRole,
   canCreateOccurrence,
-  canManageServiceTypes,
   canManageTeams,
-  canProposeSla,
+  canReviewSla,
+  canUsePreProduction,
   canSeeArea,
   canSeeOccurrence,
   canSeeTeam,
@@ -22,8 +22,8 @@ const db = appDb();
 const d = demo();
 afterAll(() => db.$disconnect());
 
-const PEOPLE: Person[] = ["admin", "marina", "paulo", "rafael", "beatriz", "claudia", "joao", "carlos", "ana"];
-const ROLES = ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE"] as const;
+const PEOPLE: Person[] = ["admin", "marina", "paulo", "rafael", "beatriz", "claudia", "joao", "carlos", "ana", "sofia"];
+const ROLES = ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"] as const;
 const rock = d.events.rock.id;
 const areas = [d.areas.infra.id, d.areas.ab.id];
 const teams = [d.teams.eletrica, d.teams.cenografia, d.teams.bar];
@@ -53,8 +53,7 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_see_area($1::uuid, $2::uuid) AS r`, rock, areaId));
           check(`gerir equipes da área ${areaId}`, canManageTeams(actor, { eventId: rock, areaId }),
             await q(`SELECT app.can_manage_team($1::uuid, $2::uuid) AS r`, rock, areaId));
-          check(`gerir tipos de atendimento da área ${areaId}`, canManageServiceTypes(actor, { eventId: rock, areaId }),
-            await q(`SELECT app.can_manage_service_type($1::uuid, $2::uuid) AS r`, rock, areaId));
+
         }
 
         for (const t of teams) {
@@ -63,8 +62,13 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_see_team($1::uuid, $2::uuid, $3::uuid) AS r`, rock, t.areaId, t.id));
           check(`abrir ocorrência em ${t.name}`, canCreateOccurrence(actor, s),
             await q(`SELECT app.can_write_occurrence($1::uuid, $2::uuid, $3::uuid) AS r`, rock, t.areaId, t.id));
-          check(`propor SLA em ${t.name}`, canProposeSla(actor, s),
-            await q(`SELECT app.can_propose_sla($1::uuid, $2::uuid, $3::uuid) AS r`, rock, t.areaId, t.id));
+        }
+
+        for (const ev of [rock, d.events.congresso.id]) {
+          check(`usar a Pré-produção de ${ev}`, canUsePreProduction(actor, ev),
+            await q(`SELECT app.can_use_pre_production($1::uuid) AS r`, ev));
+          check(`rever SLA em ${ev}`, canReviewSla(actor, ev),
+            await q(`SELECT app.can_review_sla($1::uuid) AS r`, ev));
         }
 
         for (const o of Object.values(d.occurrences)) {

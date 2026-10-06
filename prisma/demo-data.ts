@@ -11,13 +11,14 @@ export { DEFAULT_SLA_MINUTES };
  * Rock Festival 2027 (cliente Rock Produções)
  *   Infraestrutura: Elétrica (João, Carlos, Pedro), Estrutura (Marcos, Lucas), Cenografia (Ana, Bruno)
  *   A&B: Bar, Cozinha, Atendimento
+ *   Pré-produção: Sofia (Pré-produtora, sem acesso ao campo)
  * Congresso Saúde 2027 (cliente Instituto Saúde) — "outro evento/cliente"
  *   Infraestrutura: Elétrica. João é HEAD aqui (mesma pessoa, papel diferente).
  */
 
 type PersonKey =
   | "admin" | "marina" | "paulo" | "rafael" | "beatriz" | "claudia"
-  | "joao" | "carlos" | "pedro" | "marcos" | "lucas" | "ana" | "bruno" | "inativo";
+  | "joao" | "carlos" | "pedro" | "marcos" | "lucas" | "ana" | "bruno" | "inativo" | "sofia";
 
 const PEOPLE: Record<PersonKey, { name: string; email: string; login: boolean; isAdmin?: boolean; active?: boolean }> = {
   admin:   { name: "Admin CORE 360", email: "admin@core360.dev", login: true, isAdmin: true },
@@ -35,6 +36,8 @@ const PEOPLE: Record<PersonKey, { name: string; email: string; login: boolean; i
   ana:     { name: "Ana", email: "ana@rockfestival.dev", login: true },
   bruno:   { name: "Bruno", email: "bruno@rockfestival.dev", login: true },
   inativo: { name: "Usuário Inativo", email: "inativo@rockfestival.dev", login: true, active: false },
+  // Pré-produtora: só a aba Pré-produção do Rock Festival.
+  sofia:   { name: "Sofia Pré-produtora", email: "sofia@rockfestival.dev", login: true },
 };
 
 /** Senha das contas de demonstração (somente dev/teste). */
@@ -144,6 +147,7 @@ export async function seedDemo(db: PrismaClient) {
   const parts = {
     marina: await participant(rock.id, "marina", "GERENTE", { jobTitle: "Gerente de projeto" }),
     claudia: await participant(rock.id, "claudia", "CLIENTE", { jobTitle: "Produtora (cliente)" }),
+    sofia: await participant(rock.id, "sofia", "PRE_PRODUTOR", { jobTitle: "Pré-produtora" }),
     rafael: await participant(rock.id, "rafael", "HEAD", { areaId: infra.id, jobTitle: "Head de Infra" }),
     beatriz: await participant(rock.id, "beatriz", "HEAD", { areaId: ab.id, jobTitle: "Head de A&B" }),
     joao: await participant(rock.id, "joao", "OPERACIONAL", { areaId: infra.id, teamId: eletrica.id, jobTitle: "Eletricista" }),

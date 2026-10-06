@@ -12,7 +12,7 @@ import { getTeam } from "../teams/teams.service";
 import { getArea } from "../areas/areas.service";
 import { hashToken, newToken } from "../../lib/tokens";
 
-const ROLES = ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE"] as const;
+const ROLES = ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"] as const;
 export const INVITE_TTL_DAYS = 7;
 
 const publicFields = {
@@ -29,6 +29,7 @@ function scopeWhere(actor: Actor, eventId: string): Prisma.ParticipantWhereInput
   switch (m?.role) {
     case "GERENTE":
     case "CLIENTE":
+    case "PRE_PRODUTOR":
       return { eventId };
     case "HEAD":
       return { eventId, OR: [{ areaId: m.areaId }, { role: "GERENTE" }, { userId: actor.userId }] };

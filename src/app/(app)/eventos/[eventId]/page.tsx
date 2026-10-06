@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
+import { canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { TopBar } from "@/components/top-bar";
@@ -12,6 +14,8 @@ export const metadata = { title: "Início" };
 export default async function DashboardPage({ params }: PageProps<"/eventos/[eventId]">) {
   const actor = await requireUser();
   const { eventId } = await params;
+  // Pré-produtor não tem campo: a casa dele é a Pré-produção.
+  if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
   const [event, dash] = await Promise.all([getEvent(actor, eventId), getDashboard(actor, eventId)]);
   const base = `/eventos/${eventId}`;
   const scopeLabel =
@@ -21,7 +25,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   return (
     <>
       <TopBar title={event.name} subtitle={`${ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
-      <EventTabs eventId={eventId} active="campo" />
+      {canUsePreProduction(actor, eventId) && <EventTabs eventId={eventId} active="campo" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         {"structure" in dash ? (
           <>

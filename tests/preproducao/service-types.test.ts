@@ -5,18 +5,22 @@ import {
   createServiceType,
   getServiceType,
   listServiceTypes,
+  listServiceTypesForTickets,
   proposeSla,
   reviewSla,
   setServiceTypePerson,
   updateServiceType,
 } from "@/modules/service-types/service-types.service";
-import { createOccurrence, reassignOccurrence } from "@/modules/occurrences/occurrences.service";
+import { createOccurrence, listOccurrences, reassignOccurrence } from "@/modules/occurrences/occurrences.service";
+import { createParticipant } from "@/modules/participants/participants.service";
+import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { targetMinutes } from "@/modules/occurrences/sla";
 
 /**
- * Pré-produção, etapa 1: tipos de atendimento, SLA proposto por quem executa e
- * revisto pelo gestor, e "quem faz o quê". Pela camada de serviço (o caminho
- * da API e das telas) e direto no banco (a RLS segura sozinha).
+ * Pré-produção separada do campo: só a Pré-produtora (Sofia) e o gestor
+ * (Gerente Marina, ou Admin) entram. Sofia propõe o SLA; só a Gerente aprova,
+ * ajusta, recusa ou define. O campo só lê nome e prazo dos tipos ao abrir um
+ * chamado. Pela camada de serviço e direto no banco (a RLS segura sozinha).
  */
 
 const db = appDb();
@@ -31,96 +35,131 @@ const minutesFromNow = (due: Date | null, opened: Date) => Math.round((due!.getT
 let typeId: string;
 
 beforeAll(async () => {
-  const rafael = await actorFor(db, "rafael");
-  const t = await createServiceType(rafael, { teamId: d.teams.eletrica.id, name: `Troca de disjuntor ${uniq()}` });
+  const sofia = await actorFor(db, "sofia");
+  const t = await createServiceType(sofia, { teamId: d.teams.eletrica.id, name: `Troca de disjuntor ${uniq()}` });
   typeId = t.id;
 });
 
-describe("criar tipos de atendimento", () => {
-  it("Head cria na própria área e já pode definir o SLA", async () => {
-    const rafael = await actorFor(db, "rafael");
-    const t = await createServiceType(rafael, { teamId: d.teams.estrutura.id, name: `Grade solta ${uniq()}`, slaMinutes: 45 });
-    expect(t.slaMinutes).toBe(45);
-    const detail = await getServiceType(rafael, t.id);
-    expect(detail.proposals[0]).toMatchObject({ status: "APROVADA", minutes: 45, approvedMinutes: 45 });
-  });
-
-  it("Head de outra área, Operacional e Cliente não criam", async () => {
-    for (const person of ["beatriz", "joao", "claudia"] as const) {
+describe("quem entra na Pré-produção", () => {
+  it("Pré-produtora e Gerente entram; Head, Operacional e Cliente não", async () => {
+    for (const person of ["sofia", "marina", "admin"] as const) {
       const actor = await actorFor(db, person);
-      // Beatriz não enxerga a equipe (404); João e a Cliente enxergam, mas não podem (403).
-      await expectStatus(
-        createServiceType(actor, { teamId: d.teams.eletrica.id, name: `Indevido ${uniq()}` }),
-        person === "beatriz" ? 404 : 403,
-      );
+      expect((await listServiceTypes(actor, rock)).map((t) => t.id)).toContain(typeId);
+    }
+    for (const person of ["rafael", "joao", "claudia"] as const) {
+      const actor = await actorFor(db, person);
+      await expectStatus(listServiceTypes(actor, rock), 404);
+      await expectStatus(getServiceType(actor, typeId), 404);
+      await expectStatus(createServiceType(actor, { teamId: d.teams.eletrica.id, name: `Indevido ${uniq()}` }), 404);
+      await expectStatus(proposeSla(actor, typeId, { minutes: 10 }), 404);
     }
   });
 
-  it("nome repetido na mesma equipe é recusado", async () => {
-    const marina = await actorFor(db, "marina");
-    const name = `Duplicado ${uniq()}`;
-    await createServiceType(marina, { teamId: d.teams.bar.id, name });
-    await expectStatus(createServiceType(marina, { teamId: d.teams.bar.id, name: name.toUpperCase() }), 422);
+  it("Gerente de outro evento não entra", async () => {
+    const paulo = await actorFor(db, "paulo");
+    await expectStatus(listServiceTypes(paulo, rock), 404);
+    await expectStatus(getServiceType(paulo, typeId), 404);
   });
 
-  it("cada um só lista os tipos das equipes que enxerga", async () => {
+  it("Pré-produtora não vê o campo: painel, chamados e abertura de chamado", async () => {
+    const sofia = await actorFor(db, "sofia");
+    expect(await listOccurrences(sofia, rock)).toEqual([]);
+    await expectStatus(createOccurrence(sofia, { teamId: d.teams.eletrica.id, title: `Indevido ${uniq()}` }), 403);
+    const dash = await getDashboard(sofia, rock);
+    expect("totals" in dash ? dash.totals.total : 0).toBe(0);
+  });
+
+  it("só a Gerente coloca alguém como Pré-produtor, sempre sem área", async () => {
     const marina = await actorFor(db, "marina");
-    await createServiceType(marina, { teamId: d.teams.bar.id, name: `Troca de barril ${uniq()}` });
-    const ana = await actorFor(db, "ana");
-    expect((await listServiceTypes(ana, rock)).every((t) => t.teamId === d.teams.cenografia.id)).toBe(true);
-    const joao = await actorFor(db, "joao");
-    expect((await listServiceTypes(joao, rock)).every((t) => t.teamId === d.teams.eletrica.id)).toBe(true);
-    expect((await listServiceTypes(joao, rock)).map((t) => t.id)).toContain(typeId);
-    await expectStatus(getServiceType(ana, typeId), 404);
+    const p = await createParticipant(marina, { eventId: rock, name: "Nova Pré", email: `pre.${uniq()}@x.dev`, role: "PRE_PRODUTOR" });
+    expect(p.role).toBe("PRE_PRODUTOR");
+    const rafael = await actorFor(db, "rafael");
+    await expectStatus(createParticipant(rafael, { eventId: rock, name: "X", email: `x.${uniq()}@x.dev`, role: "PRE_PRODUTOR" }), 403);
+    await expectPgError(
+      as("marina", (tx) => tx.participant.create({
+        data: { eventId: rock, name: "Y", email: `y.${uniq()}@x.dev`, role: "PRE_PRODUTOR", areaId: d.areas.infra.id },
+      })),
+      "23514",
+    );
   });
 });
 
-describe("SLA proposto por quem executa e revisto pelo gestor", () => {
-  it("João propõe; só existe uma proposta aguardando por vez", async () => {
-    const joao = await actorFor(db, "joao");
-    const p = await proposeSla(joao, typeId, { minutes: 40, note: "Precisa buscar peça no almoxarifado" });
+describe("tipos de atendimento", () => {
+  it("Pré-produtora cria; o SLA que ela informa vira proposta para a Gerente", async () => {
+    const sofia = await actorFor(db, "sofia");
+    const t = await createServiceType(sofia, { teamId: d.teams.estrutura.id, name: `Grade solta ${uniq()}`, slaMinutes: 45 });
+    expect(t.slaMinutes).toBeNull();
+    const detail = await getServiceType(sofia, t.id);
+    expect(detail.proposals[0]).toMatchObject({ status: "PENDENTE", minutes: 45 });
+    expect(detail.can).toEqual({ manage: true, review: false });
+  });
+
+  it("Gerente cria já com o SLA valendo", async () => {
+    const marina = await actorFor(db, "marina");
+    const t = await createServiceType(marina, { teamId: d.teams.bar.id, name: `Troca de barril ${uniq()}`, slaMinutes: 10 });
+    expect(t.slaMinutes).toBe(10);
+  });
+
+  it("nome repetido na mesma equipe é recusado", async () => {
+    const sofia = await actorFor(db, "sofia");
+    const name = `Duplicado ${uniq()}`;
+    await createServiceType(sofia, { teamId: d.teams.bar.id, name });
+    await expectStatus(createServiceType(sofia, { teamId: d.teams.bar.id, name: name.toUpperCase() }), 422);
+  });
+
+  it("arquivar tira o tipo da lista", async () => {
+    const sofia = await actorFor(db, "sofia");
+    const t = await createServiceType(sofia, { teamId: d.teams.cenografia.id, name: `Arquivar ${uniq()}` });
+    await updateServiceType(sofia, t.id, { archived: true });
+    expect((await listServiceTypes(sofia, rock)).map((x) => x.id)).not.toContain(t.id);
+  });
+});
+
+describe("SLA proposto pela Pré-produtora e revisto pela Gerente", () => {
+  it("Sofia propõe; só existe uma proposta aguardando por vez; ela não revê", async () => {
+    const sofia = await actorFor(db, "sofia");
+    const p = await proposeSla(sofia, typeId, { minutes: 40, note: "Precisa buscar peça no almoxarifado" });
     expect(p.status).toBe("PENDENTE");
-    await expectStatus(proposeSla(joao, typeId, { minutes: 30 }), 409);
-    const list = await listServiceTypes(joao, rock);
-    expect(list.find((t) => t.id === typeId)?.pending?.minutes).toBe(40);
-  });
-
-  it("quem é de outra equipe não propõe; Operacional não revê", async () => {
-    const ana = await actorFor(db, "ana");
-    await expectStatus(proposeSla(ana, typeId, { minutes: 10 }), 404);
-    const joao = await actorFor(db, "joao");
-    const pending = (await getServiceType(joao, typeId)).proposals.find((p) => p.status === "PENDENTE")!;
-    await expectStatus(reviewSla(joao, pending.id, { decision: "APROVAR" }), 403);
-    const beatriz = await actorFor(db, "beatriz");
-    await expectStatus(reviewSla(beatriz, pending.id, { decision: "APROVAR" }), 404);
-  });
-
-  it("ajustar exige comentário; o ajuste vira o SLA do tipo e João vê o retorno", async () => {
+    await expectStatus(proposeSla(sofia, typeId, { minutes: 30 }), 409);
+    await expectStatus(reviewSla(sofia, p.id, { decision: "APROVAR" }), 403);
     const rafael = await actorFor(db, "rafael");
-    const pending = (await getServiceType(rafael, typeId)).proposals.find((p) => p.status === "PENDENTE")!;
-    await expectStatus(reviewSla(rafael, pending.id, { decision: "AJUSTAR", minutes: 30 }), 422);
-    await reviewSla(rafael, pending.id, { decision: "AJUSTAR", minutes: 30, feedback: "Deixe a peça no palco antes do show" });
-    await expectStatus(reviewSla(rafael, pending.id, { decision: "RECUSAR", feedback: "x" }), 409);
+    await expectStatus(reviewSla(rafael, p.id, { decision: "APROVAR" }), 404);
+  });
 
-    const joao = await actorFor(db, "joao");
-    const detail = await getServiceType(joao, typeId);
+  it("ajustar exige comentário; o ajuste vira o SLA e Sofia vê o retorno", async () => {
+    const marina = await actorFor(db, "marina");
+    const pending = (await getServiceType(marina, typeId)).proposals.find((p) => p.status === "PENDENTE")!;
+    await expectStatus(reviewSla(marina, pending.id, { decision: "AJUSTAR", minutes: 30 }), 422);
+    await reviewSla(marina, pending.id, { decision: "AJUSTAR", minutes: 30, feedback: "Deixe a peça no palco antes do show" });
+    await expectStatus(reviewSla(marina, pending.id, { decision: "RECUSAR", feedback: "x" }), 409);
+
+    const sofia = await actorFor(db, "sofia");
+    const detail = await getServiceType(sofia, typeId);
     expect(detail.slaMinutes).toBe(30);
     expect(detail.proposals[0]).toMatchObject({
       status: "AJUSTADA", minutes: 40, approvedMinutes: 30, feedback: "Deixe a peça no palco antes do show",
-      proposedBy: { name: "João" }, reviewedBy: { name: "Rafael Head Infra" },
+      proposedBy: { name: "Sofia Pré-produtora" }, reviewedBy: { name: "Marina Gerente" },
     });
   });
 
   it("recusar mantém o SLA anterior", async () => {
-    const carlos = await actorFor(db, "carlos");
-    const p = await proposeSla(carlos, typeId, { minutes: 120 });
+    const sofia = await actorFor(db, "sofia");
+    const p = await proposeSla(sofia, typeId, { minutes: 120 });
     const marina = await actorFor(db, "marina");
     await reviewSla(marina, p.id, { decision: "RECUSAR", feedback: "Duas horas é muito durante o show" });
     expect((await getServiceType(marina, typeId)).slaMinutes).toBe(30);
   });
 });
 
-describe("chamado com tipo de atendimento", () => {
+describe("chamado de campo com tipo de atendimento", () => {
+  it("quem abre o chamado vê nome e prazo dos tipos da própria equipe, sem a Pré-produção", async () => {
+    const joao = await actorFor(db, "joao");
+    const types = await listServiceTypesForTickets(joao, rock);
+    expect(types.map((t) => t.id)).toContain(typeId);
+    expect(types.every((t) => t.teamId === d.teams.eletrica.id)).toBe(true);
+    expect(Object.keys(types[0]).sort()).toEqual(["areaId", "eventId", "id", "name", "slaMinutes", "teamId"]);
+  });
+
   it("usa o SLA do tipo; Crítica não fica mais lenta que o prazo de Crítica", async () => {
     const rafael = await actorFor(db, "rafael");
     const normal = await createOccurrence(rafael, { teamId: d.teams.eletrica.id, title: `Disjuntor ${uniq()}`, serviceTypeId: typeId });
@@ -154,77 +193,82 @@ describe("chamado com tipo de atendimento", () => {
 });
 
 describe("quem faz o quê", () => {
-  it("o gestor marca e desmarca pessoas da área; de fora da área não", async () => {
-    const rafael = await actorFor(db, "rafael");
-    await setServiceTypePerson(rafael, typeId, { participantId: d.participants.joao.id, does: true });
-    await setServiceTypePerson(rafael, typeId, { participantId: d.participants.joao.id, does: true });
-    expect((await getServiceType(rafael, typeId)).people.map((p) => p.id)).toEqual([d.participants.joao.id]);
-    const marina = await actorFor(db, "marina");
-    await expectStatus(setServiceTypePerson(marina, typeId, { participantId: d.participants.beatriz.id, does: true }), 422);
-    await setServiceTypePerson(rafael, typeId, { participantId: d.participants.joao.id, does: false });
-    expect((await getServiceType(rafael, typeId)).people).toEqual([]);
+  it("a Pré-produção marca e desmarca pessoas da área; de fora da área não", async () => {
+    const sofia = await actorFor(db, "sofia");
+    await setServiceTypePerson(sofia, typeId, { participantId: d.participants.joao.id, does: true });
+    await setServiceTypePerson(sofia, typeId, { participantId: d.participants.joao.id, does: true });
+    expect((await getServiceType(sofia, typeId)).people.map((p) => p.id)).toEqual([d.participants.joao.id]);
+    await expectStatus(setServiceTypePerson(sofia, typeId, { participantId: d.participants.beatriz.id, does: true }), 422);
+    await setServiceTypePerson(sofia, typeId, { participantId: d.participants.joao.id, does: false });
+    expect((await getServiceType(sofia, typeId)).people).toEqual([]);
   });
 
-  it("Operacional não marca ninguém", async () => {
-    const joao = await actorFor(db, "joao");
-    await expectStatus(setServiceTypePerson(joao, typeId, { participantId: d.participants.carlos.id, does: true }), 403);
-  });
-
-  it("arquivar tira o tipo da lista", async () => {
+  it("Head da área não marca", async () => {
     const rafael = await actorFor(db, "rafael");
-    const t = await createServiceType(rafael, { teamId: d.teams.cenografia.id, name: `Arquivar ${uniq()}` });
-    await updateServiceType(rafael, t.id, { archived: true });
-    expect((await listServiceTypes(rafael, rock)).map((x) => x.id)).not.toContain(t.id);
+    await expectStatus(setServiceTypePerson(rafael, typeId, { participantId: d.participants.carlos.id, does: true }), 404);
   });
 });
 
 describe("direto no banco (sem o backend)", () => {
   const RLS = "42501";
+  const base = async () => {
+    const t = await as("marina", (tx) => tx.serviceType.findUniqueOrThrow({ where: { id: typeId } }));
+    return { t, scope: { eventId: t.eventId, areaId: t.areaId, teamId: t.teamId } };
+  };
 
-  it("Operacional não cria tipo, não aprova a própria proposta e não muda o SLA", async () => {
-    const t = (await as("rafael", (tx) => tx.serviceType.findUniqueOrThrow({ where: { id: typeId } })));
-    const base = { eventId: t.eventId, areaId: t.areaId, teamId: t.teamId };
+  it("Pré-produtora não aprova a própria proposta nem muda o SLA do tipo", async () => {
+    const { t, scope } = await base();
     await expectPgError(
-      as("joao", (tx) => tx.serviceType.create({ data: { ...base, name: `Hack ${uniq()}`, createdById: d.users.joao! } })),
-      RLS,
-    );
-    await expectPgError(
-      as("joao", (tx) => tx.slaProposal.create({
+      as("sofia", (tx) => tx.slaProposal.create({
         data: {
-          ...base, serviceTypeId: t.id, minutes: 5, status: "APROVADA", approvedMinutes: 5,
-          proposedById: d.users.joao!, reviewedById: d.users.joao!, reviewedAt: new Date(),
+          ...scope, serviceTypeId: t.id, minutes: 5, status: "APROVADA", approvedMinutes: 5,
+          proposedById: d.users.sofia!, reviewedById: d.users.sofia!, reviewedAt: new Date(),
         },
       })),
       RLS,
     );
-    // Em nome de outra pessoa também não.
+    await expectPgError(as("sofia", (tx) => tx.serviceType.update({ where: { id: t.id }, data: { slaMinutes: 1 } })), RLS);
     await expectPgError(
-      as("joao", (tx) => tx.slaProposal.create({ data: { ...base, serviceTypeId: t.id, minutes: 5, proposedById: d.users.carlos! } })),
+      as("sofia", (tx) => tx.serviceType.create({ data: { ...scope, name: `Com SLA ${uniq()}`, slaMinutes: 5, createdById: d.users.sofia! } })),
       RLS,
     );
-    const changed = await as("joao", (tx) => tx.serviceType.updateMany({ where: { id: t.id }, data: { slaMinutes: 1 } }));
-    expect(changed.count).toBe(0);
+    // Em nome de outra pessoa também não.
     await expectPgError(
-      as("joao", (tx) => tx.serviceTypePerson.create({ data: { ...base, serviceTypeId: t.id, participantId: d.participants.joao.id } })),
+      as("sofia", (tx) => tx.slaProposal.create({ data: { ...scope, serviceTypeId: t.id, minutes: 5, proposedById: d.users.marina! } })),
       RLS,
     );
   });
 
-  it("Head de A&B não enxerga tipos da Infra; a Cliente enxerga mas não altera", async () => {
-    expect(await as("beatriz", (tx) => tx.serviceType.count({ where: { id: typeId } }))).toBe(0);
-    expect(await as("claudia", (tx) => tx.serviceType.count({ where: { id: typeId } }))).toBe(1);
-    const changed = await as("claudia", (tx) => tx.serviceType.updateMany({ where: { id: typeId }, data: { name: "x" } }));
-    expect(changed.count).toBe(0);
+  it("Head, Operacional e Cliente: leem o tipo da equipe (chamado), mas nada da Pré-produção", async () => {
+    const { t, scope } = await base();
+    for (const person of ["rafael", "joao", "claudia"] as const) {
+      expect(await as(person, (tx) => tx.serviceType.count({ where: { id: t.id } }))).toBe(1);
+      expect(await as(person, (tx) => tx.slaProposal.count({ where: { serviceTypeId: t.id } }))).toBe(0);
+      expect(await as(person, (tx) => tx.serviceTypePerson.count({ where: { serviceTypeId: t.id } }))).toBe(0);
+      expect((await as(person, (tx) => tx.serviceType.updateMany({ where: { id: t.id }, data: { name: "x" } }))).count).toBe(0);
+      await expectPgError(
+        as(person, (tx) => tx.serviceType.create({ data: { ...scope, name: `Hack ${uniq()}`, createdById: d.users[person]! } })),
+        RLS,
+      );
+    }
+    await expectPgError(
+      as("rafael", (tx) => tx.serviceTypePerson.create({ data: { ...scope, serviceTypeId: t.id, participantId: d.participants.joao.id } })),
+      RLS,
+    );
+  });
+
+  it("Pré-produtora não vê chamados", async () => {
+    expect(await as("sofia", (tx) => tx.occurrence.count())).toBe(0);
   });
 
   it("tipo não muda de equipe e proposta revista não volta a ser revista", async () => {
     await expectPgError(
-      as("rafael", (tx) => tx.serviceType.update({ where: { id: typeId }, data: { teamId: d.teams.estrutura.id } })),
+      as("marina", (tx) => tx.serviceType.update({ where: { id: typeId }, data: { teamId: d.teams.estrutura.id } })),
       "23514",
     );
-    const reviewed = await as("rafael", (tx) => tx.slaProposal.findFirstOrThrow({ where: { serviceTypeId: typeId, status: "AJUSTADA" } }));
+    const reviewed = await as("marina", (tx) => tx.slaProposal.findFirstOrThrow({ where: { serviceTypeId: typeId, status: "AJUSTADA" } }));
     await expectPgError(
-      as("rafael", (tx) => tx.slaProposal.update({ where: { id: reviewed.id }, data: { status: "RECUSADA", approvedMinutes: null } })),
+      as("marina", (tx) => tx.slaProposal.update({ where: { id: reviewed.id }, data: { status: "RECUSADA", approvedMinutes: null } })),
       "23514",
     );
   });

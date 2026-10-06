@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canSeeEvent, canBuildTeam } from "@/server/authz/policy";
+import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { membershipFor } from "@/server/authz/actor";
 import { EventNav } from "@/components/event-nav";
 
@@ -14,8 +14,10 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
       {children}
       <EventNav
         eventId={eventId}
-        canCreate={role !== "CLIENTE"}
-        canSeeTickets={role !== "CLIENTE"}
+        canCreate={role !== "CLIENTE" && role !== "PRE_PRODUTOR"}
+        canSeeTickets={role !== "CLIENTE" && role !== "PRE_PRODUTOR"}
+        canUseField={canUseField(actor, eventId)}
+        canUsePre={canUsePreProduction(actor, eventId)}
         canBuildTeam={canBuildTeam(actor, eventId)}
         canSwitchEvent={actor.memberships.length > 1 || actor.isAdmin}
       />

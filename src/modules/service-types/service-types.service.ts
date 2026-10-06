@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canManageServiceTypes, canProposeSla, canSeeTeam } from "../../server/authz/policy";
+import { canReviewSla, canSeeTeam, canUsePreProduction } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -10,11 +10,24 @@ import { requireEventAccess } from "../events/events.service";
 import { getTeam } from "../teams/teams.service";
 
 /**
- * Pré-produção, etapa 1: tipos de atendimento de cada equipe, o SLA de cada
- * tipo (proposto por quem executa, revisto pelo gestor com comentário) e a
- * planilha "quem faz o quê". A RLS (migration *_pre_producao_tipos_sla) aplica
- * o mesmo perímetro no banco.
+ * Pré-produção: tipos de atendimento de cada equipe, o SLA de cada tipo
+ * (proposto pelo Pré-produtor, revisto pelo Gerente com comentário) e a
+ * planilha "quem faz o quê". Separada do campo: só o Pré-produtor e o Gerente
+ * entram (canUsePreProduction). A RLS (migrations *_pre_producao_*) aplica o
+ * mesmo perímetro no banco. O campo só lê os tipos ao abrir um chamado
+ * (listServiceTypesForTickets).
  */
+
+/** Fora da Pré-produção, ela simplesmente não existe (404, como recurso alheio). */
+function requirePreProduction(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+}
+
+const can = (actor: Actor, eventId: string) => ({
+  manage: canUsePreProduction(actor, eventId),
+  review: canReviewSla(actor, eventId),
+});
 
 /** Até 30 dias, em minutos. */
 const minutes = z.coerce.number().int("Use minutos inteiros").min(1, "Mínimo 1 minuto").max(43200, "Máximo 30 dias");
@@ -23,7 +36,7 @@ type TypeScope = { eventId: string; areaId: string; teamId: string };
 
 async function load(actor: Actor, tx: Tx, id: string) {
   const t = uuid.safeParse(id).success ? await tx.serviceType.findFirst({ where: { id, deletedAt: null } }) : null;
-  if (!t || !canSeeTeam(actor, t)) throw new NotFoundError("Tipo de atendimento");
+  if (!t || !canUsePreProduction(actor, t.eventId)) throw new NotFoundError("Tipo de atendimento");
   return t;
 }
 
@@ -31,7 +44,7 @@ const listSchema = z.object({ teamId: uuid.optional() });
 
 /** Tipos que a pessoa enxerga no evento, com SLA, proposta aguardando e quem faz. */
 export async function listServiceTypes(actor: Actor, eventId: string, filters: unknown = {}) {
-  requireEventAccess(actor, eventId);
+  requirePreProduction(actor, eventId);
   const f = parse(listSchema, filters);
   const rows = await actor.run((tx) =>
     tx.serviceType.findMany({
@@ -48,16 +61,26 @@ export async function listServiceTypes(actor: Actor, eventId: string, filters: u
       },
     }),
   );
-  return rows
-    .filter((t) => canSeeTeam(actor, t))
-    .map(({ proposals, people, team, ...t }) => ({
-      ...t,
-      teamName: team.name,
-      areaName: team.area.name,
-      peopleIds: people.map((p) => p.participantId),
-      pending: proposals[0] ?? null,
-      can: { manage: canManageServiceTypes(actor, t), propose: canProposeSla(actor, t) },
-    }));
+  return rows.map(({ proposals, people, team, ...t }) => ({
+    ...t,
+    teamName: team.name,
+    areaName: team.area.name,
+    peopleIds: people.map((p) => p.participantId),
+    pending: proposals[0] ?? null,
+  }));
+}
+
+/** O que o campo vê dos tipos: nome e prazo, só das equipes que enxerga (formulário do chamado). */
+export async function listServiceTypesForTickets(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  const rows = await actor.run((tx) =>
+    tx.serviceType.findMany({
+      where: { eventId, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, eventId: true, areaId: true, teamId: true, name: true, slaMinutes: true },
+    }),
+  );
+  return rows.filter((t) => canSeeTeam(actor, t));
 }
 
 /** Detalhe do tipo: histórico de SLA com comentários do gestor e quem faz. */
@@ -82,11 +105,7 @@ export async function getServiceType(actor: Actor, id: string) {
         people: { select: { participant: { select: { id: true, name: true, jobTitle: true } } } },
       },
     });
-    return {
-      ...t,
-      people: t.people.map((p) => p.participant),
-      can: { manage: canManageServiceTypes(actor, base), propose: canProposeSla(actor, base) },
-    };
+    return { ...t, people: t.people.map((p) => p.participant), can: can(actor, base.eventId) };
   });
 }
 
@@ -94,7 +113,7 @@ const createSchema = z.object({
   teamId: uuid,
   name: text(80),
   description: optionalText(1000),
-  /** O gestor pode já criar com o SLA definido. */
+  /** Do Gerente: vale na hora. Do Pré-produtor: vira proposta para o Gerente. */
   slaMinutes: minutes.optional().nullable(),
 });
 
@@ -103,14 +122,17 @@ export async function createServiceType(actor: Actor, input: unknown) {
   const data = parse(createSchema, input);
   const team = await getTeam(actor, data.teamId);
   const scope: TypeScope = { eventId: team.eventId, areaId: team.areaId, teamId: team.id };
-  if (!canManageServiceTypes(actor, scope)) throw new ForbiddenError("Só o gerente ou o head da área cria tipos de atendimento");
+  requirePreProduction(actor, team.eventId);
   try {
     return await actor.run(async (tx) => {
       const t = await tx.serviceType.create({
         data: { ...scope, name: data.name, description: data.description, createdById: actor.userId },
       });
       await audit(tx, actor, { eventId: t.eventId, entity: "service_type", entityId: t.id, action: "CREATE", after: { name: t.name, teamId: t.teamId } });
-      if (data.slaMinutes) await defineSla(tx, actor, t, data.slaMinutes, null);
+      if (data.slaMinutes) {
+        if (canReviewSla(actor, t.eventId)) await defineSla(tx, actor, t, data.slaMinutes, null);
+        else await createProposal(tx, actor, t, data.slaMinutes, null);
+      }
       return tx.serviceType.findUniqueOrThrow({ where: { id: t.id } });
     });
   } catch (e) {
@@ -131,7 +153,6 @@ export async function updateServiceType(actor: Actor, id: string, input: unknown
   try {
     return await actor.run(async (tx) => {
       const t = await load(actor, tx, id);
-      if (!canManageServiceTypes(actor, t)) throw new ForbiddenError();
       const patch = {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.description !== undefined && { description: data.description }),
@@ -169,28 +190,31 @@ async function defineSla(tx: Tx, actor: Actor, t: TypeScope & { id: string }, va
 
 const proposeSchema = z.object({ minutes, note: optionalText(500) });
 
+async function createProposal(tx: Tx, actor: Actor, t: TypeScope & { id: string }, value: number, note: string | null) {
+  const p = await tx.slaProposal.create({
+    data: {
+      eventId: t.eventId, areaId: t.areaId, teamId: t.teamId, serviceTypeId: t.id,
+      minutes: value, note, proposedById: actor.userId,
+    },
+  });
+  await audit(tx, actor, {
+    eventId: t.eventId, entity: "sla_proposal", entityId: p.id, action: "CREATE",
+    after: { serviceTypeId: t.id, minutes: p.minutes },
+  });
+  return p;
+}
+
 /**
- * Propor o SLA de um tipo. Quem executa propõe e fica aguardando o gestor;
- * o próprio gestor define na hora.
+ * Propor o SLA de um tipo. O Pré-produtor propõe e fica aguardando o Gerente;
+ * o próprio Gerente define na hora.
  */
 export async function proposeSla(actor: Actor, id: string, input: unknown) {
   const data = parse(proposeSchema, input);
   try {
     return await actor.run(async (tx) => {
       const t = await load(actor, tx, id);
-      if (!canProposeSla(actor, t)) throw new ForbiddenError("Só quem é da equipe ou o gestor propõe o SLA deste tipo");
-      if (canManageServiceTypes(actor, t)) return defineSla(tx, actor, t, data.minutes, data.note);
-      const p = await tx.slaProposal.create({
-        data: {
-          eventId: t.eventId, areaId: t.areaId, teamId: t.teamId, serviceTypeId: t.id,
-          minutes: data.minutes, note: data.note, proposedById: actor.userId,
-        },
-      });
-      await audit(tx, actor, {
-        eventId: t.eventId, entity: "sla_proposal", entityId: p.id, action: "CREATE",
-        after: { serviceTypeId: t.id, minutes: p.minutes },
-      });
-      return p;
+      if (canReviewSla(actor, t.eventId)) return defineSla(tx, actor, t, data.minutes, data.note);
+      return createProposal(tx, actor, t, data.minutes, data.note);
     });
   } catch (e) {
     if (isUniqueViolation(e)) throw new ConflictError("Já existe uma proposta de SLA aguardando o gestor neste tipo");
@@ -212,9 +236,9 @@ export async function reviewSla(actor: Actor, proposalId: string, input: unknown
   const data = parse(reviewSchema, input);
   return actor.run(async (tx) => {
     const p = uuid.safeParse(proposalId).success ? await tx.slaProposal.findUnique({ where: { id: proposalId } }) : null;
-    if (!p || !canSeeTeam(actor, p)) throw new NotFoundError("Proposta de SLA");
+    if (!p || !canUsePreProduction(actor, p.eventId)) throw new NotFoundError("Proposta de SLA");
     await load(actor, tx, p.serviceTypeId);
-    if (!canManageServiceTypes(actor, p)) throw new ForbiddenError("Só o gerente ou o head da área revê o SLA");
+    if (!canReviewSla(actor, p.eventId)) throw new ForbiddenError("Só o gerente aprova, ajusta ou recusa o SLA");
     if (p.status !== "PENDENTE") throw new ConflictError("Esta proposta já foi revista");
 
     const status = data.decision === "APROVAR" ? "APROVADA" : data.decision === "AJUSTAR" ? "AJUSTADA" : "RECUSADA";
@@ -240,7 +264,6 @@ export async function setServiceTypePerson(actor: Actor, id: string, input: unkn
   const data = parse(personSchema, input);
   return actor.run(async (tx) => {
     const t = await load(actor, tx, id);
-    if (!canManageServiceTypes(actor, t)) throw new ForbiddenError();
     const person = await tx.participant.findFirst({
       where: { id: data.participantId, eventId: t.eventId, deletedAt: null },
       select: { id: true, areaId: true },

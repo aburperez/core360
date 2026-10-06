@@ -7,7 +7,8 @@ import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { api } from "@/components/api-client";
 import { ROLE_LABEL } from "@/lib/format";
 
-type Role = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE";
+type Role = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
+const EVENT_LEVEL: Role[] = ["GERENTE", "CLIENTE", "PRE_PRODUTOR"];
 type Area = { id: string; name: string; canAddTeam: boolean; roles: Role[] };
 type Team = { id: string; name: string; areaId: string };
 type Person = {
@@ -40,7 +41,7 @@ export function TeamBuilder(props: {
     }
   };
 
-  const coordination = props.people.filter((p) => !p.teamId && (!p.areaId || p.role === "HEAD" || p.role === "CLIENTE" || p.role === "GERENTE"));
+  const coordination = props.people.filter((p) => !p.teamId && (!p.areaId || p.role === "HEAD" || EVENT_LEVEL.includes(p.role)));
 
   return (
     <div>
@@ -99,10 +100,15 @@ export function TeamBuilder(props: {
         })}
       </div>
 
-      {props.eventRoles.some((r) => r === "GERENTE" || r === "CLIENTE") && (
+      {props.eventRoles.some((r) => EVENT_LEVEL.includes(r)) && (
         <>
-          <SectionTitle>Gerentes e cliente</SectionTitle>
-          <AddPerson eventId={props.eventId} roles={props.eventRoles.filter((r) => r === "GERENTE" || r === "CLIENTE")} label="+ Gerente ou cliente" guard={guard} />
+          <SectionTitle>Gerentes, cliente e pré-produção</SectionTitle>
+          <AddPerson
+            eventId={props.eventId}
+            roles={props.eventRoles.filter((r) => EVENT_LEVEL.includes(r))}
+            label={props.eventRoles.includes("PRE_PRODUTOR") ? "+ Gerente, cliente ou pré-produtor" : "+ Gerente ou cliente"}
+            guard={guard}
+          />
         </>
       )}
     </div>

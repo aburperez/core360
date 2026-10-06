@@ -18,7 +18,7 @@ export function canSeeArea(a: Actor, s: Scope): boolean {
   if (a.isAdmin) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
-  return m.role === "GERENTE" || m.role === "CLIENTE" || m.role === "HEAD" || m.areaId === s.areaId;
+  return m.role === "GERENTE" || m.role === "CLIENTE" || m.role === "HEAD" || m.role === "PRE_PRODUTOR" || m.areaId === s.areaId;
 }
 
 export function canManageAreas(a: Actor, eventId: string): boolean {
@@ -34,6 +34,7 @@ export function canSeeTeam(a: Actor, s: Scope): boolean {
   switch (m.role) {
     case "GERENTE":
     case "CLIENTE":
+    case "PRE_PRODUTOR":
       return true;
     case "HEAD":
       return m.areaId === s.areaId;
@@ -51,11 +52,11 @@ export function canManageTeams(a: Actor, s: Scope): boolean {
 
 /** Anti-escalada: quem pode atribuir qual papel (seção 7.4 da proposta). */
 export function assignableRoles(a: Actor, eventId: string, areaId?: string | null): EventRole[] {
-  if (a.isAdmin) return ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE"];
+  if (a.isAdmin) return ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
   const m = membershipFor(a, eventId);
   switch (m?.role) {
     case "GERENTE":
-      return ["HEAD", "OPERACIONAL", "CLIENTE"];
+      return ["HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
     case "CLIENTE":
       return ["CLIENTE", "OPERACIONAL"];
     case "HEAD":
@@ -88,6 +89,7 @@ export function canSeeOccurrence(a: Actor, o: OccScope): boolean {
     case "OPERACIONAL":
       return m.teamId === o.teamId || m.participantId === o.responsibleParticipantId;
     case "CLIENTE":
+    case "PRE_PRODUTOR":
       return false;
   }
 }
@@ -105,6 +107,7 @@ export function canCreateOccurrence(a: Actor, s: Scope): boolean {
     case "OPERACIONAL":
       return m.teamId === s.teamId;
     case "CLIENTE":
+    case "PRE_PRODUTOR":
       return false;
   }
 }
@@ -137,17 +140,24 @@ export function canClaimOccurrence(a: Actor, o: OccScope & { status?: Occurrence
 }
 
 // ─────────────────────── Pré-produção ───────────────────────
+// Separada do campo: só o Pré-produtor e o gestor (Gerente do evento) entram.
 
-/** Criar e editar tipos de atendimento, definir e rever SLA, marcar quem faz o quê. */
-export function canManageServiceTypes(a: Actor, s: Scope): boolean {
+/** Ver e trabalhar na Pré-produção: tipos, quem faz o quê, propor SLA. */
+export function canUsePreProduction(a: Actor, eventId: string): boolean {
   if (a.isAdmin) return true;
-  const m = membershipFor(a, s.eventId);
-  return m?.role === "GERENTE" || (m?.role === "HEAD" && m.areaId === s.areaId);
+  const m = membershipFor(a, eventId);
+  return m?.role === "GERENTE" || m?.role === "PRE_PRODUTOR";
 }
 
-/** Propor um SLA: o gestor ou quem é da equipe que executa o tipo. */
-export function canProposeSla(a: Actor, s: Scope): boolean {
-  if (canManageServiceTypes(a, s)) return true;
-  const m = membershipFor(a, s.eventId);
-  return m?.role === "OPERACIONAL" && m.teamId === s.teamId;
+/** Gestão de campo (painel, chamados): todos menos o Pré-produtor. */
+export function canUseField(a: Actor, eventId: string): boolean {
+  if (a.isAdmin) return true;
+  const m = membershipFor(a, eventId);
+  return !!m && m.role !== "PRE_PRODUTOR";
+}
+
+/** Aprovar, ajustar, recusar ou definir o SLA: só o gestor. */
+export function canReviewSla(a: Actor, eventId: string): boolean {
+  if (a.isAdmin) return true;
+  return membershipFor(a, eventId)?.role === "GERENTE";
 }

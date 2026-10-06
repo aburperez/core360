@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/server/http/session";
-import { canManageServiceTypes } from "@/server/authz/policy";
+import { notFound } from "next/navigation";
+import { canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listParticipants } from "@/modules/participants/participants.service";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
@@ -16,6 +17,7 @@ export default async function WhoDoesWhatPage({ params, searchParams }: PageProp
   const actor = await requireUser();
   const { eventId } = await params;
   const { equipe } = await searchParams;
+  if (!canUsePreProduction(actor, eventId)) notFound();
   const [teams, types] = await Promise.all([listTeams(actor, eventId), listServiceTypes(actor, eventId)]);
   const withTypes = new Set(types.map((t) => t.teamId));
   const team = teams.find((t) => t.id === equipe) ?? teams.find((t) => withTypes.has(t.id)) ?? teams[0];
@@ -25,12 +27,12 @@ export default async function WhoDoesWhatPage({ params, searchParams }: PageProp
         (p) => p.teamId === team.id || (!p.teamId && p.role === "HEAD"),
       )
     : [];
-  const manage = !!team && canManageServiceTypes(actor, { eventId, areaId: team.areaId });
+  const manage = !!team;
 
   return (
     <>
       <TopBar title="Quem faz o quê" subtitle={team ? `${team.area.name} › ${team.name}` : undefined} />
-      <EventTabs eventId={eventId} active="pre" />
+      {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
       <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-10 bg-background">
         <div className={cx(PAGE, "flex gap-2 overflow-x-auto py-2")}>
           {teams.map((t) => (

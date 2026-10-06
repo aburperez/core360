@@ -3,7 +3,7 @@ import { membershipFor } from "@/server/authz/actor";
 import { canCreateOccurrence } from "@/server/authz/policy";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listParticipants } from "@/modules/participants/participants.service";
-import { listServiceTypes } from "@/modules/service-types/service-types.service";
+import { listServiceTypesForTickets } from "@/modules/service-types/service-types.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { NewOccurrenceForm } from "./new-occurrence-form";
@@ -18,7 +18,7 @@ export default async function NewOccurrencePage({ params }: PageProps<"/eventos/
     canCreateOccurrence(actor, { eventId, areaId: t.areaId, teamId: t.id }),
   );
   const people = (await listParticipants(actor, eventId)).filter((p) => p.userId || p.teamId);
-  const types = await listServiceTypes(actor, eventId);
+  const types = await listServiceTypesForTickets(actor, eventId);
 
   return (
     <>

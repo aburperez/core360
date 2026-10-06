@@ -88,7 +88,6 @@ export function Matrix({ eventId, manage, types, people }: { eventId: string; ma
           </tbody>
         </table>
       </Card>
-      {!manage && <p className="mt-2 px-1 text-sm text-muted">Só o gerente ou o head da área marca quem faz cada tipo.</p>}
     </>
   );
 }
