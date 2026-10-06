@@ -75,7 +75,7 @@ export function TeamBuilder(props: {
             <Card key={area.id} className="p-0">
               <button type="button" onClick={() => setOpen(isOpen ? null : area.id)} className="flex min-h-14 w-full items-center justify-between px-4 text-left">
                 <span className="font-semibold">{area.name}</span>
-                <span className="text-sm text-muted">{teams.length} equipes · {count} pessoas {isOpen ? "▴" : "▾"}</span>
+                <span className="text-sm text-muted">{teams.length} {teams.length === 1 ? "equipe" : "equipes"} · {count} {count === 1 ? "pessoa" : "pessoas"} {isOpen ? "▴" : "▾"}</span>
               </button>
               {isOpen && (
                 <div className="space-y-3 border-t border-border p-3">
