@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, workerDb } from "../helpers";
 import { addPhoto, photoBytes } from "@/modules/attachments/attachments.service";
 import { databaseStorage, setStorageForTests } from "@/server/storage/storage";
-import { rolePassword, roleDatabaseUrl } from "@/server/db/urls";
+import { ownerDatabaseUrl, rolePassword, roleDatabaseUrl } from "@/server/db/urls";
 import { seedTraining, TRAINING_EVENT } from "../../prisma/training-data";
 
 /**
@@ -61,6 +61,26 @@ describe("endereços do banco na hospedagem", () => {
       // Endereço explícito continua valendo.
       process.env.APP_DATABASE_URL = "postgresql://outro@h/db";
       expect(roleDatabaseUrl("app")).toBe("postgresql://outro@h/db");
+    } finally {
+      process.env = saved;
+    }
+  });
+
+  it("aceita as variáveis com outro prefixo (DATABASE1_URL) que a Vercel cria", () => {
+    const saved = { ...process.env };
+    try {
+      delete process.env.DATABASE_URL;
+      delete process.env.DATABASE_URL_UNPOOLED;
+      delete process.env.APP_DATABASE_URL;
+      process.env.DB_ROLES_SECRET = "z".repeat(40);
+      process.env.DATABASE1_URL = "postgresql://dono:x@ep-um-pooler.neon.tech/neondb?sslmode=require";
+      process.env.DATABASE1_URL_UNPOOLED = "postgresql://dono:x@ep-um.neon.tech/neondb?sslmode=require";
+      expect(new URL(roleDatabaseUrl("app")!).host).toBe("ep-um-pooler.neon.tech");
+      expect(ownerDatabaseUrl()).toBe(process.env.DATABASE1_URL_UNPOOLED);
+      // Com DATABASE_URL presente, ele vale.
+      process.env.DATABASE_URL = "postgresql://dono:x@ep-zero.neon.tech/neondb";
+      expect(new URL(roleDatabaseUrl("app")!).host).toBe("ep-zero.neon.tech");
+      expect(ownerDatabaseUrl()).toBe(process.env.DATABASE_URL);
     } finally {
       process.env = saved;
     }

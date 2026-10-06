@@ -38,11 +38,16 @@ async function ensureRoles(url: string) {
 async function main() {
   const url = ownerDatabaseUrl();
   if (!url) {
+    // Na Vercel, publicar sem banco deixa um app que não abre: melhor parar aqui.
+    if (process.env.VERCEL) throw new Error("deploy-db: nenhum banco ligado ao projeto (DATABASE_URL). Ligue o Neon em Storage e publique de novo.");
     console.log("deploy-db: DATABASE_URL não definida, nada a fazer.");
     return;
   }
   await ensureRoles(url);
-  execFileSync("prisma", ["migrate", "deploy"], { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } });
+  execFileSync("prisma", ["migrate", "deploy"], {
+    stdio: "inherit",
+    env: { ...process.env, DATABASE_URL: url, DATABASE_URL_UNPOOLED: url },
+  });
 
   const email = process.env.ADMIN_EMAIL;
   if (!email) {

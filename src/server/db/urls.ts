@@ -28,10 +28,29 @@ export function rolePassword(role: DbRole): string {
   return createHmac("sha256", secret).update(`core360-db-role:${DB_ROLES[role]}`).digest("base64url");
 }
 
+/**
+ * Prefixo das variáveis do banco. Ligado pela Vercel, o Neon cria DATABASE_URL
+ * e DATABASE_URL_UNPOOLED; se o projeto já tinha um DATABASE_URL, ou se alguém
+ * escolheu outro prefixo, elas viram DATABASE1_URL, DATABASE2_URL e assim por diante.
+ */
+function ownerPrefix(): string | null {
+  if (process.env.DATABASE_URL) return "DATABASE";
+  const numbered = Object.keys(process.env)
+    .filter((k) => /^DATABASE\d+_URL$/.test(k) && process.env[k])
+    .sort((a, b) => parseInt(a.slice(8), 10) - parseInt(b.slice(8), 10));
+  return numbered.length ? numbered[0].slice(0, -"_URL".length) : null;
+}
+
+/** Endereço do dono do banco (com pooler, quando houver). */
+export function ownerPooledUrl(): string | undefined {
+  const prefix = ownerPrefix();
+  return prefix ? process.env[`${prefix}_URL`] : undefined;
+}
+
 export function roleDatabaseUrl(role: DbRole): string | null {
   const explicit = process.env[EXPLICIT[role]];
   if (explicit) return explicit;
-  const base = process.env.DATABASE_URL;
+  const base = ownerPooledUrl();
   if (!base || !rolesSecret()) return null;
   const url = new URL(base);
   url.username = DB_ROLES[role];
@@ -41,5 +60,6 @@ export function roleDatabaseUrl(role: DbRole): string | null {
 
 /** Conexão direta (sem pooler) para migrations. O Neon na Vercel cria as duas. */
 export function ownerDatabaseUrl(): string | undefined {
-  return process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  const prefix = ownerPrefix();
+  return prefix ? process.env[`${prefix}_URL_UNPOOLED`] || process.env[`${prefix}_URL`] : undefined;
 }
