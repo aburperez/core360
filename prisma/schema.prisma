@@ -173,22 +173,25 @@ model User {
 
   sessions             Session[]
   accounts             Account[]
-  participations       Participant[]    @relation("ParticipantUser")
-  participantsCreated  Participant[]    @relation("ParticipantCreatedBy")
+  participations       Participant[]        @relation("ParticipantUser")
+  participantsCreated  Participant[]        @relation("ParticipantCreatedBy")
   invitationsCreated   Invitation[]
-  occurrencesCreated   Occurrence[]     @relation("OccurrenceCreatedBy")
-  occurrencesConcluded Occurrence[]     @relation("OccurrenceConcludedBy")
-  occurrencesValidated Occurrence[]     @relation("OccurrenceValidatedBy")
+  occurrencesCreated   Occurrence[]         @relation("OccurrenceCreatedBy")
+  occurrencesConcluded Occurrence[]         @relation("OccurrenceConcludedBy")
+  occurrencesValidated Occurrence[]         @relation("OccurrenceValidatedBy")
   attachments          Attachment[]
   notifications        Notification[]
   whatsapp             WhatsappContact?
-  serviceTypesCreated  ServiceType[]    @relation("ServiceTypeCreatedBy")
-  slaProposed          SlaProposal[]    @relation("SlaProposalProposedBy")
-  slaReviewed          SlaProposal[]    @relation("SlaProposalReviewedBy")
-  briefingsUpdated     Briefing[]       @relation("BriefingUpdatedBy")
-  dailyNotesUpdated    DailyNote[]      @relation("DailyNoteUpdatedBy")
-  director             Director?        @relation("DirectorUser")
-  directorsCreated     Director[]       @relation("DirectorCreatedBy")
+  serviceTypesCreated  ServiceType[]        @relation("ServiceTypeCreatedBy")
+  slaProposed          SlaProposal[]        @relation("SlaProposalProposedBy")
+  slaReviewed          SlaProposal[]        @relation("SlaProposalReviewedBy")
+  briefingsUpdated     Briefing[]           @relation("BriefingUpdatedBy")
+  dailyNotesUpdated    DailyNote[]          @relation("DailyNoteUpdatedBy")
+  functionsCreated     EventFunction[]      @relation("EventFunctionCreatedBy")
+  activitiesCreated    Activity[]           @relation("ActivityCreatedBy")
+  profilesUpdated      ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
+  director             Director?            @relation("DirectorUser")
+  directorsCreated     Director[]           @relation("DirectorCreatedBy")
 
   @@map("users")
 }
@@ -280,23 +283,27 @@ model Event {
   updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  areas         Area[]
-  teams         Team[]
-  participants  Participant[]
-  occurrences   Occurrence[]
-  attachments   Attachment[]
-  slaPolicies   SlaPolicy[]
-  notifications Notification[]
-  invitations   Invitation[]
-  serviceTypes  ServiceType[]
-  costSheet     CostSheet?
-  costSections  CostSection[]
-  costItems     CostItem[]
-  itemReceipts  ItemReceipt[]
-  receiptPhotos ReceiptPhoto[]
-  briefings     Briefing[]
-  dailyNotes    DailyNote[]
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  areas          Area[]
+  teams          Team[]
+  participants   Participant[]
+  occurrences    Occurrence[]
+  attachments    Attachment[]
+  slaPolicies    SlaPolicy[]
+  notifications  Notification[]
+  invitations    Invitation[]
+  serviceTypes   ServiceType[]
+  costSheet      CostSheet?
+  costSections   CostSection[]
+  costItems      CostItem[]
+  itemReceipts   ItemReceipt[]
+  receiptPhotos  ReceiptPhoto[]
+  briefings      Briefing[]
+  dailyNotes     DailyNote[]
+  functions      EventFunction[]
+  activities     Activity[]
+  profiles       ParticipantProfile[]
+  activityChecks ActivityCheck[]
 
   @@index([clientId])
   @@index([status])
@@ -386,6 +393,9 @@ model Participant {
   costItemsToReceive     CostItem[]          @relation("CostItemReceiver")
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
   briefing               Briefing?
+  profile                ParticipantProfile?
+  ownActivities          Activity[]
+  activityChecks         ActivityCheck[]
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -899,4 +909,94 @@ model DailyNote {
 
   @@id([eventId, day])
   @@map("daily_notes")
+}
+
+/// Função do evento (Pré-produção › Funções): escrita uma vez, aplicada a
+/// muitas pessoas. As atividades da função valem para todos que a têm.
+model EventFunction {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String
+  description String?
+  createdById String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event      Event                @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  createdBy  User                 @relation("EventFunctionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  activities Activity[]
+  profiles   ParticipantProfile[]
+
+  @@unique([eventId, id])
+  @@map("event_functions")
+}
+
+/// Atividade com dia e horário: da função (vale para todos com ela) ou de
+/// uma pessoa só. Exatamente um dos dois.
+model Activity {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  functionId    String?   @map("function_id") @db.Uuid
+  participantId String?   @map("participant_id") @db.Uuid
+  title         String
+  day           DateTime? @db.Date
+  /// "HH:MM", no fuso do evento.
+  startTime     String?   @map("start_time")
+  endTime       String?   @map("end_time")
+  place         String?
+  createdById   String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  function    EventFunction?  @relation(fields: [eventId, functionId], references: [eventId, id], onDelete: Cascade)
+  participant Participant?    @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Restrict)
+  createdBy   User            @relation("ActivityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  checks      ActivityCheck[]
+
+  @@unique([eventId, id])
+  @@index([eventId, functionId])
+  @@index([eventId, participantId])
+  @@map("activities")
+}
+
+/// "Feito": só a própria pessoa marca, e só nas atividades dela.
+model ActivityCheck {
+  activityId    String   @map("activity_id") @db.Uuid
+  participantId String   @map("participant_id") @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  doneAt        DateTime @default(now()) @map("done_at") @db.Timestamptz(3)
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  activity    Activity    @relation(fields: [eventId, activityId], references: [eventId, id], onDelete: Cascade)
+  participant Participant @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Restrict)
+
+  @@id([activityId, participantId])
+  @@index([eventId, participantId])
+  @@map("activity_checks")
+}
+
+/// Ficha da pessoa no evento: a função e os dados para a produção. Só a
+/// Pré-produção e a própria pessoa veem; a pessoa não muda a própria função.
+model ParticipantProfile {
+  participantId  String   @id @map("participant_id") @db.Uuid
+  eventId        String   @map("event_id") @db.Uuid
+  functionId     String?  @map("function_id") @db.Uuid
+  document       String?
+  uniformSize    String?  @map("uniform_size")
+  dietary        String?
+  emergencyName  String?  @map("emergency_name")
+  emergencyPhone String?  @map("emergency_phone")
+  updatedById    String   @map("updated_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  participant Participant    @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Restrict)
+  function    EventFunction? @relation(fields: [eventId, functionId], references: [eventId, id], onDelete: Restrict)
+  updatedBy   User           @relation("ParticipantProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, participantId])
+  @@index([eventId, functionId])
+  @@map("participant_profiles")
 }

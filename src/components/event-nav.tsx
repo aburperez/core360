@@ -11,7 +11,7 @@ type NavProps = {
   canUseField: boolean; canUsePre: boolean;
   /** Itens da planilha enviados para conferir no campo (para esta pessoa, ou o gerente). */
   hasReceipts: boolean;
-  /** A pessoa tem briefing (no celular ele fica no cartão da tela inicial). */
+  /** A pessoa tem briefing, função ou agenda (no celular fica no cartão da tela inicial). */
   hasBriefing: boolean;
 };
 
@@ -32,7 +32,7 @@ export function EventNav(props: NavProps) {
     { href: pre, label: "Tipos e SLA", short: "Tipos", icon: "⏱", active: path === pre || path.startsWith(`${pre}/tipos`) },
     { href: `${pre}/quem-faz`, label: "Quem faz o quê", short: "Quem faz", icon: "▦", active: path.startsWith(`${pre}/quem-faz`) },
     { href: `${pre}/custos`, label: "Custos", icon: "$", active: path.startsWith(`${pre}/custos`) },
-    { href: `${pre}/briefing`, label: "Briefing", icon: "📋", active: path.startsWith(`${pre}/briefing`) },
+    { href: `${pre}/funcoes`, label: "Funções e briefing", short: "Funções", icon: "📋", active: path.startsWith(`${pre}/funcoes`) || path.startsWith(`${pre}/briefing`) },
     { href: `${pre}/relatorio`, label: "Relatório diário", short: "Relatório", icon: "📊", active: path.startsWith(`${pre}/relatorio`) },
   ];
   const items: Item[] = [

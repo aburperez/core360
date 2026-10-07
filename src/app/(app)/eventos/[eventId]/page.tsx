@@ -5,6 +5,7 @@ import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
 import { myBriefingState } from "@/modules/briefings/briefings.service";
+import { myPlanSummary } from "@/modules/functions/functions.service";
 import Link from "next/link";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
@@ -19,8 +20,9 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   const { eventId } = await params;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
-  const [event, dash, toReceive, briefing] = await Promise.all([
+  const [event, dash, toReceive, briefing, plan] = await Promise.all([
     getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId), myBriefingState(actor, eventId),
+    myPlanSummary(actor, eventId),
   ]);
   const base = `/eventos/${eventId}`;
   const scopeLabel =
@@ -44,9 +46,11 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
             <span className="text-2xl text-amber-300" aria-hidden>›</span>
           </Link>
         )}
-        {briefing === "LIDO" && (
+        {(briefing === "LIDO" || (briefing === "SEM" && plan.has)) && (
           <Link href={`${base}/briefing`} className="mb-4 flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-primary lg:hidden">
-            📋 Meu briefing <span aria-hidden>›</span>
+            📋 Meu briefing
+            {plan.pending > 0 && <span className="font-normal text-muted">· {plan.pending} {plan.pending === 1 ? "atividade" : "atividades"} a fazer</span>}
+            <span aria-hidden>›</span>
           </Link>
         )}
         {toReceive > 0 && (

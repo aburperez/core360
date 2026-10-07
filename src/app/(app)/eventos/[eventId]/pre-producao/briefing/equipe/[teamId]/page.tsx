@@ -18,7 +18,7 @@ export default async function TeamBriefingPage({ params }: PageProps<"/eventos/[
   const team = await getTeam(actor, teamId);
   if (team.eventId !== eventId) notFound();
   const people = (await listBriefings(actor, eventId)).filter((p) => p.teamId === team.id);
-  const back = `/eventos/${eventId}/pre-producao/briefing`;
+  const back = `/eventos/${eventId}/pre-producao/funcoes`;
 
   return (
     <>

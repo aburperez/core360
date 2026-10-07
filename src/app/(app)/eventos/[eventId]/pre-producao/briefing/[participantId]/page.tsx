@@ -20,7 +20,7 @@ export default async function BriefingEditPage({ params }: PageProps<"/eventos/[
 
   return (
     <>
-      <TopBar title={person.name} subtitle={`Briefing · ${person.jobTitle ?? ROLE_LABEL[person.role]}`} back={`/eventos/${eventId}/pre-producao/briefing`} />
+      <TopBar title={person.name} subtitle={`Briefing · ${person.jobTitle ?? ROLE_LABEL[person.role]}`} back={`/eventos/${eventId}/pre-producao/funcoes`} />
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <div className="lg:grid lg:grid-cols-5 lg:items-start lg:gap-6">
           <div className="lg:col-span-3">
