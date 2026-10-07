@@ -7,6 +7,7 @@ import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
 import { myBriefingState } from "@/modules/briefings/briefings.service";
 import { getMyPlan, myPlanSummary } from "@/modules/functions/functions.service";
+import { plansSummary } from "@/modules/floorplans/floorplans.service";
 import Link from "next/link";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
@@ -14,7 +15,7 @@ import { EmptyState, LinkButton, PAGE, PriorityText, SectionTitle, SlaPill, Stat
 import { Icon } from "@/components/icons";
 import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, pct, serie } from "@/components/panel";
 import { OccurrenceCard, type OccurrenceRow } from "@/components/occurrence-card";
-import { ROLE_LABEL, formatDuration } from "@/lib/format";
+import { ROLE_LABEL, formatDuration, formatTime } from "@/lib/format";
 
 export const metadata = { title: "Gestão de campo" };
 
@@ -23,9 +24,9 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   const { eventId } = await params;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
-  const [event, dash, toReceive, briefing, plan] = await Promise.all([
+  const [event, dash, toReceive, briefing, plan, stages] = await Promise.all([
     getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId), myBriefingState(actor, eventId),
-    myPlanSummary(actor, eventId),
+    myPlanSummary(actor, eventId), plansSummary(actor, eventId),
   ]);
   const base = `/eventos/${eventId}`;
   const scopeLabel =
@@ -92,7 +93,11 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
             <Stat label="Equipes" value={dash.structure.teams} />
             <Stat label="Pessoas" value={dash.structure.people} />
           </div>
-          <LinkButton href={`${base}/equipe`} className="mt-4 w-full lg:w-auto">Ver a equipe</LinkButton>
+          {stages && <div className="mt-4 lg:max-w-2xl"><StagesPanel stages={stages} base={base} /></div>}
+          <div className="mt-4 flex flex-col gap-2 lg:flex-row">
+            <LinkButton href={`${base}/planta`} variant="secondary">Ver a planta do evento</LinkButton>
+            <LinkButton href={`${base}/equipe`}>Ver a equipe</LinkButton>
+          </div>
         </main>
       </>
     );
@@ -103,6 +108,11 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   const tiles: TileData[] = [
     { href: `${base}/ocorrencias`, icon: "tickets", title: "Chamados", line: t.urgente ? `${open} abertos · ${t.urgente} urgentes` : `${open} abertos`, alert: t.urgente + t.bloqueio > 0 },
     { href: `${base}/ocorrencias/nova`, icon: "plus", title: "Novo chamado", line: "Abrir agora" },
+    {
+      href: `${base}/planta`, icon: "map", title: "Planta",
+      line: stages ? (stages.late ? `${stages.late} ${stages.late === 1 ? "etapa atrasada" : "etapas atrasadas"}` : `${stages.done} de ${stages.total} etapas`) : "Onde fica cada etapa",
+      alert: !!stages?.late,
+    },
     { href: `${base}/equipe`, icon: "team", title: manager ? "Montar equipe" : "Equipe", line: "Áreas, equipes e pessoas" },
     ...(briefing !== "SEM" || plan.has
       ? [{ href: `${base}/briefing`, icon: "briefing" as const, title: "Meu briefing", line: plan.pending ? `${plan.pending} atividades a fazer` : "Função e agenda" }]
@@ -193,6 +203,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
 
           <aside className="mt-4 space-y-4 lg:mt-0">
             <Panel className="hidden lg:block"><Profile name={actor.name} role={role} detail={event.name} /></Panel>
+            {stages && <StagesPanel stages={stages} base={base} />}
             {agenda.length > 0 && (
               <Panel title="Minha agenda" action={<Link href={`${base}/briefing`} className="text-sm font-semibold text-primary">Ver ›</Link>}>
                 <ul className="space-y-2">
@@ -235,6 +246,40 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
         </div>
       </main>
     </>
+  );
+}
+
+/** Etapas de montagem e finalização marcadas na planta: quantas prontas e quais atrasaram. */
+function StagesPanel({ stages, base }: { stages: NonNullable<Awaited<ReturnType<typeof plansSummary>>>; base: string }) {
+  return (
+    <Panel title="Montagem e finalização" action={<Link href={`${base}/planta`} className="text-sm font-semibold text-primary">Planta ›</Link>}>
+      <Link href={`${base}/planta`} className="block">
+        <p className="flex items-baseline gap-1.5">
+          <span className="text-3xl font-bold tabular-nums">{stages.done}</span>
+          <span className="text-sm text-muted">de {stages.total} etapas concluídas</span>
+        </p>
+        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-emerald-500/15">
+          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct(stages.done, stages.total)}%` }} />
+        </div>
+        {stages.doing > 0 && <p className="mt-1.5 text-xs text-muted">{stages.doing} em andamento agora</p>}
+      </Link>
+      {stages.late > 0 && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-1.5 text-sm font-semibold text-red-300">{stages.late === 1 ? "1 etapa atrasada" : `${stages.late} etapas atrasadas`}</p>
+          <ul className="space-y-1">
+            {stages.lateRows.map((r) => (
+              <li key={r.id}>
+                <Link href={`${base}/planta?p=${r.planId}`} className="flex items-center gap-2 text-sm hover:text-primary">
+                  <span className={cx("h-2.5 w-2.5 shrink-0 bg-red-500", r.kind === "FINALIZACAO" ? "rounded-[2px]" : "rounded-full")} />
+                  <span className="truncate">{r.name}</span>
+                  {r.endsAt && <span className="ml-auto shrink-0 text-xs text-muted">até {formatTime(r.endsAt)}</span>}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
   );
 }
 

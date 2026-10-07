@@ -4,6 +4,10 @@ import { withUser } from "@/server/db/with-user";
 import {
   canAssignRole,
   canCreateOccurrence,
+  canEditPlanPoint,
+  canManagePlans,
+  canUseField,
+  canWorkPlanPoint,
   canManageTeams,
   canReviewSla,
   canSendToField,
@@ -75,6 +79,28 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_send_to_field($1::uuid) AS r`, ev));
           check(`escrever observações do relatório em ${ev}`, canWriteReport(actor, ev),
             await q(`SELECT app.can_write_report($1::uuid) AS r`, ev));
+          check(`usar a Gestão de campo de ${ev}`, canUseField(actor, ev),
+            await q(`SELECT app.can_use_field($1::uuid) AS r`, ev));
+          check(`gerir plantas em ${ev}`, canManagePlans(actor, ev),
+            await q(`SELECT app.can_manage_plans($1::uuid) AS r`, ev));
+        }
+
+        // Etapas da planta: com e sem área, equipe e responsável.
+        const p = d.participants;
+        const points = [
+          { areaId: null, teamId: null, responsibleId: null },
+          { areaId: d.areas.infra.id, teamId: null, responsibleId: null },
+          { areaId: d.areas.infra.id, teamId: d.teams.eletrica.id, responsibleId: null },
+          { areaId: d.areas.infra.id, teamId: d.teams.cenografia.id, responsibleId: p.joao.id },
+          { areaId: d.areas.ab.id, teamId: d.teams.bar.id, responsibleId: p.rafael.id },
+          { areaId: null, teamId: null, responsibleId: p.ana.id },
+        ];
+        for (const [i, pt] of points.entries()) {
+          const s = { eventId: rock, ...pt };
+          check(`editar etapa ${i}`, canEditPlanPoint(actor, s),
+            await q(`SELECT app.can_edit_plan_point($1::uuid, $2::uuid) AS r`, rock, pt.areaId));
+          check(`trabalhar na etapa ${i}`, canWorkPlanPoint(actor, s),
+            await q(`SELECT app.can_work_plan_point($1::uuid, $2::uuid, $3::uuid, $4::uuid) AS r`, rock, pt.areaId, pt.teamId, pt.responsibleId));
         }
 
         for (const o of Object.values(d.occurrences)) {

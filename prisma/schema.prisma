@@ -407,6 +407,9 @@ model Event {
   activityChecks ActivityCheck[]
   quoteRequests  QuoteRequest[]
   supplierQuotes SupplierQuote[]
+  floorPlans     FloorPlan[]
+  planPoints     PlanPoint[]
+  planPhotos     PlanPointPhoto[]
 
   @@index([clientId])
   @@index([agencyId])
@@ -428,6 +431,7 @@ model Area {
   teams        Team[]
   participants Participant[]
   occurrences  Occurrence[]
+  planPoints   PlanPoint[]
 
   /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
   @@unique([eventId, id])
@@ -454,6 +458,7 @@ model Team {
   participants Participant[] @relation("ParticipantTeam")
   occurrences  Occurrence[]
   serviceTypes ServiceType[]
+  planPoints   PlanPoint[]
 
   @@unique([eventId, areaId, id])
   @@index([eventId, areaId])
@@ -501,6 +506,7 @@ model Participant {
   ownActivities          Activity[]
   activityChecks         ActivityCheck[]
   quoteRequests          QuoteRequest[]
+  planPoints             PlanPoint[]
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -1203,4 +1209,102 @@ model SupplierQuote {
   @@unique([requestId, id])
   @@unique([eventId, id])
   @@map("supplier_quotes")
+}
+
+// ─────────────────────── Planta do evento (Gestão de campo) ───────────────────────
+// O Gerente envia a planta (imagem; PDF vira imagem no navegador) e marca nela
+// onde acontece cada etapa de montagem ou de finalização. Todos do campo veem.
+
+enum PlanPointKind {
+  MONTAGEM
+  FINALIZACAO
+
+  @@map("plan_point_kind")
+}
+
+/// "Atrasado" não é guardado: sai do horário previsto (veja pointLate).
+enum PlanPointStatus {
+  NAO_INICIADO
+  EM_ANDAMENTO
+  CONCLUIDO
+
+  @@map("plan_point_status")
+}
+
+model FloorPlan {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String
+  position    Int      @default(0)
+  storageKey  String   @unique @map("storage_key")
+  mimeType    String   @map("mime_type")
+  sizeBytes   Int      @map("size_bytes")
+  sha256      String
+  createdById String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event  Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  points PlanPoint[]
+
+  @@unique([eventId, id])
+  @@index([eventId])
+  @@map("floor_plans")
+}
+
+/// Uma etapa marcada na planta. x e y em % da imagem (0 a 100), a partir do canto de cima à esquerda.
+model PlanPoint {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  eventId       String          @map("event_id") @db.Uuid
+  planId        String          @map("plan_id") @db.Uuid
+  x             Float
+  y             Float
+  name          String
+  description   String?
+  kind          PlanPointKind
+  /// Sem área = só o Gerente mexe. Com área, o Head dela também.
+  areaId        String?         @map("area_id") @db.Uuid
+  teamId        String?         @map("team_id") @db.Uuid
+  responsibleId String?         @map("responsible_id") @db.Uuid
+  startsAt      DateTime?       @map("starts_at") @db.Timestamptz(3)
+  endsAt        DateTime?       @map("ends_at") @db.Timestamptz(3)
+  status        PlanPointStatus @default(NAO_INICIADO)
+  startedAt     DateTime?       @map("started_at") @db.Timestamptz(3)
+  startedById   String?         @map("started_by") @db.Uuid
+  finishedAt    DateTime?       @map("finished_at") @db.Timestamptz(3)
+  finishedById  String?         @map("finished_by") @db.Uuid
+  /// Observação de quem trabalhou na etapa (ao concluir, por exemplo).
+  note          String?
+  createdById   String          @map("created_by") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  plan        FloorPlan        @relation(fields: [eventId, planId], references: [eventId, id], onDelete: Cascade)
+  area        Area?            @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction)
+  team        Team?            @relation(fields: [eventId, areaId, teamId], references: [eventId, areaId, id], onDelete: NoAction)
+  responsible Participant?     @relation(fields: [eventId, responsibleId], references: [eventId, id], onDelete: NoAction)
+  photos      PlanPointPhoto[]
+
+  @@unique([eventId, id])
+  @@index([eventId, planId])
+  @@map("plan_points")
+}
+
+model PlanPointPhoto {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  eventId      String   @map("event_id") @db.Uuid
+  pointId      String   @map("point_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  sha256       String
+  uploadedById String   @map("uploaded_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  point PlanPoint @relation(fields: [eventId, pointId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([pointId, sha256])
+  @@map("plan_point_photos")
 }

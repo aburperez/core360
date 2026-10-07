@@ -62,8 +62,10 @@ export function EventNav(props: NavProps) {
     // O Cliente não vê chamados (padrão da proposta), então o atalho some para ele.
     ...(props.canSeeTickets ? [{ href: `${base}/ocorrencias`, label: "Chamados", icon: "tickets" as const, active: path.startsWith(`${base}/ocorrencias`) && !path.endsWith("/nova") }] : []),
     ...(props.canCreate ? [{ href: `${base}/ocorrencias/nova`, label: "Novo", icon: "plus" as const, active: path.endsWith("/nova"), primary: true }] : []),
+    { href: `${base}/planta`, label: "Planta do evento", short: "Planta", icon: "map", active: path.startsWith(`${base}/planta`) },
     { href: `${base}/equipe`, label: props.canBuildTeam ? "Montar equipe" : "Equipe", short: "Equipe", icon: "team", active: path.startsWith(`${base}/equipe`) },
-    ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", short: "Receber", icon: "receipts" as const, active: path.startsWith(`${base}/recebimentos`) }] : []),
+    // Na barra de baixo cabem cinco: os recebimentos ficam no menu ☰ e no aviso do painel.
+    ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", short: "Receber", icon: "receipts" as const, active: path.startsWith(`${base}/recebimentos`), desktopOnly: true }] : []),
     ...(props.hasBriefing ? [{ href: `${base}/briefing`, label: "Meu briefing", short: "Briefing", icon: "briefing" as const, active: path.startsWith(`${base}/briefing`), desktopOnly: true }] : []),
   ];
   const create = items.find((it) => it.primary);
