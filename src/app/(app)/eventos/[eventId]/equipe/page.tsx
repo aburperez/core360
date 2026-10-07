@@ -1,8 +1,9 @@
 import { requireUser } from "@/server/http/session";
 import { membershipFor } from "@/server/authz/actor";
 import { notFound } from "next/navigation";
-import { assignableRoles, canGrantClientView, canManageAreas, canManageTeams, clientCan, isClient } from "@/server/authz/policy";
+import { assignableRoles, canGiveFunction, canGrantClientView, canManageAreas, canManageTeams, clientCan, isClient } from "@/server/authz/policy";
 import { listClientViews } from "@/modules/participants/client-views.service";
+import { listFunctionChoices } from "@/modules/functions/functions.service";
 import { getEvent } from "@/modules/events/events.service";
 import { listAreas } from "@/modules/areas/areas.service";
 import { listTeams } from "@/modules/teams/teams.service";
@@ -22,12 +23,13 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
   const { eventId } = await params;
   // O Cliente vê a equipe só quando o Gerente libera.
   if (isClient(actor, eventId) && !clientCan(actor, eventId, "team")) notFound();
-  const [event, areas, teams, people, clientViews] = await Promise.all([
+  const [event, areas, teams, people, clientViews, functionChoices] = await Promise.all([
     getEvent(actor, eventId),
     listAreas(actor, eventId),
     listTeams(actor, eventId),
     listParticipants(actor, eventId, { includeInactive: true }),
     listClientViews(actor, eventId),
+    listFunctionChoices(actor, eventId),
   ]);
   const me = membershipFor(actor, eventId);
 
@@ -49,11 +51,13 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
             eventRoles={assignableRoles(actor, eventId, null)}
             canGrantClientView={canGrantClientView(actor, eventId)}
             clientViews={clientViews}
+            functionChoices={functionChoices}
             teams={teams.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId }))}
             people={people.map((p) => ({
               id: p.id, name: p.name, email: p.email, phone: p.phone, jobTitle: p.jobTitle, role: p.role,
               areaId: p.areaId, teamId: p.teamId, active: p.active, joined: !!p.userId, invited: !!p.invitedAt,
               mine: p.userId === actor.userId,
+              canGiveFunction: canGiveFunction(actor, eventId, p),
             }))}
           />
         </div>

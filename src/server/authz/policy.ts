@@ -173,6 +173,25 @@ export function canUsePreProduction(a: Actor, eventId: string): boolean {
   return m?.role === "GERENTE" || m?.role === "PRE_PRODUTOR";
 }
 
+const FIELD_ROLES: readonly EventRole[] = ["GERENTE", "HEAD", "OPERACIONAL"];
+
+/** Dá função a alguém neste evento: a Pré-produção (a qualquer um do campo) e o Head (aos Operacionais da área dele). */
+export function canGiveFunctions(a: Actor, eventId: string): boolean {
+  return canUsePreProduction(a, eventId) || membershipFor(a, eventId)?.role === "HEAD";
+}
+
+/** Pode dar função a esta pessoa? Espelha app.can_give_function. */
+export function canGiveFunction(
+  a: Actor,
+  eventId: string,
+  p: { role: EventRole; areaId: string | null; active: boolean },
+): boolean {
+  if (!p.active || !FIELD_ROLES.includes(p.role)) return false;
+  if (canUsePreProduction(a, eventId)) return true;
+  const m = membershipFor(a, eventId);
+  return m?.role === "HEAD" && !!m.areaId && p.role === "OPERACIONAL" && p.areaId === m.areaId;
+}
+
 /** Gestão de campo (painel, chamados): quem trabalha no campo. O Cliente tem a tela dele. */
 export function canUseField(a: Actor, eventId: string): boolean {
   if (isEventAdmin(a, eventId)) return true;

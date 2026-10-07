@@ -15,7 +15,12 @@ type Team = { id: string; name: string; areaId: string };
 type Person = {
   id: string; name: string; email: string; phone: string | null; jobTitle: string | null; role: Role;
   areaId: string | null; teamId: string | null; active: boolean; joined: boolean; invited: boolean; mine: boolean;
+  /** Quem vê a tela pode dar função a esta pessoa? */
+  canGiveFunction: boolean;
 };
+type Fn = { id: string; name: string };
+/** Funções do evento e a de cada pessoa, para quem dá função (Pré-produção e Head). */
+type FunctionChoices = { functions: Fn[]; assigned: Record<string, string> } | null;
 
 export function TeamBuilder(props: {
   eventId: string;
@@ -27,6 +32,7 @@ export function TeamBuilder(props: {
   people: Person[];
   canGrantClientView: boolean;
   clientViews: Record<string, ClientView>;
+  functionChoices: FunctionChoices;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(props.areas.length === 1 ? props.areas[0].id : null);
@@ -44,6 +50,10 @@ export function TeamBuilder(props: {
     }
   };
 
+  const fnFor = (p: Person) =>
+    p.canGiveFunction && props.functionChoices?.functions.length
+      ? { eventId: props.eventId, options: props.functionChoices.functions, value: props.functionChoices.assigned[p.id] ?? null }
+      : undefined;
   const coordination = props.people.filter((p) => !p.teamId && (!p.areaId || p.role === "HEAD" || EVENT_LEVEL.includes(p.role)));
 
   return (
@@ -56,7 +66,7 @@ export function TeamBuilder(props: {
           <Card className="divide-y divide-border p-0">
             {coordination.map((p) => (
               <PersonRow key={p.id} p={p} areaName={props.areas.find((a) => a.id === p.areaId)?.name} guard={guard}
-                canManage={canManagePerson(p, props)}
+                canManage={canManagePerson(p, props)} fn={fnFor(p)}
                 clientView={p.role === "CLIENTE" && props.canGrantClientView ? (props.clientViews[p.id] ?? NO_VIEW) : undefined} />
             ))}
           </Card>
@@ -87,9 +97,12 @@ export function TeamBuilder(props: {
                   {teams.map((team) => (
                     <TeamBlock key={team.id} team={team} area={area} eventId={props.eventId}
                       people={props.people.filter((p) => p.teamId === team.id)} guard={guard}
-                      canManage={(p) => canManagePerson(p, props)} />
+                      canManage={(p) => canManagePerson(p, props)} fnFor={fnFor} />
                   ))}
                   {teams.length === 0 && <p className="px-1 text-sm text-muted">Nenhuma equipe nesta área.</p>}
+                  {props.functionChoices && props.functionChoices.functions.length === 0 && teams.length > 0 && (
+                    <p className="px-1 text-xs text-muted">As funções aparecem aqui quando a pré-produção criar a lista de funções do evento.</p>
+                  )}
                   {area.canAddTeam && (
                     <InlineAdd label="+ Equipe" placeholder="Nome da equipe (ex.: Elétrica)" block
                       onSave={(name) => guard(() => api(`/api/areas/${area.id}/teams`, { body: { name } }))} />
@@ -125,9 +138,10 @@ function canManagePerson(p: Person, props: { areas: Area[]; eventRoles: Role[] }
   return roles.includes(p.role);
 }
 
-function TeamBlock({ team, area, eventId, people, guard, canManage }: {
+function TeamBlock({ team, area, eventId, people, guard, canManage, fnFor }: {
   team: Team; area: Area; eventId: string; people: Person[];
   guard: (fn: () => Promise<unknown>) => Promise<boolean>; canManage: (p: Person) => boolean;
+  fnFor: (p: Person) => FunctionPick | undefined;
 }) {
   const [bulk, setBulk] = useState(false);
   const canAdd = area.roles.includes("OPERACIONAL");
@@ -138,7 +152,7 @@ function TeamBlock({ team, area, eventId, people, guard, canManage }: {
         <span className="text-xs text-muted">{people.filter((p) => p.active).length} ativos</span>
       </div>
       <div className="divide-y divide-border border-t border-border">
-        {people.map((p) => <PersonRow key={p.id} p={p} guard={guard} canManage={canManage(p)} />)}
+        {people.map((p) => <PersonRow key={p.id} p={p} guard={guard} canManage={canManage(p)} fn={fnFor(p)} />)}
         {people.length === 0 && <p className="px-3 py-3 text-sm text-muted">Ninguém nesta equipe ainda.</p>}
       </div>
       {canAdd && (
@@ -154,10 +168,14 @@ function TeamBlock({ team, area, eventId, people, guard, canManage }: {
   );
 }
 
-function PersonRow({ p, areaName, guard, canManage, clientView }: {
+type FunctionPick = { eventId: string; options: Fn[]; value: string | null };
+
+function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
   p: Person; areaName?: string; guard: (fn: () => Promise<unknown>) => Promise<boolean>; canManage: boolean;
   /** Só para o Cliente, quando quem vê a tela pode liberar a visão dele. */
   clientView?: ClientView;
+  /** Escolher a função desta pessoa (Pré-produção e o Head da área). */
+  fn?: FunctionPick;
 }) {
   const [link, setLink] = useState<string | null>(null);
   const state = !p.active ? "Inativo" : p.joined ? "Com acesso" : p.invited ? "Convidado" : "Sem acesso";
@@ -206,6 +224,7 @@ function PersonRow({ p, areaName, guard, canManage, clientView }: {
           </button>
         )}
       </div>
+      {fn && <FunctionSelect participantId={p.id} name={p.name} pick={fn} guard={guard} />}
       {clientView && p.active && <ClientViewSwitches participantId={p.id} view={clientView} guard={guard} />}
       {link && (
         <p className="mt-2 break-all rounded-lg bg-background p-2 text-xs">
@@ -217,6 +236,31 @@ function PersonRow({ p, areaName, guard, canManage, clientView }: {
 }
 
 const NO_VIEW: ClientView = { costs: false, team: false, progress: false };
+
+function FunctionSelect({ participantId, name, pick, guard }: {
+  participantId: string; name: string; pick: FunctionPick; guard: (fn: () => Promise<unknown>) => Promise<boolean>;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <label className="mt-2 flex items-center gap-2 text-sm">
+      <span className="shrink-0 text-muted">Função</span>
+      <Select
+        aria-label={`Função de ${name}`}
+        className="min-h-10 py-1.5"
+        value={pick.value ?? ""}
+        disabled={busy}
+        onChange={async (e) => {
+          setBusy(true);
+          await guard(() => api(`/api/events/${pick.eventId}/people/${participantId}/function`, { method: "PUT", body: { functionId: e.target.value || null } }));
+          setBusy(false);
+        }}
+      >
+        <option value="">Sem função</option>
+        {pick.options.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+      </Select>
+    </label>
+  );
+}
 
 const VIEW_OPTIONS: { key: keyof ClientView; label: string; hint: string }[] = [
   { key: "progress", label: "Andamento", hint: "chamados e planta" },

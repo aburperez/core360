@@ -15,7 +15,19 @@ const MAX_ROWS = 2000;
 /** Linhas com lista de funções e formato de data/hora prontos para preencher. */
 const READY_ROWS = 500;
 
-export const TAB = { help: "Como preencher", areas: "Áreas e equipes", functions: "Funções", activities: "Atividades" } as const;
+export const TAB = { help: "Como preencher", people: "Pessoas", areas: "Áreas e equipes", functions: "Funções", activities: "Atividades" } as const;
+
+export type SheetRole = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
+export const ROLE_NAMES: Record<SheetRole, string> = {
+  GERENTE: "Gerente", HEAD: "Head", OPERACIONAL: "Operacional", CLIENTE: "Cliente", PRE_PRODUTOR: "Pré-produtor",
+};
+export interface SheetView { progress: boolean; team: boolean; costs: boolean }
+const VIEW_NAMES: [keyof SheetView, string][] = [["progress", "Andamento"], ["team", "Equipe"], ["costs", "Custos"]];
+export const NO_FUNCTION = "Sem função";
+const NO_VIEW_TEXT = "Nada";
+
+/** "Andamento, Custos" para a coluna Visão do cliente. */
+export const viewText = (v: SheetView) => VIEW_NAMES.filter(([k]) => v[k]).map(([, n]) => n).join(", ") || NO_VIEW_TEXT;
 
 export interface SheetTeam { name: string; description: string | null }
 export interface SheetArea { name: string; description: string | null; teams: SheetTeam[] }
@@ -31,8 +43,38 @@ export interface SheetActivity {
   place: string | null;
 }
 
+/** Uma pessoa do evento na aba Pessoas. */
+export interface SheetPerson {
+  name: string;
+  email: string;
+  phone: string | null;
+  area: string | null;
+  team: string | null;
+  role: SheetRole;
+  functionName: string | null;
+  /** Só para o Cliente, quando quem baixa pode liberar a visão dele. */
+  view: SheetView | null;
+}
+
+/** Linha lida da aba Pessoas. undefined = valor que não deu para entender. */
+export interface ParsedPerson {
+  where: string;
+  email: string;
+  area: string | null;
+  team: string | null;
+  role: SheetRole | null | undefined;
+  /** null = em branco (não muda); NO_FUNCTION tira a função. */
+  functionName: string | null;
+  view: SheetView | null | undefined;
+}
+
 export interface FunctionsSheet {
   eventName: string;
+  people: SheetPerson[];
+  /** Quem baixa muda perfil, área e equipe (Gerente)? */
+  canEditPeople: boolean;
+  /** Quem baixa libera a visão do Cliente (Gerente)? */
+  canGrantClientView: boolean;
   areas: SheetArea[];
   functions: SheetFunction[];
   activities: SheetActivity[];
@@ -42,6 +84,7 @@ export interface FunctionsSheet {
 
 export interface ParsedFunctionsSheet {
   /** null = a aba não veio no arquivo. */
+  people: ParsedPerson[] | null;
   areas: SheetArea[] | null;
   functions: SheetFunction[] | null;
   activities: SheetActivity[] | null;
@@ -85,9 +128,23 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
     [`Evento: ${s.eventName}`, "note"],
     ["", "text"],
     ["Como funciona", "head"],
-    ["1. Preencha as abas Áreas e equipes, Funções e Atividades. Não mude o nome das abas nem a primeira linha (os títulos).", "text"],
+    ["1. Preencha as abas Pessoas, Áreas e equipes, Funções e Atividades. Não mude o nome das abas nem a primeira linha (os títulos).", "text"],
     ["2. Salve em .xlsx e envie em Pré-produção › Funções e briefing › Enviar planilha.", "text"],
     ["3. Antes de gravar, o app mostra o que vai criar e o que vai atualizar. Só grava quando você confirmar.", "text"],
+    ["", "text"],
+    ["Pessoas", "head"],
+    ["Quem já está no evento, uma linha por pessoa. A pessoa é encontrada pelo e-mail: não mude o e-mail.", "text"],
+    ["Função: escolha na lista (ela vem da aba Funções). Para tirar a função de alguém, escreva \"Sem função\". Só pessoas do campo (Gerente, Head e Operacional) têm função.", "text"],
+    [
+      s.canEditPeople
+        ? "Perfil, Área e Equipe: mude para trocar a pessoa de perfil ou de lugar. Head precisa de uma área; Operacional precisa de uma equipe."
+        : "Perfil, Área e Equipe estão aí para você ver; só o Gerente do evento muda. Se você mexer nessas colunas, elas serão ignoradas.",
+      "note",
+    ],
+    ...(s.canGrantClientView
+      ? ([["Visão do cliente (só para o Cliente): escreva o que ele vê, separado por vírgula: Andamento, Equipe, Custos. \"Nada\" fecha tudo.", "text"]] as [string, "text"][])
+      : []),
+    ["Para cadastrar gente nova, use Montar equipe no app. Pessoa que não está no evento é ignorada.", "text"],
     ["", "text"],
     ["Áreas e equipes", "head"],
     ["Uma linha por equipe: a área na coluna Área e a equipe na coluna Equipe.", "text"],
@@ -101,7 +158,7 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
     ["", "text"],
     ["Funções", "head"],
     ["Uma linha por função. A descrição aparece para a pessoa em Meu briefing.", "text"],
-    ["Quem dá a função a cada pessoa é o app (Funções e briefing), não a planilha.", "text"],
+    ["A função de cada pessoa você escolhe na aba Pessoas (ou no app).", "text"],
     ["", "text"],
     ["Atividades", "head"],
     ["Uma linha por atividade de cada função. Escolha a função na lista (ela vem da aba Funções).", "text"],
@@ -110,7 +167,7 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
     ["O que o envio nunca faz", "head"],
     ["Nada é apagado: linha que você tirar da planilha continua no app. Para apagar, use as telas do app.", "text"],
     ["Célula em branco não apaga o que já está no app.", "text"],
-    ["Quem já tem uma função continua com ela, e as atividades marcadas como feitas continuam feitas.", "text"],
+    ["Função em branco não muda a função da pessoa, e as atividades marcadas como feitas continuam feitas.", "text"],
     ["Nome igual ao que já existe (sem diferença de maiúsculas ou acentos) atualiza; nome novo cria.", "text"],
   ];
   lines.forEach(([t, kind], i) => {
@@ -129,6 +186,19 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
       c.font = { italic: true, color: { argb: "FF555555" } };
     }
   });
+
+  // Pessoas.
+  const people = wb.addWorksheet(TAB.people);
+  const peopleCols: [string, number][] = [["Nome", 30], ["E-mail", 32], ["Telefone", 18], ["Área", 22], ["Equipe", 22], ["Perfil", 15], ["Função", 28]];
+  if (s.canGrantClientView) peopleCols.push(["Visão do cliente", 28]);
+  header(people, peopleCols);
+  for (const p of s.people) {
+    const row = people.addRow([
+      p.name, p.email, p.phone ?? "", p.area ?? "", p.team ?? "", ROLE_NAMES[p.role], p.functionName ?? "",
+      ...(s.canGrantClientView ? [p.role === "CLIENTE" && p.view ? viewText(p.view) : ""] : []),
+    ]);
+    if (!s.canEditPeople) [4, 5, 6].forEach((c) => (row.getCell(c).font = { color: { argb: "FF777777" } }));
+  }
 
   // Áreas e equipes.
   const areas = wb.addWorksheet(TAB.areas);
@@ -152,6 +222,18 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
   }
   const last = Math.max(READY_ROWS, acts.rowCount + 100);
   const fnLast = Math.max(READY_ROWS, fns.rowCount + 100);
+  // Perfil e Função com lista; "Sem função" é digitado (o Excel avisa, mas aceita).
+  for (let r = 2; r <= people.rowCount; r++) {
+    const row = people.getRow(r);
+    row.getCell(6).dataValidation = {
+      type: "list", allowBlank: true, formulae: [`"${Object.values(ROLE_NAMES).join(",")}"`],
+      showErrorMessage: true, errorStyle: "warning", errorTitle: "Perfil", error: "Use Gerente, Head, Operacional, Cliente ou Pré-produtor.",
+    };
+    row.getCell(7).dataValidation = {
+      type: "list", allowBlank: true, formulae: [`'${TAB.functions}'!$A$2:$A$${fnLast}`],
+      showErrorMessage: true, errorStyle: "warning", errorTitle: "Função", error: "Use uma função da aba Funções (ou crie ela lá primeiro), ou \"Sem função\" para tirar.",
+    };
+  }
   for (let r = 2; r <= last; r++) {
     const row = acts.getRow(r);
     row.getCell(1).dataValidation = {
@@ -249,7 +331,8 @@ export async function readFunctionsSheet(bytes: Uint8Array): Promise<ParsedFunct
   const wsAreas = tab(/^area/);
   const wsFns = tab(/^func/);
   const wsActs = tab(/^ativ/);
-  if (!wsAreas && !wsFns && !wsActs) {
+  const wsPeople = tab(/^pessoa/);
+  if (!wsAreas && !wsFns && !wsActs && !wsPeople) {
     throw new ValidationError("Esta não é a planilha de funções e áreas. Baixe o modelo pelo botão Baixar planilha e preencha nele.");
   }
   const rows = (ws: ExcelJS.Worksheet) => {
@@ -347,5 +430,61 @@ export async function readFunctionsSheet(bytes: Uint8Array): Promise<ParsedFunct
     activities = [...byKey.values()];
   }
 
-  return { areas, functions, activities, warnings };
+  // Pessoas: só muda quem já está no evento, achado pelo e-mail.
+  let people: ParsedPerson[] | null = null;
+  if (wsPeople) {
+    const c = findCols(wsPeople, [
+      ["name", /^nome/], ["email", /^e-?mail/], ["area", /^area/], ["team", /^equipe/],
+      ["role", /^perfil|^papel/], ["fn", /^func/], ["view", /^visao/],
+    ]);
+    if (c.email === undefined) throw new ValidationError(`Não achei a coluna E-mail na aba ${wsPeople.name}`);
+    const byEmail = new Map<string, ParsedPerson>();
+    for (const r of rows(wsPeople)) {
+      const email = text(wsPeople, r, c.email, 200)?.toLowerCase() ?? null;
+      const roleText = text(wsPeople, r, c.role, 40);
+      const viewText = text(wsPeople, r, c.view, 200);
+      const p: ParsedPerson = {
+        where: where(wsPeople, r),
+        email: email ?? "",
+        area: text(wsPeople, r, c.area, 80),
+        team: text(wsPeople, r, c.team, 80),
+        role: roleText === null ? null : readRole(roleText),
+        functionName: text(wsPeople, r, c.fn, 80),
+        view: viewText === null ? null : readView(viewText),
+      };
+      if (!email) {
+        if (p.area || p.team || roleText || p.functionName || viewText) warnings.push(`${p.where}: falta o e-mail; a linha foi ignorada.`);
+        continue;
+      }
+      if (p.role === undefined) warnings.push(`${p.where}: perfil "${roleText}" não existe (use ${Object.values(ROLE_NAMES).join(", ")}); o perfil não muda.`);
+      if (p.view === undefined) warnings.push(`${p.where}: visão "${viewText}" não entendida (use Andamento, Equipe, Custos ou Nada); a visão não muda.`);
+      if (byEmail.has(email)) warnings.push(`${p.where}: e-mail repetido; vale a última linha.`);
+      byEmail.set(email, p);
+    }
+    people = [...byEmail.values()];
+  }
+
+  return { people, areas, functions, activities, warnings };
+}
+
+const ROLE_BY_NAME = new Map<string, SheetRole>([
+  ...(Object.entries(ROLE_NAMES) as [SheetRole, string][]).map(([k, v]) => [norm(v), k] as [string, SheetRole]),
+  ["pre produtor", "PRE_PRODUTOR"], ["preprodutor", "PRE_PRODUTOR"], ["pre-produtora", "PRE_PRODUTOR"], ["gerente de producao", "GERENTE"],
+]);
+
+function readRole(t: string): SheetRole | undefined {
+  return ROLE_BY_NAME.get(norm(t));
+}
+
+/** "Andamento, Custos" → visão; "Nada" → tudo desligado; undefined se não entender. */
+function readView(t: string): SheetView | undefined {
+  const parts = norm(t).split(/[,;/+]| e /).map((x) => x.trim()).filter(Boolean);
+  const v: SheetView = { progress: false, team: false, costs: false };
+  for (const part of parts) {
+    if (/^(nada|nenhum|nenhuma|-)$/.test(part)) continue;
+    const hit = VIEW_NAMES.find(([, n]) => norm(n) === part || (part.length >= 4 && norm(n).startsWith(part)));
+    if (!hit) return undefined;
+    v[hit[0]] = true;
+  }
+  return v;
 }

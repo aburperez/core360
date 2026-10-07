@@ -9,6 +9,7 @@ import { api } from "@/components/api-client";
 
 type Count = { create: number; update: number; createNames: string[]; updateNames: string[] };
 type Preview = {
+  people?: Count;
   areas: Count;
   teams: Count;
   functions: Count;
@@ -66,7 +67,7 @@ export function SheetPanel({ eventId, canEditAreas }: { eventId: string; canEdit
         <div className="min-w-0">
           <p className="font-semibold">Planilha de funções e áreas</p>
           <p className="mt-0.5 text-sm text-muted">
-            {canEditAreas ? "Áreas e equipes, funções e atividades" : "Funções e atividades"} no modelo do sistema.
+            {canEditAreas ? "Pessoas (perfil e função), áreas e equipes, funções e atividades" : "A função de cada pessoa, funções e atividades"} no modelo do sistema.
             Baixe, preencha no Excel e envie de volta.
           </p>
         </div>
@@ -126,7 +127,8 @@ export function SheetPanel({ eventId, canEditAreas }: { eventId: string; canEdit
 }
 
 function PreviewView({ p }: { p: Preview }) {
-  const rows: { label: string; c: { create: number; update: number; createNames?: string[]; updateNames?: string[] }; one: string; many: string }[] = [
+  const rows: { label: string; c: { create: number; update: number; createNames?: string[]; updateNames?: string[] }; one: string; many: string; changed?: string }[] = [
+    { label: "Pessoas", c: p.people ?? { create: 0, update: 0 }, one: "pessoa", many: "pessoas", changed: "Mudam" },
     { label: "Áreas", c: p.areas, one: "área", many: "áreas" },
     { label: "Equipes", c: p.teams, one: "equipe", many: "equipes" },
     { label: "Funções", c: p.functions, one: "função", many: "funções" },
@@ -155,7 +157,7 @@ function PreviewView({ p }: { p: Preview }) {
                 ].filter(Boolean).join(" · ")}
               </p>
               <Names label="Novas" names={r.c.createNames} total={r.c.create} />
-              <Names label="Com descrição nova" names={r.c.updateNames} total={r.c.update} />
+              <Names label={r.changed ?? "Com descrição nova"} names={r.c.updateNames} total={r.c.update} />
             </li>
           ))}
         </ul>
@@ -163,7 +165,7 @@ function PreviewView({ p }: { p: Preview }) {
 
       {!p.saved && !p.nothing && (
         <p className="rounded-xl bg-white/5 px-3 py-2 text-sm text-muted">
-          Nada será apagado. Quem já tem função continua com ela, e as atividades marcadas como feitas continuam feitas.
+          Nada será apagado e ninguém será desativado. Função em branco não muda a função da pessoa, e as atividades marcadas como feitas continuam feitas.
         </p>
       )}
 

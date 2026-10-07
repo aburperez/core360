@@ -21,6 +21,9 @@ const uniq = () => Math.random().toString(36).slice(2, 7);
 const rock = d.events.rock.id;
 let ev: string;
 let joaoHere: string;
+let carlaHere: string;
+let ritaHere: string;
+const emails = { joao: "", carla: "", rita: "", marina: "", sofia: "" };
 /** Pessoas só deste evento (os outros testes contam as participações das pessoas do demo). */
 const users = { gerente: "", pre: "", campo: "" };
 const as = async (who: keyof typeof users): Promise<Actor> => (await loadActor(db, users[who]))!;
@@ -38,12 +41,18 @@ beforeAll(async () => {
   const team = await owner.team.create({ data: { eventId: ev, areaId: area.id, name: "Elétrica" } });
   await owner.participant.createMany({
     data: [
-      { eventId: ev, name: "Marina", email: `marina.${uniq()}@x.dev`, role: "GERENTE", userId: users.gerente },
-      { eventId: ev, name: "Sofia", email: `sofia.${uniq()}@x.dev`, role: "PRE_PRODUTOR", userId: users.pre },
+      { eventId: ev, name: "Marina", email: (emails.marina = `marina.${uniq()}@x.dev`), role: "GERENTE", userId: users.gerente },
+      { eventId: ev, name: "Sofia", email: (emails.sofia = `sofia.${uniq()}@x.dev`), role: "PRE_PRODUTOR", userId: users.pre },
     ],
   });
   joaoHere = (await owner.participant.create({
-    data: { eventId: ev, name: "João", email: `joao.${uniq()}@x.dev`, role: "OPERACIONAL", areaId: area.id, teamId: team.id, userId: users.campo },
+    data: { eventId: ev, name: "João", email: (emails.joao = `joao.${uniq()}@x.dev`), role: "OPERACIONAL", areaId: area.id, teamId: team.id, userId: users.campo },
+  })).id;
+  carlaHere = (await owner.participant.create({
+    data: { eventId: ev, name: "Carla", email: (emails.carla = `carla.${uniq()}@x.dev`), role: "OPERACIONAL", areaId: area.id, teamId: team.id },
+  })).id;
+  ritaHere = (await owner.participant.create({
+    data: { eventId: ev, name: "Rita", email: (emails.rita = `rita.${uniq()}@x.dev`), role: "CLIENTE" },
   })).id;
 });
 
@@ -87,7 +96,7 @@ describe("planilha de funções e áreas", () => {
     const { fileName, bytes } = await exportFunctionsSheet(await as("gerente"), ev);
     expect(fileName).toMatch(/^Funcoes e areas - Feira/);
     const wb = await load(bytes);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["Como preencher", "Áreas e equipes", "Funções", "Atividades"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Como preencher", "Pessoas", "Áreas e equipes", "Funções", "Atividades"]);
     expect(values(wb.getWorksheet("Áreas e equipes")!)).toEqual([["Infra", "Elétrica", ""]]);
     expect(values(wb.getWorksheet("Funções")!).map((r) => r[0])).toEqual([...DEFAULT_FUNCTIONS]);
     // A coluna Função das atividades tem a lista da aba Funções.
@@ -245,5 +254,77 @@ describe("leitura de dia e hora", () => {
     for (const t of ["8:00", "08:00", "8h", "8 h", "08h00"]) expect(readTime(cell(t))).toBe("08:00");
     expect(readTime(cell("24:00"))).toBeUndefined();
     expect(readTime(cell(null))).toBeNull();
+  });
+});
+
+/** Linha da aba Pessoas pelo e-mail. Colunas: Nome, E-mail, Telefone, Área, Equipe, Perfil, Função, Visão do cliente. */
+function personRow(wb: ExcelJS.Workbook, email: string) {
+  const ws = wb.getWorksheet("Pessoas")!;
+  for (let r = 2; r <= ws.rowCount; r++) if (ws.getRow(r).getCell(2).text === email) return ws.getRow(r);
+  throw new Error(`sem linha para ${email}`);
+}
+
+describe("aba Pessoas", () => {
+  it("o Gerente muda perfil, lugar, função e a visão do cliente; o resto vira aviso", async () => {
+    const marina = await as("gerente");
+    const wb = await load((await exportFunctionsSheet(marina, ev)).bytes);
+    const ws = wb.getWorksheet("Pessoas")!;
+    expect(ws.getRow(1).values).toEqual([undefined, "Nome", "E-mail", "Telefone", "Área", "Equipe", "Perfil", "Função", "Visão do cliente"]);
+    expect(personRow(wb, emails.rita).getCell(8).text).toBe("Nada");
+    expect(personRow(wb, emails.joao).getCell(7).text).toBe("Roadie");
+    expect(personRow(wb, emails.joao).getCell(6).text).toBe("Operacional");
+
+    personRow(wb, emails.joao).getCell(6).value = "Head";
+    personRow(wb, emails.carla).getCell(5).value = "gerador";
+    personRow(wb, emails.carla).getCell(7).value = "roadie";
+    personRow(wb, emails.rita).getCell(8).value = "Andamento, custos";
+    personRow(wb, emails.sofia).getCell(7).value = "Roadie";
+    personRow(wb, emails.marina).getCell(6).value = "Head";
+    ws.addRow(["Fulano", "ninguem@x.dev", "", "", "", "Operacional", "Roadie"]);
+    ws.addRow(["Beltrano", "outro@x.dev", "", "Infra", "Gerador", "Chefe"]);
+    ws.addRow(["Rita", emails.rita.toUpperCase(), "", "", "", "Cliente", "", "Andamento e Custos"]);
+    const file = await save(wb);
+
+    const preview = await importFunctionsSheet(marina, ev, file, { confirm: false });
+    expect(preview.people).toMatchObject({ create: 0, update: 3 });
+    expect(preview.people!.updateNames).toEqual(expect.arrayContaining([
+      "João (perfil Operacional → Head (Infra))",
+      "Carla (vai para Infra › Gerador; função Roadie)",
+      "Rita (vê Andamento, Custos)",
+    ]));
+    expect(preview.warnings).toEqual(expect.arrayContaining([
+      expect.stringMatching(/\(Marina\): você não muda a sua própria participação/),
+      expect.stringMatching(/\(Sofia\): Pré-produtor não tem função/),
+      expect.stringMatching(/ninguem@x.dev não está neste evento/),
+      expect.stringMatching(/perfil "Chefe" não existe/),
+      expect.stringMatching(/e-mail repetido/),
+    ]));
+    expect((await owner.participant.findUniqueOrThrow({ where: { id: joaoHere } })).role).toBe("OPERACIONAL");
+
+    expect(await importFunctionsSheet(marina, ev, file, { confirm: true })).toMatchObject({ saved: true });
+    const infra = await owner.area.findFirstOrThrow({ where: { eventId: ev, name: "Infra" }, include: { teams: true } });
+    const joao = await owner.participant.findUniqueOrThrow({ where: { id: joaoHere } });
+    expect([joao.role, joao.areaId, joao.teamId]).toEqual(["HEAD", infra.id, null]);
+    const carla = await owner.participant.findUniqueOrThrow({ where: { id: carlaHere }, include: { profile: { include: { function: true } } } });
+    expect([carla.role, carla.teamId, carla.profile?.function?.name]).toEqual(["OPERACIONAL", infra.teams.find((t) => t.name === "Gerador")!.id, "Roadie"]);
+    expect(await owner.clientView.findUnique({ where: { participantId: ritaHere } })).toMatchObject({ progress: true, costs: true, team: false, updatedById: users.gerente });
+    expect((await owner.participant.findUniqueOrThrow({ where: { id: (await owner.participant.findFirstOrThrow({ where: { eventId: ev, name: "Marina" } })).id } })).role).toBe("GERENTE");
+    expect(await owner.auditLog.count({ where: { eventId: ev, entity: "participant", entityId: joaoHere, action: "ROLE_CHANGE" } })).toBe(1);
+    // Baixar de novo e enviar sem mexer: nada muda.
+    expect(await importFunctionsSheet(marina, ev, (await exportFunctionsSheet(marina, ev)).bytes, { confirm: false })).toMatchObject({ nothing: true, warnings: [] });
+  });
+
+  it("para a Pré-produtora só a função muda; sem coluna de visão", async () => {
+    const sofia = await as("pre");
+    const wb = await load((await exportFunctionsSheet(sofia, ev)).bytes);
+    expect(wb.getWorksheet("Pessoas")!.getRow(1).values).toEqual([undefined, "Nome", "E-mail", "Telefone", "Área", "Equipe", "Perfil", "Função"]);
+    expect(values(wb.getWorksheet("Como preencher")!).flat().join(" ")).toMatch(/só o Gerente do evento muda/);
+    personRow(wb, emails.carla).getCell(6).value = "Head";
+    personRow(wb, emails.carla).getCell(7).value = "Sem função";
+    const r = await importFunctionsSheet(sofia, ev, await save(wb), { confirm: true });
+    expect(r).toMatchObject({ saved: true, people: { update: 1 } });
+    expect(r.warnings[0]).toMatch(/perfil, área e equipe foram ignorados em 1 linha/);
+    const carla = await owner.participant.findUniqueOrThrow({ where: { id: carlaHere }, include: { profile: true } });
+    expect([carla.role, carla.profile?.functionId]).toEqual(["OPERACIONAL", null]);
   });
 });

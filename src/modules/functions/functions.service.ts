@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
 import type { Tx } from "../../server/db/with-user";
-import { canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canGiveFunction, canGiveFunctions, canUseField, canUsePreProduction } from "../../server/authz/policy";
 import { membershipFor } from "../../server/authz/actor";
 import { audit, diff } from "../../server/audit/audit";
-import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
@@ -255,12 +255,11 @@ async function fieldPeople(tx: Tx, eventId: string, ids: string[]) {
   return found.map((p) => p.id);
 }
 
-async function setFunction(tx: Tx, actor: Actor, eventId: string, participantId: string, functionId: string | null) {
-  await tx.participantProfile.upsert({
-    where: { participantId },
-    create: { eventId, participantId, functionId, updatedById: actor.userId },
-    update: { functionId },
-  });
+/** Grava a função pelo banco (app.give_function), que confere de novo quem pode dar. Devolve a anterior. */
+export async function setFunction(tx: Tx, eventId: string, participantId: string, functionId: string | null) {
+  const [row] = await tx.$queryRaw<{ before: string | null }[]>`
+    SELECT app.give_function(${eventId}::uuid, ${participantId}::uuid, ${functionId}::uuid) AS before`;
+  return row?.before ?? null;
 }
 
 /** Quem tem esta função: os marcados ficam com ela; os desmarcados ficam sem função. */
@@ -275,7 +274,7 @@ export async function setFunctionPeople(actor: Actor, functionId: string, input:
     if (removed.length) {
       await tx.participantProfile.updateMany({ where: { eventId: f.eventId, participantId: { in: removed } }, data: { functionId: null } });
     }
-    for (const id of added) await setFunction(tx, actor, f.eventId, id, f.id);
+    for (const id of added) await setFunction(tx, f.eventId, id, f.id);
     if (added.length || removed.length) {
       await audit(tx, actor, { eventId: f.eventId, entity: "event_function", entityId: f.id, action: "REASSIGN", after: { added, removed } });
     }
@@ -283,25 +282,54 @@ export async function setFunctionPeople(actor: Actor, functionId: string, input:
   });
 }
 
-/** Troca a função de uma pessoa (ou tira, com null). */
+/**
+ * Troca a função de uma pessoa (ou tira, com null). A Pré-produção dá a
+ * qualquer pessoa do campo; o Head, aos Operacionais da área dele.
+ */
 export async function setPersonFunction(actor: Actor, eventId: string, participantId: string, input: unknown) {
-  requirePre(actor, eventId);
+  requireEventAccess(actor, eventId);
+  if (!canGiveFunctions(actor, eventId)) throw new NotFoundError("Pessoa");
   const { functionId } = parse(z.object({ functionId: uuid.nullable() }), input);
   if (!uuid.safeParse(participantId).success) throw new NotFoundError("Pessoa");
   return actor.run(async (tx) => {
-    await fieldPeople(tx, eventId, [participantId]);
+    const p = await tx.participant.findFirst({
+      where: { id: participantId, eventId, deletedAt: null },
+      select: { role: true, areaId: true, active: true },
+    });
+    if (!p) throw new NotFoundError("Pessoa");
+    if (!p.active || !(FIELD_ROLES as readonly string[]).includes(p.role)) throw new ValidationError("Escolha pessoas do campo deste evento");
+    if (!canGiveFunction(actor, eventId, p)) throw new ForbiddenError("O Head dá função só aos Operacionais da área dele");
     if (functionId && !(await tx.eventFunction.findFirst({ where: { id: functionId, eventId }, select: { id: true } }))) {
       throw new NotFoundError("Função");
     }
-    const before = await tx.participantProfile.findUnique({ where: { participantId }, select: { functionId: true } });
-    await setFunction(tx, actor, eventId, participantId, functionId);
-    if ((before?.functionId ?? null) !== functionId) {
+    const before = await setFunction(tx, eventId, participantId, functionId);
+    if (before !== functionId) {
       await audit(tx, actor, {
         eventId, entity: "participant_profile", entityId: participantId, action: "ROLE_CHANGE",
-        before: { functionId: before?.functionId ?? null }, after: { functionId },
+        before: { functionId: before }, after: { functionId },
       });
     }
     return { functionId };
+  });
+}
+
+/**
+ * Para a tela Montar equipe: as funções do evento e a função de cada pessoa a
+ * quem eu posso dar função (sem o resto da ficha). null = não dou função aqui.
+ */
+export async function listFunctionChoices(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  if (!canGiveFunctions(actor, eventId)) return null;
+  return actor.run(async (tx) => {
+    const [functions, rows] = await Promise.all([
+      tx.eventFunction.findMany({ where: { eventId }, select: { id: true, name: true } }),
+      tx.$queryRaw<{ participant_id: string; function_id: string }[]>`
+        SELECT participant_id, function_id FROM app.function_assignments(${eventId}::uuid)`,
+    ]);
+    return {
+      functions: functions.sort(byName),
+      assigned: Object.fromEntries(rows.map((r) => [r.participant_id, r.function_id])) as Record<string, string>,
+    };
   });
 }
 
