@@ -1,121 +1,138 @@
 import Link from "next/link";
-import { requireUser } from "@/server/http/session";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/server/http/session";
 import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { getEvent } from "@/modules/events/events.service";
-import { listTeams } from "@/modules/teams/teams.service";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
+import { getCostSheet } from "@/modules/costs/costs.service";
+import { getFunctionsPanel } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
-import { Card, EmptyState, PAGE, SectionTitle, cx } from "@/components/ui";
-import { formatDuration, formatDateTime } from "@/lib/format";
-import { NewTypeForm } from "./sla-forms";
+import { PAGE, cx } from "@/components/ui";
+import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, Tile, pct } from "@/components/panel";
+import { ROLE_LABEL, formatDuration } from "@/lib/format";
+import { brl } from "@/lib/money";
 
 export const metadata = { title: "Pré-produção" };
 
-/** Pré-produção: tipos de atendimento de cada equipe e o SLA de cada um. */
-export default async function PreProductionPage({ params }: PageProps<"/eventos/[eventId]/pre-producao">) {
+/**
+ * Painel da pré-produção: quanto falta em cada parte da preparação, o custo
+ * total e atalhos para cada página.
+ */
+export default async function PreProductionPanel({ params }: PageProps<"/eventos/[eventId]/pre-producao">) {
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, teams] = await Promise.all([getEvent(actor, eventId), listServiceTypes(actor, eventId), listTeams(actor, eventId)]);
+  const [event, types, sheet, fn] = await Promise.all([
+    getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
+  ]);
   const base = `/eventos/${eventId}/pre-producao`;
-  const creatable = teams;
   const toReview = canReviewSla(actor, eventId) ? types.filter((t) => t.pending) : [];
+  const proposed = types.filter((t) => t.pending).length;
+  const approved = types.filter((t) => t.slaMinutes).length;
+  const withPeople = types.filter((t) => t.peopleIds.length).length;
+  const people = fn.people.length;
+  const withFunction = fn.people.filter((p) => p.functionId).length;
+  const fullProfile = fn.people.filter((p) => p.profileFilled === 5).length;
+  const briefed = fn.people.filter((p) => p.briefingState !== "SEM");
+  const read = briefed.filter((p) => p.briefingState === "LIDO").length;
+  const priced = sheet.itemCount - sheet.totals.undefinedCount;
+  const role = isEventSupport(actor, eventId) ? "Suporte" : isEventAdmin(actor, eventId) ? "Admin" : ROLE_LABEL[membershipFor(actor, eventId)!.role];
+
+  const tiles: TileData[] = [
+    { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
+    { href: `${base}/quem-faz`, icon: "matrix", title: "Quem faz o quê", line: `${withPeople} de ${types.length} tipos com pessoas` },
+    { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
+    { href: `${base}/funcoes`, icon: "functions", title: "Funções e briefing", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
+    { href: `${base}/relatorio`, icon: "report", title: "Relatório diário", line: "Chamados e recebimentos do dia" },
+  ];
 
   return (
     <>
       <TopBar title="Pré-produção" subtitle={event.name} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
-        {toReview.length > 0 && (
-          <>
-            <SectionTitle>Aguardando sua revisão ({toReview.length})</SectionTitle>
-            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-              {toReview.map((t) => (
-                <Link key={t.id} href={`${base}/tipos/${t.id}`} className="block rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 transition hover:border-amber-300">
-                  <p className="font-semibold">{t.name}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {t.pending!.proposedBy.name} propôs <strong className="text-foreground">{formatDuration(t.pending!.minutes * 60)}</strong>
-                    {t.slaMinutes ? ` (hoje: ${formatDuration(t.slaMinutes * 60)})` : ""}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">{t.teamName} · {formatDateTime(t.pending!.createdAt)}</p>
-                </Link>
-              ))}
+        <PageHeading trail={[event.name, "Pré-produção"]} title="Painel da pré-produção" />
+        <MobileHero name={actor.name} role={role} detail={event.name} />
+        <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0 space-y-4">
+            {/* Celular: cartões quadrados; computador: atalhos em linha. */}
+            <div className="grid grid-cols-2 gap-3 lg:hidden">
+              {tiles.map((t, i) => <SquareTile key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
             </div>
-          </>
-        )}
+            <div className="hidden gap-3 lg:grid lg:grid-cols-2">
+              {tiles.map((t, i) => <Tile key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
+            </div>
 
-        <SectionTitle>Tipos de atendimento e SLA</SectionTitle>
-        <p className="mb-3 px-1 text-sm text-muted">
-          O SLA de cada tipo vira o prazo do chamado de campo. O pré-produtor propõe e o gerente aprova, ajusta ou recusa.
-          Sem SLA aprovado, vale o prazo da prioridade.
-        </p>
-        {creatable.length > 0 && (
-          <div className="mb-3">
-            <NewTypeForm eventId={eventId} teams={creatable.map((t) => ({ id: t.id, label: `${t.area.name} › ${t.name}` }))} />
-          </div>
-        )}
-
-        {types.length === 0 ? (
-          <EmptyState title="Nenhum tipo de atendimento ainda">
-            {creatable.length ? "Crie o primeiro, por exemplo “Troca de lâmpada” na equipe de Elétrica." : "Monte as equipes primeiro em Montar equipe."}
-          </EmptyState>
-        ) : (
-          <>
-            {/* Computador: planilha. */}
-            <Card className="hidden overflow-hidden p-0 lg:block">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Tipo de atendimento</th>
-                    <th className="px-4 py-3 font-semibold">Equipe</th>
-                    <th className="px-4 py-3 font-semibold">SLA</th>
-                    <th className="px-4 py-3 font-semibold">Situação</th>
-                    <th className="px-4 py-3 text-right font-semibold">Quem faz</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {types.map((t) => (
-                    <tr key={t.id} className="transition hover:bg-white/5">
-                      <td className="px-4 py-3">
-                        <Link href={`${base}/tipos/${t.id}`} className="font-semibold hover:text-primary">{t.name}</Link>
-                        {t.description && <p className="line-clamp-1 text-xs text-muted">{t.description}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-muted">{t.areaName} › {t.teamName}</td>
-                      <td className="px-4 py-3 font-semibold tabular-nums">{t.slaMinutes ? formatDuration(t.slaMinutes * 60) : "—"}</td>
-                      <td className="px-4 py-3"><Situation t={t} /></td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted">{t.peopleIds.length || "—"}</td>
-                    </tr>
+            {toReview.length > 0 && (
+              <Panel title={`Aguardando sua revisão (${toReview.length})`}>
+                <ul className="divide-y divide-border">
+                  {toReview.map((t) => (
+                    <li key={t.id}>
+                      <Link href={`${base}/tipos/${t.id}`} className="flex items-center justify-between gap-3 py-2.5 transition hover:text-primary">
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold">{t.name}</span>
+                          <span className="block truncate text-sm text-muted">{t.pending!.proposedBy.name} propôs {formatDuration(t.pending!.minutes * 60)} · {t.teamName}</span>
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold text-amber-300">Revisar ›</span>
+                      </Link>
+                    </li>
                   ))}
-                </tbody>
-              </table>
-            </Card>
+                </ul>
+              </Panel>
+            )}
 
-            {/* Celular: cartões. */}
-            <div className="space-y-3 lg:hidden">
-              {types.map((t) => (
-                <Link key={t.id} href={`${base}/tipos/${t.id}`} className="block rounded-2xl border border-border bg-surface p-4 active:scale-[0.99] transition">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 font-semibold">{t.name}</p>
-                    <span className="shrink-0 font-semibold tabular-nums">{t.slaMinutes ? formatDuration(t.slaMinutes * 60) : "—"}</span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-                    <span>{t.areaName} › {t.teamName}</span>
-                    <Situation t={t} />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
+            <Panel title="Andamento da preparação">
+              <div className="space-y-1">
+                <ProgressRow label="SLA aprovado" done={approved} total={types.length} hint={`${approved} de ${types.length} tipos`} i={0} href={`${base}/tipos`} />
+                <ProgressRow label="Quem faz" done={withPeople} total={types.length} hint={`${withPeople} de ${types.length} tipos`} i={1} href={`${base}/quem-faz`} />
+                <ProgressRow label="Funções" done={withFunction} total={people} hint={`${withFunction} de ${people} pessoas`} i={2} href={`${base}/funcoes`} />
+                <ProgressRow label="Fichas" done={fullProfile} total={people} hint={`${fullProfile} de ${people} completas`} i={3} href={`${base}/funcoes`} />
+                <ProgressRow label="Briefing lido" done={read} total={briefed.length} hint={`${read} de ${briefed.length} pessoas`} i={4} href={`${base}/funcoes`} />
+                <ProgressRow label="Custos" done={priced} total={sheet.itemCount} hint={`${priced} de ${sheet.itemCount} itens com valor`} i={5} href={`${base}/custos`} />
+                {sheet.field.sent > 0 && (
+                  <ProgressRow label="Conferidos" done={sheet.field.ok + sheet.field.different} total={sheet.field.sent} hint={`${sheet.field.ok + sheet.field.different} de ${sheet.field.sent} itens no campo`} i={0} href={`${base}/relatorio`} />
+                )}
+              </div>
+            </Panel>
+          </div>
+
+          <aside className="mt-4 space-y-4 lg:mt-0">
+            <Panel className="hidden lg:block"><Profile name={actor.name} role={role} detail={event.name} /></Panel>
+            <Panel title="Custo do evento" action={<Link href={`${base}/custos`} className="text-sm font-semibold text-primary">Abrir ›</Link>}>
+              <p className="text-3xl font-bold tabular-nums">{brl(sheet.totals.total)}</p>
+              <dl className="mt-3 space-y-1.5 text-sm">
+                <Line label="Fornecedores" value={brl(sheet.totals.suppliers)} />
+                <Line label="Honorários" value={brl(sheet.totals.fee)} />
+                <Line label="Impostos" value={brl(sheet.totals.invoiceTax + sheet.totals.nfTax)} />
+                {sheet.totals.undefinedCount > 0 && <Line label="Itens sem valor" value={String(sheet.totals.undefinedCount)} tone="text-amber-300" />}
+              </dl>
+            </Panel>
+            <Panel title="Situação">
+              <div className="grid grid-cols-3 gap-2">
+                <Ring value={types.length ? pct(approved, types.length) : null} label="SLA" i={0} />
+                <Ring value={people ? pct(withFunction, people) : null} label="Funções" i={2} />
+                <Ring value={briefed.length ? pct(read, briefed.length) : null} label="Briefing" i={4} />
+              </div>
+            </Panel>
+            {fn.functions.some((f) => f.peopleCount) && (
+              <Panel title="Pessoas por função">
+                <Bars rows={[...fn.functions].sort((a, b) => b.peopleCount - a.peopleCount).slice(0, 6).map((f) => ({ label: f.name, value: f.peopleCount }))} />
+              </Panel>
+            )}
+          </aside>
+        </div>
       </main>
     </>
   );
 }
 
-function Situation({ t }: { t: { slaMinutes: number | null; pending: { minutes: number } | null } }) {
-  if (t.pending) return <span className="text-xs font-semibold text-amber-300">Proposta de {formatDuration(t.pending.minutes * 60)} aguardando</span>;
-  if (t.slaMinutes) return <span className="text-xs text-emerald-300">Aprovado</span>;
-  return <span className="text-xs text-muted">Sem SLA: usa a prioridade</span>;
+function Line({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted">{label}</dt>
+      <dd className={cx("font-semibold tabular-nums", tone)}>{value}</dd>
+    </div>
+  );
 }

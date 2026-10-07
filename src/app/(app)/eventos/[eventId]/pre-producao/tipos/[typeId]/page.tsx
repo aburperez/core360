@@ -32,7 +32,7 @@ export default async function ServiceTypePage({ params }: PageProps<"/eventos/[e
 
   return (
     <>
-      <TopBar title={t.name} subtitle={`${t.team.area.name} › ${t.team.name}`} back={base} />
+      <TopBar title={t.name} subtitle={`${t.team.area.name} › ${t.team.name}`} back={`${base}/tipos`} />
       <main className={cx(PAGE, "py-4 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-8 lg:py-6")}>
         <div>
           <Card>

@@ -3,6 +3,7 @@ import { LogoutButton } from "./logout-button";
 import { ConnectionBanner } from "./connection-banner";
 import { NotificationBell } from "./notification-bell";
 import { BrandWordmark } from "./brand";
+import { MenuButton } from "./menu-button";
 import { PAGE, cx } from "./ui";
 
 /**
@@ -14,6 +15,7 @@ export function TopBar({ title, subtitle, back, brand, narrow }: { title: string
     <header className="sticky top-0 z-20 bg-brand-navy text-white pt-[env(safe-area-inset-top)]">
       <ConnectionBanner />
       <div className={cx("flex items-center gap-2 py-3", narrow ? "mx-auto max-w-2xl px-4" : PAGE)}>
+        <MenuButton />
         {back && (
           <Link href={back} aria-label="Voltar" className="-ml-2 flex h-11 w-11 items-center justify-center rounded-xl text-2xl text-white transition hover:bg-white/10">
             ‹

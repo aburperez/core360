@@ -65,6 +65,22 @@ export async function getDashboard(actor: Actor, eventId: string) {
 
     const metOnTime = await tx.occurrence.count({ where: { AND: [scope, { status: "CONCLUIDO" }, { slaBreached: false }] } });
 
+    // Quadro do painel: os primeiros de cada coluna (o total vem de byStatus).
+    const boardSelect = {
+      id: true, number: true, title: true, status: true, priority: true, slaDueAt: true,
+      team: { select: { name: true } }, responsible: { select: { name: true } },
+    } as const;
+    const column = (status: OccurrenceStatus[], done = false) =>
+      tx.occurrence.findMany({
+        where: { AND: [scope, { status: { in: status } }] },
+        orderBy: done ? [{ concludedAt: "desc" }] : [{ slaDueAt: "asc" }],
+        take: 4,
+        select: boardSelect,
+      });
+    const [cAttention, cPending, cDoing, cDone] = await Promise.all([
+      column(["URGENTE", "BLOQUEIO"]), column(["PENDENTE"]), column(["EM_ANDAMENTO"]), column(["CONCLUIDO"], true),
+    ]);
+
     const count = (s: OccurrenceStatus) => byStatus.find((r) => r.status === s)?._count._all ?? 0;
     const total = byStatus.reduce((n, r) => n + r._count._all, 0);
 
@@ -109,6 +125,12 @@ export async function getDashboard(actor: Actor, eventId: string) {
       byTeam: rollup(byTeam, (r: { teamId: string }) => r.teamId, teamNames),
       urgent,
       mine,
+      board: [
+        { key: "atencao", label: "Urgentes e bloqueios", count: count("URGENTE") + count("BLOQUEIO"), rows: cAttention, filter: "status=URGENTE" },
+        { key: "pendente", label: "Pendentes", count: count("PENDENTE"), rows: cPending, filter: "status=PENDENTE" },
+        { key: "andamento", label: "Em andamento", count: count("EM_ANDAMENTO"), rows: cDoing, filter: "status=EM_ANDAMENTO" },
+        { key: "concluido", label: "Concluídos", count: count("CONCLUIDO"), rows: cDone, filter: "status=CONCLUIDO" },
+      ],
     } as const;
   });
 }

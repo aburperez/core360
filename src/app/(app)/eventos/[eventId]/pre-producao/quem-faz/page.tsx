@@ -54,7 +54,7 @@ export default async function WhoDoesWhatPage({ params, searchParams }: PageProp
           <EmptyState title="Nenhuma equipe ainda">Monte as equipes primeiro em Montar equipe.</EmptyState>
         ) : teamTypes.length === 0 ? (
           <EmptyState title={`${team.name} ainda não tem tipos de atendimento`}>
-            <Link href={`/eventos/${eventId}/pre-producao`} className="font-semibold text-primary">Cadastrar tipos em Tipos e SLA</Link>
+            <Link href={`/eventos/${eventId}/pre-producao/tipos`} className="font-semibold text-primary">Cadastrar tipos em Tipos e SLA</Link>
           </EmptyState>
         ) : people.length === 0 ? (
           <EmptyState title={`Ninguém em ${team.name} ainda`}>Adicione pessoas em Montar equipe.</EmptyState>
