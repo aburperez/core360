@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { isAgencyAdmin } from "@/server/authz/actor";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
@@ -27,7 +28,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   const base = `/eventos/${eventId}`;
   const scopeLabel =
     dash.role === "HEAD" ? "da sua área" : dash.role === "OPERACIONAL" ? "da sua equipe" : "do evento";
-  const multi = actor.memberships.length > 1 || actor.isAdmin;
+  const multi = actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin;
 
   return (
     <>
@@ -128,6 +129,11 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
               </div>
             </div>
           </>
+        )}
+        {(dash.role === "ADMIN" || dash.role === "GERENTE") && (
+          <Link href={`${base}/editar`} className="mt-6 flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-primary">
+            Dados do evento: nome, datas, local e fase <span aria-hidden>›</span>
+          </Link>
         )}
       </main>
     </>

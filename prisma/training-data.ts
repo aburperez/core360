@@ -10,6 +10,7 @@ import { DEFAULT_SLA_MINUTES } from "../src/modules/occurrences/sla";
  * nunca troca a senha de quem já tem conta.
  */
 export const TRAINING_EVENT = "Teste de usabilidade";
+export const MAIN_AGENCY = "Agência principal";
 
 export async function seedTraining(
   db: PrismaClient,
@@ -31,6 +32,20 @@ export async function seedTraining(
     user = await db.user.update({ where: { id: user.id }, data: { isAdmin: true, active: true } });
   }
 
+  // O Admin do teste é Admin de uma agência (a "Agência principal", se ainda não tiver).
+  let membership = await db.agencyAdmin.findFirst({ where: { userId: user.id, active: true }, orderBy: { createdAt: "asc" } });
+  if (!membership) {
+    const agency =
+      (await db.agency.findFirst({ where: { name: MAIN_AGENCY }, orderBy: { createdAt: "asc" } })) ??
+      (await db.agency.create({ data: { name: MAIN_AGENCY } }));
+    membership = await db.agencyAdmin.upsert({
+      where: { agencyId_email: { agencyId: agency.id, email } },
+      update: { userId: user.id, active: true },
+      create: { agencyId: agency.id, name: user.name, email, userId: user.id },
+    });
+  }
+  const agencyId = membership.agencyId;
+
   const existing = await db.event.findFirst({ where: { name: TRAINING_EVENT, deletedAt: null } });
   if (existing) {
     // Evento criado antes da Pré-produção: ganha os tipos de exemplo uma vez.
@@ -38,10 +53,11 @@ export async function seedTraining(
     return { adminCreated, eventCreated: false };
   }
 
-  const client = await db.client.create({ data: { name: "Cliente de teste", contactName: "Equipe do teste" } });
+  const client = await db.client.create({ data: { agencyId, name: "Cliente de teste", contactName: "Equipe do teste" } });
   const now = new Date();
   const event = await db.event.create({
     data: {
+      agencyId,
       clientId: client.id,
       name: TRAINING_EVENT,
       description: "Evento de treino para o teste de usabilidade. Pode ser apagado depois.",

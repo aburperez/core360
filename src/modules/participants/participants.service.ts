@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AuditAction, ParticipantRole } from "../../generated/prisma/enums";
-import { membershipFor, type Actor } from "../../server/authz/actor";
+import { isEventAdmin, membershipFor, type Actor } from "../../server/authz/actor";
 import { assignableRoles, canAssignRole } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
@@ -24,7 +24,7 @@ const publicFields = {
 
 /** Filtro de escopo no backend (a RLS do banco aplica o mesmo perímetro). */
 function scopeWhere(actor: Actor, eventId: string): Prisma.ParticipantWhereInput {
-  if (actor.isAdmin) return { eventId };
+  if (isEventAdmin(actor, eventId)) return { eventId };
   const m = membershipFor(actor, eventId);
   switch (m?.role) {
     case "GERENTE":
@@ -165,7 +165,7 @@ export async function updateParticipant(actor: Actor, participantId: string, inp
   const patch = parse(updateSchema, input);
   const current = await loadParticipant(actor, participantId);
 
-  if (current.userId === actor.userId && !actor.isAdmin) {
+  if (current.userId === actor.userId && !isEventAdmin(actor, current.eventId)) {
     throw new ForbiddenError("Você não pode alterar a sua própria participação");
   }
   // Precisa poder gerenciar o papel ATUAL e o NOVO.

@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { z } from "zod";
-import type { Actor } from "../../server/authz/actor";
+import { isEventAdmin, type Actor } from "../../server/authz/actor";
 import type { OccurrenceStatus, OccurrenceType, Priority } from "../../generated/prisma/enums";
 import { canUsePreProduction, canWriteReport } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
@@ -80,7 +80,7 @@ export async function getDailyReport(actor: Actor, eventId: string, dayParam?: s
     daysWithNotes: data.notes.map((n) => n.day.toISOString().slice(0, 10)),
     report: buildDayReport({ day, timeZone: tz, now, occurrences, receipts }),
     note: note ? { body: note.body, updatedAt: note.updatedAt, updatedBy: (note.updatedBy as { name: string } | null)?.name ?? null } : null,
-    can: { write: canWriteReport(actor, eventId), openTickets: actor.isAdmin || !!actor.memberships.find((m) => m.eventId === eventId && m.role === "GERENTE") },
+    can: { write: canWriteReport(actor, eventId), openTickets: isEventAdmin(actor, eventId) || !!actor.memberships.find((m) => m.eventId === eventId && m.role === "GERENTE") },
   };
 }
 

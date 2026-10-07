@@ -11,7 +11,7 @@ type Director = {
   linked: boolean; invited: boolean; events: { id: string; name: string }[]; createdAt: string;
 };
 
-export function DirectorsAdmin({ directors }: { directors: Director[] }) {
+export function DirectorsAdmin({ directors, agencyId }: { directors: Director[]; agencyId: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const guard = async (fn: () => Promise<unknown>) => {
@@ -29,7 +29,7 @@ export function DirectorsAdmin({ directors }: { directors: Director[] }) {
   return (
     <div className="space-y-4">
       <FormError message={error} />
-      <AddDirector guard={guard} />
+      <AddDirector guard={guard} agencyId={agencyId} />
       <SectionTitle>Diretores ({directors.length})</SectionTitle>
       {directors.length === 0 ? (
         <EmptyState title="Nenhum diretor cadastrado">Cadastre acima quem cuida de todos os eventos da agência.</EmptyState>
@@ -99,7 +99,7 @@ function DirectorRow({ d, guard }: { d: Director; guard: (fn: () => Promise<unkn
   );
 }
 
-function AddDirector({ guard }: { guard: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+function AddDirector({ guard, agencyId }: { guard: (fn: () => Promise<unknown>) => Promise<boolean>; agencyId: string }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return <Button className="w-full" onClick={() => setOpen(true)}>+ Cadastrar diretor</Button>;
@@ -113,7 +113,7 @@ function AddDirector({ guard }: { guard: (fn: () => Promise<unknown>) => Promise
           const f = new FormData(e.currentTarget);
           const ok = await guard(() =>
             api("/api/directors", {
-              body: { name: f.get("name"), email: f.get("email"), phone: f.get("phone") || null, jobTitle: f.get("jobTitle") || null },
+              body: { agencyId, name: f.get("name"), email: f.get("email"), phone: f.get("phone") || null, jobTitle: f.get("jobTitle") || null },
             }),
           );
           if (ok) setOpen(false);

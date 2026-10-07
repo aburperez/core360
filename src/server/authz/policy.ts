@@ -1,5 +1,5 @@
 import type { OccurrenceStatus } from "../../generated/prisma/enums";
-import { membershipFor, type Actor, type EventRole } from "./actor";
+import { isEventAdmin, membershipFor, type Actor, type EventRole } from "./actor";
 
 /**
  * Matriz de permissões do backend. Espelha as funções app.* da migration de RLS
@@ -11,24 +11,24 @@ import { membershipFor, type Actor, type EventRole } from "./actor";
 type Scope = { eventId: string; areaId?: string | null; teamId?: string | null };
 
 export function canSeeEvent(a: Actor, eventId: string): boolean {
-  return a.isAdmin || !!membershipFor(a, eventId);
+  return isEventAdmin(a, eventId) || !!membershipFor(a, eventId);
 }
 
 export function canSeeArea(a: Actor, s: Scope): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
   return m.role === "GERENTE" || m.role === "CLIENTE" || m.role === "HEAD" || m.role === "PRE_PRODUTOR" || m.areaId === s.areaId;
 }
 
 export function canManageAreas(a: Actor, eventId: string): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
   return m?.role === "GERENTE" || m?.role === "CLIENTE";
 }
 
 export function canSeeTeam(a: Actor, s: Scope): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
   switch (m.role) {
@@ -44,7 +44,7 @@ export function canSeeTeam(a: Actor, s: Scope): boolean {
 }
 
 export function canManageTeams(a: Actor, s: Scope): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
   return m.role === "GERENTE" || m.role === "CLIENTE" || (m.role === "HEAD" && m.areaId === s.areaId);
@@ -52,7 +52,7 @@ export function canManageTeams(a: Actor, s: Scope): boolean {
 
 /** Anti-escalada: quem pode atribuir qual papel (seção 7.4 da proposta). */
 export function assignableRoles(a: Actor, eventId: string, areaId?: string | null): EventRole[] {
-  if (a.isAdmin) return ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
+  if (isEventAdmin(a, eventId)) return ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
   const m = membershipFor(a, eventId);
   switch (m?.role) {
     case "GERENTE":
@@ -78,7 +78,7 @@ export function canBuildTeam(a: Actor, eventId: string): boolean {
 type OccScope = Scope & { responsibleParticipantId?: string | null };
 
 export function canSeeOccurrence(a: Actor, o: OccScope): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, o.eventId)) return true;
   const m = membershipFor(a, o.eventId);
   if (!m) return false;
   switch (m.role) {
@@ -96,7 +96,7 @@ export function canSeeOccurrence(a: Actor, o: OccScope): boolean {
 
 /** Abrir ocorrência nesta área/equipe. */
 export function canCreateOccurrence(a: Actor, s: Scope): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
   switch (m.role) {
@@ -114,7 +114,7 @@ export function canCreateOccurrence(a: Actor, s: Scope): boolean {
 
 /** Gerir a ocorrência: reatribuir, mudar prioridade, cancelar. */
 export function canManageOccurrence(a: Actor, o: OccScope): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, o.eventId)) return true;
   const m = membershipFor(a, o.eventId);
   return m?.role === "GERENTE" || (m?.role === "HEAD" && m.areaId === o.areaId);
 }
@@ -144,27 +144,27 @@ export function canClaimOccurrence(a: Actor, o: OccScope & { status?: Occurrence
 
 /** Ver e trabalhar na Pré-produção: tipos, quem faz o quê, propor SLA. */
 export function canUsePreProduction(a: Actor, eventId: string): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
   return m?.role === "GERENTE" || m?.role === "PRE_PRODUTOR";
 }
 
 /** Gestão de campo (painel, chamados): todos menos o Pré-produtor. */
 export function canUseField(a: Actor, eventId: string): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
   return !!m && m.role !== "PRE_PRODUTOR";
 }
 
 /** Aprovar, ajustar, recusar ou definir o SLA: só o gestor. */
 export function canReviewSla(a: Actor, eventId: string): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, eventId)) return true;
   return membershipFor(a, eventId)?.role === "GERENTE";
 }
 
 /** Escolher quem recebe cada item da planilha e enviar para o campo: só o gestor. */
 export function canSendToField(a: Actor, eventId: string): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, eventId)) return true;
   return membershipFor(a, eventId)?.role === "GERENTE";
 }
 
@@ -175,6 +175,6 @@ export function isMe(a: Actor, eventId: string, participantId: string): boolean 
 
 /** Escrever as observações do dia no relatório diário: só o gestor. */
 export function canWriteReport(a: Actor, eventId: string): boolean {
-  if (a.isAdmin) return true;
+  if (isEventAdmin(a, eventId)) return true;
   return membershipFor(a, eventId)?.role === "GERENTE";
 }

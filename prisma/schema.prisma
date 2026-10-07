@@ -21,6 +21,13 @@ enum RecordStatus {
   @@map("record_status")
 }
 
+enum AgencyStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("agency_status")
+}
+
 enum EventStatus {
   PLANEJAMENTO
   PRE_PRODUCAO
@@ -33,7 +40,8 @@ enum EventStatus {
   @@map("event_status")
 }
 
-/// Papéis por evento. ADMIN não existe aqui de propósito: é global (users.is_admin).
+/// Papéis por evento. ADMIN não existe aqui de propósito: o Admin é da agência
+/// (agency_admins) e vale para todos os eventos dela.
 enum ParticipantRole {
   GERENTE
   HEAD
@@ -166,6 +174,8 @@ model User {
   name          String
   emailVerified Boolean  @default(false) @map("email_verified")
   image         String?
+  /// Admin da plataforma (dono do CORE 360): cria e suspende agências. Não
+  /// enxerga os eventos das agências por isso; só como Admin de uma agência.
   isAdmin       Boolean  @default(false) @map("is_admin")
   active        Boolean  @default(true)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -190,8 +200,12 @@ model User {
   functionsCreated     EventFunction[]      @relation("EventFunctionCreatedBy")
   activitiesCreated    Activity[]           @relation("ActivityCreatedBy")
   profilesUpdated      ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
-  director             Director?            @relation("DirectorUser")
+  directors            Director[]           @relation("DirectorUser")
   directorsCreated     Director[]           @relation("DirectorCreatedBy")
+  agencyAdmins         AgencyAdmin[]        @relation("AgencyAdminUser")
+  agencyAdminsCreated  AgencyAdmin[]        @relation("AgencyAdminCreatedBy")
+  agenciesCreated      Agency[]             @relation("AgencyCreatedBy")
+  agencyInvitations    AgencyInvitation[]
 
   @@map("users")
 }
@@ -246,10 +260,76 @@ model Verification {
   @@map("verifications")
 }
 
+// ───────────────────────────── Agências ─────────────────────────────
+
+/// Cada agência que aluga o CORE 360 é um espaço fechado: clientes, eventos e
+/// diretores pertencem a uma agência, e o banco não deixa uma ver a outra.
+model Agency {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  name        String
+  status      AgencyStatus @default(ACTIVE)
+  createdById String?      @map("created_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy   User?              @relation("AgencyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  admins      AgencyAdmin[]
+  invitations AgencyInvitation[]
+  clients     Client[]
+  events      Event[]
+  directors   Director[]
+
+  @@map("agencies")
+}
+
+/// Admin de uma agência: cria clientes e eventos e cadastra diretores dela.
+model AgencyAdmin {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  agencyId    String   @map("agency_id") @db.Uuid
+  name        String
+  email       String   @db.Citext
+  /// Preenchido quando a pessoa aceita o convite.
+  userId      String?  @map("user_id") @db.Uuid
+  active      Boolean  @default(true)
+  createdById String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency      Agency             @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  user        User?              @relation("AgencyAdminUser", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation("AgencyAdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  invitations AgencyInvitation[]
+
+  @@unique([agencyId, email])
+  @@unique([agencyId, id])
+  @@index([userId])
+  @@map("agency_admins")
+}
+
+/// Convite para Admin de agência. Guarda só o hash do token.
+model AgencyInvitation {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  agencyId      String    @map("agency_id") @db.Uuid
+  agencyAdminId String    @map("agency_admin_id") @db.Uuid
+  tokenHash     String    @unique @map("token_hash")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
+  createdById   String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  agency    Agency      @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  admin     AgencyAdmin @relation(fields: [agencyId, agencyAdminId], references: [agencyId, id], onDelete: Restrict)
+  createdBy User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([agencyAdminId])
+  @@map("agency_invitations")
+}
+
 // ───────────────────────── Estrutura do evento ─────────────────────────
 
 model Client {
   id          String       @id @default(uuid(7)) @db.Uuid
+  agencyId    String       @map("agency_id") @db.Uuid
   name        String
   document    String?
   contactName String?      @map("contact_name")
@@ -260,14 +340,19 @@ model Client {
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt   DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
+  agency      Agency       @relation(fields: [agencyId], references: [id], onDelete: Restrict)
   events      Event[]
   occurrences Occurrence[]
 
+  @@unique([agencyId, id])
+  @@index([agencyId])
   @@map("clients")
 }
 
 model Event {
   id            String      @id @default(uuid(7)) @db.Uuid
+  /// Sempre a agência do cliente (chave composta com clients).
+  agencyId      String      @map("agency_id") @db.Uuid
   clientId      String      @map("client_id") @db.Uuid
   name          String
   description   String?
@@ -283,7 +368,8 @@ model Event {
   updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  client         Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  agency         Agency               @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  client         Client               @relation(fields: [agencyId, clientId], references: [agencyId, id], onDelete: Restrict)
   areas          Area[]
   teams          Team[]
   participants   Participant[]
@@ -306,6 +392,7 @@ model Event {
   activityChecks ActivityCheck[]
 
   @@index([clientId])
+  @@index([agencyId])
   @@index([status])
   @@map("events")
 }
@@ -405,25 +492,29 @@ model Participant {
 }
 
 /// Diretor de produção da agência: o Admin cadastra uma vez e o banco o põe
-/// como Gerente em todos os eventos abertos, inclusive os criados depois.
+/// como Gerente em todos os eventos abertos DA AGÊNCIA, inclusive os criados depois.
 /// A função continua sendo por evento (uma participação em cada um).
 model Director {
   id          String   @id @default(uuid(7)) @db.Uuid
+  agencyId    String   @map("agency_id") @db.Uuid
   name        String
-  email       String   @unique @db.Citext
+  email       String   @db.Citext
   phone       String?
   jobTitle    String?  @map("job_title")
   /// Preenchido quando o diretor aceita o convite; liga todas as participações.
-  userId      String?  @unique @map("user_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
   active      Boolean  @default(true)
   createdById String   @map("created_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  agency       Agency        @relation(fields: [agencyId], references: [id], onDelete: Restrict)
   user         User?         @relation("DirectorUser", fields: [userId], references: [id], onDelete: SetNull)
   createdBy    User          @relation("DirectorCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   participants Participant[]
 
+  @@unique([agencyId, email])
+  @@unique([agencyId, userId])
   @@map("directors")
 }
 

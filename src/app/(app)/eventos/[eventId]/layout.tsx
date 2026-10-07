@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction } from "@/server/authz/policy";
-import { membershipFor } from "@/server/authz/actor";
+import { isAgencyAdmin, isEventAdmin, membershipFor } from "@/server/authz/actor";
 import { EventNav } from "@/components/event-nav";
 import { hasReceipts } from "@/modules/receipts/receipts.service";
 import { myBriefingState } from "@/modules/briefings/briefings.service";
@@ -11,7 +11,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canSeeEvent(actor, eventId)) notFound();
-  const role = actor.isAdmin ? "ADMIN" : membershipFor(actor, eventId)?.role;
+  const role = isEventAdmin(actor, eventId) ? "ADMIN" : membershipFor(actor, eventId)?.role;
   const [receipts, briefing, plan] = await Promise.all([hasReceipts(actor, eventId), myBriefingState(actor, eventId), myPlanSummary(actor, eventId)]);
   return (
     <div className="pb-nav lg:pb-0 lg:pl-60">
@@ -25,7 +25,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
         canBuildTeam={canBuildTeam(actor, eventId)}
         hasReceipts={receipts}
         hasBriefing={briefing !== "SEM" || plan.has}
-        canSwitchEvent={actor.memberships.length > 1 || actor.isAdmin}
+        canSwitchEvent={actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin}
       />
     </div>
   );

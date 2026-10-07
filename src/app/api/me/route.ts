@@ -5,6 +5,7 @@ export const GET = authed(async ({ actor }) => ({
   id: actor.userId,
   name: actor.name,
   email: actor.email,
-  isAdmin: actor.isAdmin,
+  isPlatformAdmin: actor.isPlatformAdmin,
+  adminAgencies: actor.adminAgencies,
   memberships: actor.memberships,
 }));

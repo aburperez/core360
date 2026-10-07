@@ -93,7 +93,8 @@ const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];
 /** Monta um "Actor" mínimo para reaproveitar a matriz de permissões. */
 function asActor(p: Person, clientId: string): Actor {
   return {
-    userId: p.userId, name: "", email: "", isAdmin: false, meta: {},
+    userId: p.userId, name: "", email: "", meta: {},
+    isPlatformAdmin: false, adminAgencies: [], adminEventIds: new Set(), suspendedAgencies: [],
     memberships: [{ participantId: p.participantId, eventId: p.eventId, clientId, role: p.role, areaId: p.areaId, teamId: p.teamId }],
     run: () => Promise.reject(new Error("somente leitura")),
   };

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { OccurrenceStatus } from "../../generated/prisma/enums";
-import { membershipFor, type Actor } from "../../server/authz/actor";
+import { isEventAdmin, membershipFor, type Actor } from "../../server/authz/actor";
 import {
   canClaimOccurrence,
   canCreateOccurrence,
@@ -25,7 +25,7 @@ const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];
 
 /** Filtro de escopo no backend; a RLS do banco aplica o mesmo perímetro. */
 export function occurrenceScope(actor: Actor, eventId: string): Prisma.OccurrenceWhereInput {
-  if (actor.isAdmin) return { eventId };
+  if (isEventAdmin(actor, eventId)) return { eventId };
   const m = membershipFor(actor, eventId);
   switch (m?.role) {
     case "GERENTE":

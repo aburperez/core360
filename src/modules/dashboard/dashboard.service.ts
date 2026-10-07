@@ -1,5 +1,5 @@
 import type { OccurrenceStatus } from "../../generated/prisma/enums";
-import { membershipFor, type Actor } from "../../server/authz/actor";
+import { isEventAdmin, membershipFor, type Actor } from "../../server/authz/actor";
 import { requireEventAccess } from "../events/events.service";
 import { occurrenceScope } from "../occurrences/occurrences.service";
 
@@ -12,7 +12,7 @@ const OPEN: OccurrenceStatus[] = ["PENDENTE", "EM_ANDAMENTO", "URGENTE", "BLOQUE
 export async function getDashboard(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
   const m = membershipFor(actor, eventId);
-  const role = actor.isAdmin ? "ADMIN" : m!.role;
+  const role = isEventAdmin(actor, eventId) ? "ADMIN" : m!.role;
 
   if (role === "CLIENTE") {
     const [areas, teams, people] = await actor.run((tx) =>

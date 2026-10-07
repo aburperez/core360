@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
+import { isAgencyAdmin } from "@/server/authz/actor";
 import { listEvents } from "@/modules/events/events.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
@@ -17,25 +18,53 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   const actor = await requireUser();
   const events = await listEvents(actor);
   const { todos } = await searchParams;
-  // Quem só participa de um evento vai direto para ele (o Admin vê a lista e os diretores).
-  if (events.length === 1 && !todos && !actor.isAdmin) redirect(`/eventos/${events[0].id}`);
+  const admin = isAgencyAdmin(actor);
+  // Quem só participa de um evento vai direto para ele (os Admins veem a lista e o painel da agência).
+  if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
+  const many = actor.adminAgencies.length > 1;
 
   return (
     <>
       <TopBar title="Meus eventos" subtitle={actor.name} brand />
       <main className={cx(PAGE, "grid gap-3 py-4 lg:grid-cols-2 lg:py-6 xl:grid-cols-3")}>
-        {actor.isAdmin && (
-          <Link href="/diretores" className="flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
+        {actor.isPlatformAdmin && (
+          <Link href="/agencias" className="flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
             <span className="min-w-0">
-              <span className="block font-semibold">Diretores de produção</span>
-              <span className="block text-sm text-muted">Quem entra como Gerente em todos os eventos</span>
+              <span className="block font-semibold">Agências</span>
+              <span className="block text-sm text-muted">Criar, convidar o Admin, suspender e reativar</span>
             </span>
             <span className="text-2xl text-primary">›</span>
           </Link>
         )}
+        {actor.suspendedAgencies.map((a) => (
+          <p key={a.id} className="rounded-2xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100 lg:col-span-2 xl:col-span-3">
+            A agência <b>{a.name}</b> está suspensa. Os eventos dela voltam quando ela for reativada.
+          </p>
+        ))}
+        {actor.adminAgencies.map((a) => {
+          const q = many ? `?agencia=${a.id}` : "";
+          return (
+            <div key={a.id} className="rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Agência</p>
+              <p className="text-lg font-semibold">{a.name}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <Link href={`/eventos/novo${q}`} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 font-semibold text-primary-foreground sm:col-span-1">
+                  + Novo evento
+                </Link>
+                <AdminLink href={`/clientes${q}`}>Clientes</AdminLink>
+                <AdminLink href={`/diretores${q}`}>Diretores</AdminLink>
+                <AdminLink href={`/agencias/${a.id}`}>Admins</AdminLink>
+              </div>
+            </div>
+          );
+        })}
         {events.length === 0 && (
           <div className="lg:col-span-2 xl:col-span-3">
-            <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>
+            {admin ? (
+              <EmptyState title="Nenhum evento ainda">Cadastre um cliente e crie o primeiro evento.</EmptyState>
+            ) : actor.isPlatformAdmin ? null : (
+              <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>
+            )}
           </div>
         )}
         {events.map((e) => (
@@ -55,5 +84,13 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
         ))}
       </main>
     </>
+  );
+}
+
+function AdminLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-surface px-4 font-semibold">
+      {children}
+    </Link>
   );
 }

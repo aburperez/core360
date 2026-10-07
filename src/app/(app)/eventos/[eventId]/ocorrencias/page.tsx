@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/server/http/session";
-import { membershipFor } from "@/server/authz/actor";
+import { isEventAdmin, membershipFor } from "@/server/authz/actor";
 import { listOccurrences } from "@/modules/occurrences/occurrences.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
@@ -26,7 +26,7 @@ export default async function OccurrencesPage({ params, searchParams }: PageProp
   const key = typeof sp.filtro === "string" ? sp.filtro : status ? FILTERS.find((f) => "status" in f.q && f.q.status === status)?.key : "abertas";
   const filter = FILTERS.find((f) => f.key === key) ?? { key: "status", label: status, q: { status } };
   const items = await listOccurrences(actor, eventId, filter.q);
-  const isClient = membershipFor(actor, eventId)?.role === "CLIENTE" && !actor.isAdmin;
+  const isClient = membershipFor(actor, eventId)?.role === "CLIENTE" && !isEventAdmin(actor, eventId);
 
   return (
     <>

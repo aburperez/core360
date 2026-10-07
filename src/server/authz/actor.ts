@@ -12,6 +12,11 @@ export interface Membership {
   teamId: string | null;
 }
 
+export interface AgencyRef {
+  id: string;
+  name: string;
+}
+
 export interface RequestMeta {
   ip?: string | null;
   userAgent?: string | null;
@@ -25,7 +30,14 @@ export interface Actor {
   userId: string;
   name: string;
   email: string;
-  isAdmin: boolean;
+  /** Admin da plataforma: cria e suspende agências. Não abre eventos de ninguém. */
+  isPlatformAdmin: boolean;
+  /** Agências (ativas) em que a pessoa é Admin. */
+  adminAgencies: AgencyRef[];
+  /** Eventos dessas agências: neles a pessoa pode tudo, como Admin. */
+  adminEventIds: ReadonlySet<string>;
+  /** Agências suspensas em que a pessoa é Admin (só para o aviso na tela). */
+  suspendedAgencies: AgencyRef[];
   memberships: Membership[];
   meta: RequestMeta;
   /** Executa no banco como este usuário (RLS ativa). */
@@ -40,11 +52,21 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
   const data = await withUser(db, userId, async (tx) => {
     const user = await tx.user.findUnique({ where: { id: userId } });
     if (!user || !user.active) return null;
+    // Evento de agência suspensa não aparece aqui: a RLS de events o esconde.
     const participations = await tx.participant.findMany({
       where: { userId, active: true, deletedAt: null, event: { deletedAt: null } },
       select: { id: true, eventId: true, role: true, areaId: true, teamId: true, event: { select: { clientId: true } } },
     });
-    return { user, participations };
+    const admin = await tx.agencyAdmin.findMany({
+      where: { userId, active: true },
+      select: { agency: { select: { id: true, name: true, status: true } } },
+      orderBy: { agency: { name: "asc" } },
+    });
+    const active = admin.filter((a) => a.agency.status === "ACTIVE").map((a) => a.agency);
+    const events = active.length
+      ? await tx.event.findMany({ where: { agencyId: { in: active.map((a) => a.id) } }, select: { id: true } })
+      : [];
+    return { user, participations, admin, active, events };
   });
   if (!data) return null;
 
@@ -52,7 +74,10 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
     userId,
     name: data.user.name,
     email: data.user.email,
-    isAdmin: data.user.isAdmin,
+    isPlatformAdmin: data.user.isAdmin,
+    adminAgencies: data.active.map(({ id, name }) => ({ id, name })),
+    adminEventIds: new Set(data.events.map((e) => e.id)),
+    suspendedAgencies: data.admin.filter((a) => a.agency.status !== "ACTIVE").map(({ agency: { id, name } }) => ({ id, name })),
     memberships: data.participations.map((p) => ({
       participantId: p.id,
       eventId: p.eventId,
@@ -68,4 +93,14 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
 
 export function membershipFor(actor: Actor, eventId: string): Membership | undefined {
   return actor.memberships.find((m) => m.eventId === eventId);
+}
+
+/** Admin da agência dona do evento: no evento, pode tudo. */
+export function isEventAdmin(actor: Actor, eventId: string): boolean {
+  return actor.adminEventIds.has(eventId);
+}
+
+/** Admin desta agência (ou de alguma, sem agencyId). */
+export function isAgencyAdmin(actor: Actor, agencyId?: string): boolean {
+  return agencyId ? actor.adminAgencies.some((a) => a.id === agencyId) : actor.adminAgencies.length > 0;
 }

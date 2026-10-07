@@ -64,15 +64,22 @@ export async function seedDemo(db: PrismaClient) {
     });
   }
 
+  // A agência dona dos eventos de demonstração; o Admin é Admin dela.
+  const agency = await db.agency.create({ data: { name: "Agência Demo" } });
+  await db.agencyAdmin.create({
+    data: { agencyId: agency.id, name: PEOPLE.admin.name, email: PEOPLE.admin.email, userId: users.admin! },
+  });
+
   const rockClient = await db.client.create({
-    data: { name: "Rock Produções", contactName: "Cláudia", email: "contato@rockproducoes.dev" },
+    data: { agencyId: agency.id, name: "Rock Produções", contactName: "Cláudia", email: "contato@rockproducoes.dev" },
   });
   const saudeClient = await db.client.create({
-    data: { name: "Instituto Saúde", contactName: "Paulo", email: "contato@congresso.dev" },
+    data: { agencyId: agency.id, name: "Instituto Saúde", contactName: "Paulo", email: "contato@congresso.dev" },
   });
 
   const rock = await db.event.create({
     data: {
+      agencyId: agency.id,
       clientId: rockClient.id,
       name: "Rock Festival 2027",
       startsAt: new Date("2027-04-10T12:00:00-03:00"),
@@ -84,6 +91,7 @@ export async function seedDemo(db: PrismaClient) {
   });
   const congresso = await db.event.create({
     data: {
+      agencyId: agency.id,
       clientId: saudeClient.id,
       name: "Congresso Saúde 2027",
       startsAt: new Date("2027-06-01T08:00:00-03:00"),
@@ -204,6 +212,7 @@ export async function seedDemo(db: PrismaClient) {
 
   return {
     users,
+    agency,
     clients: { rock: rockClient, saude: saudeClient },
     events: { rock, congresso },
     areas: { infra, ab, congressoInfra },

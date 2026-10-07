@@ -1,20 +1,23 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
+import { isAgencyAdmin } from "../../server/authz/actor";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { createInvitation } from "../participants/participants.service";
+import { resolveAgency } from "../clients/clients.service";
 
 /**
- * Diretores de produção: o Admin cadastra uma vez e o banco põe a pessoa como
- * Gerente em todos os eventos abertos, inclusive os criados depois (gatilhos
- * da migration 20261006120000_diretores). Um convite só liga a conta em
- * todos os eventos. Só o Admin vê esta parte; para os outros ela não existe.
+ * Diretores de produção: o Admin da agência cadastra uma vez e o banco põe a
+ * pessoa como Gerente em todos os eventos abertos DA AGÊNCIA, inclusive os
+ * criados depois (gatilhos das migrations 20261006120000_diretores e
+ * 20261007120000_agencias). Um convite só liga a conta em todos os eventos.
+ * Só o Admin da agência vê esta parte; para os outros ela não existe.
  */
 
 function requireAdmin(actor: Actor) {
-  if (!actor.isAdmin) throw new NotFoundError("Página");
+  if (!isAgencyAdmin(actor)) throw new NotFoundError("Página");
 }
 
 const OPEN_EVENT = { deletedAt: null, status: { notIn: ["FINALIZADO" as const, "CANCELADO" as const] } };
@@ -44,13 +47,17 @@ function view(d: Row) {
   };
 }
 
-export async function listDirectors(actor: Actor) {
+export async function listDirectors(actor: Actor, agencyId?: string | null) {
   requireAdmin(actor);
-  const rows = await actor.run((tx) => tx.director.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }], select }));
+  const agency = resolveAgency(actor, agencyId);
+  const rows = await actor.run((tx) =>
+    tx.director.findMany({ where: { agencyId: agency.id }, orderBy: [{ active: "desc" }, { name: "asc" }], select }),
+  );
   return rows.map(view);
 }
 
 const createSchema = z.object({
+  agencyId: uuid.optional(),
   name: text(120),
   email: z.email({ message: "E-mail inválido" }).trim().toLowerCase(),
   phone: optionalText(30),
@@ -60,11 +67,12 @@ const createSchema = z.object({
 /** Cadastra o diretor. O banco já o coloca como Gerente nos eventos abertos. */
 export async function createDirector(actor: Actor, input: unknown) {
   requireAdmin(actor);
-  const data = parse(createSchema, input);
+  const { agencyId, ...data } = parse(createSchema, input);
+  const agency = resolveAgency(actor, agencyId);
   try {
     return await actor.run(async (tx) => {
-      const d = await tx.director.create({ data: { ...data, createdById: actor.userId }, select });
-      await audit(tx, actor, { entity: "director", entityId: d.id, action: "CREATE", after: { ...data, events: d.participants.length } });
+      const d = await tx.director.create({ data: { ...data, agencyId: agency.id, createdById: actor.userId }, select });
+      await audit(tx, actor, { entity: "director", entityId: d.id, action: "CREATE", after: { ...data, agencyId: agency.id, events: d.participants.length } });
       return view(d);
     });
   } catch (e) {
