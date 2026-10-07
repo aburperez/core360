@@ -171,3 +171,23 @@ describe("convite", () => {
     await expectStatus(createInvitation(claudia, d.participants.rafael.id), 403);
   });
 });
+
+describe("domínios", () => {
+  const signInAt = (url: string, origin: string) =>
+    auth.handler(
+      new Request(`${url}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, cookie: "qualquer=1" },
+        body: JSON.stringify({ email: "joao@rockfestival.dev", password: "errada" }),
+      }),
+    );
+
+  it("aceita login pelo próprio endereço, mesmo que não seja o principal", async () => {
+    // Com cookie o Better Auth confere a origem. 401 = passou e chegou a conferir a senha.
+    expect((await signInAt("https://www.core360prod.com.br", "https://www.core360prod.com.br")).status).toBe(401);
+  });
+
+  it("recusa login vindo de outro site", async () => {
+    expect((await signInAt("https://www.core360prod.com.br", "https://site-malicioso.dev")).status).toBe(403);
+  });
+});

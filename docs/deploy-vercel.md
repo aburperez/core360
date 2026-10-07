@@ -22,7 +22,7 @@ Rodar de novo não apaga nem recria nada. A senha do Admin só é usada na prime
 | `CRON_SECRET` | Opcional | Protege `/api/cron/dispatch`, para um agendador externo chamar a cada minuto. |
 | `DB_ROLES_SECRET` | Opcional | Se definido, as senhas dos papéis vêm dele e não do `BETTER_AUTH_SECRET`. |
 
-O endereço público vem de `VERCEL_PROJECT_PRODUCTION_URL`, que a Vercel define sozinha. Defina `APP_URL` só se usar um domínio próprio.
+O endereço público (links dos convites e dos avisos) vem de `VERCEL_PROJECT_PRODUCTION_URL`, que a Vercel define sozinha a cada deploy: com um domínio próprio ligado ao projeto, ela passa a usar o domínio (o mais curto, se houver mais de um). Para fixar um endereço exato, defina `APP_URL`, por exemplo `https://www.core360prod.com.br`. O login funciona em qualquer endereço que a Vercel entrega para este projeto (o `.vercel.app` e o domínio próprio).
 
 ## Avisos sem agendador
 

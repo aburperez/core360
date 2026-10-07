@@ -44,7 +44,10 @@ export function createAuth(cfg: AuthConfig) {
     appName: "CORE 360",
     secret: cfg.secret,
     baseURL: cfg.baseURL,
-    trustedOrigins: cfg.trustedOrigins,
+    // Além da lista fixa, o próprio endereço por onde o pedido chegou: a Vercel só
+    // entrega aqui os domínios deste projeto (o .vercel.app e o domínio próprio),
+    // e um site de fora nunca consegue mandar o Origin igual ao nosso endereço.
+    trustedOrigins: (request) => [...(cfg.trustedOrigins ?? []), ...(request ? [new URL(request.url).origin] : [])],
     database: prismaAdapter(db, { provider: "postgresql" }),
     emailAndPassword: {
       enabled: true,
@@ -78,6 +81,8 @@ export function createAuth(cfg: AuthConfig) {
     advanced: {
       database: { generateId: false }, // UUID gerado pelo Prisma/banco
       ipAddress: { ipAddressHeaders: ["x-forwarded-for", "x-real-ip"] },
+      // Igual à produção também nos testes (lá o Better Auth desligaria sozinho).
+      disableOriginCheck: false,
     },
     databaseHooks: {
       session: {
