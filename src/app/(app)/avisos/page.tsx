@@ -16,7 +16,7 @@ export default async function NotificationsPage() {
         <NotificationList
           unread={unread}
           items={items.map((n) => ({
-            id: n.id, type: n.type, title: n.title, body: n.body, occurrenceId: n.occurrenceId,
+            id: n.id, type: n.type, title: n.title, body: n.body, occurrenceId: n.occurrenceId, link: n.link,
             eventName: n.event?.name ?? null, read: !!n.readAt, createdAt: n.createdAt.toISOString(),
           }))}
         />

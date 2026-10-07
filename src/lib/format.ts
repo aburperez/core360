@@ -49,7 +49,7 @@ export function formatDuration(seconds: number | null | undefined): string {
   const rest = m % 60;
   if (h < 24) return rest ? `${h} h ${rest} min` : `${h} h`;
   const d = Math.floor(h / 24);
-  return `${d} d ${h % 24} h`;
+  return h % 24 ? `${d} d ${h % 24} h` : `${d} d`;
 }
 
 /** "vence em 12 min" / "atrasado 1 h 5 min" / "no prazo". */

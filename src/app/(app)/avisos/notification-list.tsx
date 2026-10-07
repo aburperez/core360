@@ -12,6 +12,7 @@ interface Item {
   title: string;
   body: string | null;
   occurrenceId: string | null;
+  link: string | null;
   eventName: string | null;
   read: boolean;
   createdAt: string;
@@ -33,6 +34,7 @@ export function NotificationList({ items, unread }: { items: Item[]; unread: num
   async function open(n: Item) {
     if (!n.read) api("/api/notifications/read", { body: { ids: [n.id] } }).catch(() => {});
     if (n.occurrenceId) router.push(`/c/${n.occurrenceId}`);
+    else if (n.link?.startsWith("/")) router.push(n.link);
     else router.refresh();
   }
 

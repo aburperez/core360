@@ -14,7 +14,7 @@ export async function listNotifications(actor: Actor) {
         orderBy: { createdAt: "desc" },
         take: 60,
         select: {
-          id: true, type: true, title: true, body: true, readAt: true, createdAt: true, eventId: true, occurrenceId: true,
+          id: true, type: true, title: true, body: true, readAt: true, createdAt: true, eventId: true, occurrenceId: true, link: true,
           event: { select: { name: true } },
         },
       }),

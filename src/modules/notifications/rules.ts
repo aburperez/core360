@@ -86,6 +86,7 @@ export const HEADLINE: Record<NotificationType, string> = {
   SLA_ESTOURADO: "SLA estourado",
   CONCLUIDA: "Concluído, falta validar",
   REPROVADA: "Chamado reprovado na validação",
+  COTACAO: "Cotação",
 };
 
 const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];

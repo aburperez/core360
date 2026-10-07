@@ -151,6 +151,7 @@ enum NotificationType {
   ATRIBUIDA
   REPROVADA
   LEMBRETE
+  COTACAO
 
   @@map("notification_type")
 }
@@ -206,6 +207,10 @@ model User {
   agencyAdminsCreated  AgencyAdmin[]        @relation("AgencyAdminCreatedBy")
   agenciesCreated      Agency[]             @relation("AgencyCreatedBy")
   agencyInvitations    AgencyInvitation[]
+  quotesCreated        QuoteRequest[]       @relation("QuoteCreatedBy")
+  quotesSlaSet         QuoteRequest[]       @relation("QuoteSlaSetBy")
+  quotesClosed         QuoteRequest[]       @relation("QuoteClosedBy")
+  supplierQuotes       SupplierQuote[]      @relation("SupplierQuoteCreatedBy")
 
   @@map("users")
 }
@@ -400,6 +405,8 @@ model Event {
   activities     Activity[]
   profiles       ParticipantProfile[]
   activityChecks ActivityCheck[]
+  quoteRequests  QuoteRequest[]
+  supplierQuotes SupplierQuote[]
 
   @@index([clientId])
   @@index([agencyId])
@@ -493,6 +500,7 @@ model Participant {
   profile                ParticipantProfile?
   ownActivities          Activity[]
   activityChecks         ActivityCheck[]
+  quoteRequests          QuoteRequest[]
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -678,6 +686,8 @@ model Notification {
   body         String?
   /// Evita o mesmo aviso duas vezes para a mesma pessoa (ex.: "urgente:<chamado>").
   dedupeKey    String           @default(dbgenerated("(gen_random_uuid())::text")) @map("dedupe_key")
+  /// Tela a abrir quando o aviso não é de um chamado (ex.: uma cotação).
+  link         String?
   readAt       DateTime?        @map("read_at") @db.Timestamptz(3)
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -897,10 +907,11 @@ model CostItem {
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event    Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  section  CostSection  @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
-  receiver Participant? @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  section  CostSection    @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
+  receiver Participant?   @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
   receipt  ItemReceipt?
+  quotes   QuoteRequest[]
 
   @@unique([eventId, id])
   @@index([eventId, sectionId, position])
@@ -1100,4 +1111,96 @@ model ParticipantProfile {
   @@unique([eventId, participantId])
   @@index([eventId, functionId])
   @@map("participant_profiles")
+}
+
+// ─────────────── Pré-produção: cotação com fornecedores ───────────────
+
+enum QuoteStatus {
+  /// Criada: o descritivo ainda não saiu para os fornecedores.
+  ABERTA
+  /// Enviada aos fornecedores; o gestor define o prazo para os orçamentos.
+  ENVIADA
+  /// O gestor escolheu um orçamento.
+  FECHADA
+  CANCELADA
+
+  @@map("quote_status")
+}
+
+/// Pedido de cotação: o descritivo do que se cota (o "briefing" que vai por
+/// e-mail aos fornecedores), quem cuida e o prazo que o gestor define depois
+/// do envio. Só a Pré-produção vê (valores nunca vão para o campo).
+model QuoteRequest {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  eventId       String      @map("event_id") @db.Uuid
+  title         String
+  briefing      String
+  /// Quem pede os orçamentos (Gerente ou Pré-produtor do evento).
+  responsibleId String      @map("responsible_id") @db.Uuid
+  /// Item da planilha de custos que esta cotação vai preencher (opcional).
+  costItemId    String?     @map("cost_item_id") @db.Uuid
+  status        QuoteStatus @default(ABERTA)
+  sentAt        DateTime?   @map("sent_at") @db.Timestamptz(3)
+  sentById      String?     @map("sent_by") @db.Uuid
+  /// Prazo definido pelo gestor (em minutos) e até quando vale.
+  slaMinutes    Int?        @map("sla_minutes")
+  dueAt         DateTime?   @map("due_at") @db.Timestamptz(3)
+  slaSetAt      DateTime?   @map("sla_set_at") @db.Timestamptz(3)
+  slaSetById    String?     @map("sla_set_by") @db.Uuid
+  /// Quando chegou o terceiro orçamento (volta a vazio se um sair).
+  completedAt   DateTime?   @map("completed_at") @db.Timestamptz(3)
+  chosenQuoteId String?     @map("chosen_quote_id") @db.Uuid
+  chosenReason  String?     @map("chosen_reason")
+  closedAt      DateTime?   @map("closed_at") @db.Timestamptz(3)
+  closedById    String?     @map("closed_by") @db.Uuid
+  createdById   String      @map("created_by") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  responsible Participant     @relation(fields: [eventId, responsibleId], references: [eventId, id], onDelete: Restrict)
+  costItem    CostItem?       @relation(fields: [eventId, costItemId], references: [eventId, id], onDelete: SetNull)
+  chosen      SupplierQuote?  @relation("QuoteChosen", fields: [id, chosenQuoteId], references: [requestId, id], onDelete: NoAction)
+  createdBy   User            @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  slaSetBy    User?           @relation("QuoteSlaSetBy", fields: [slaSetById], references: [id], onDelete: Restrict)
+  closedBy    User?           @relation("QuoteClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  quotes      SupplierQuote[] @relation("QuoteQuotes")
+
+  @@unique([eventId, id])
+  @@index([eventId, status])
+  @@map("quote_requests")
+}
+
+/// Um dos (até) 3 orçamentos recebidos, com os dados do fornecedor e o arquivo.
+model SupplierQuote {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  eventId      String   @map("event_id") @db.Uuid
+  requestId    String   @map("request_id") @db.Uuid
+  /// 1, 2 ou 3.
+  position     Int
+  cnpj         String
+  companyName  String   @map("company_name")
+  phone        String
+  email        String   @db.Citext
+  contactName  String   @map("contact_name")
+  totalValue   Decimal  @map("total_value") @db.Decimal(14, 2)
+  paymentTerms String?  @map("payment_terms")
+  notes        String?
+  fileKey      String?  @unique @map("file_key")
+  fileName     String?  @map("file_name")
+  fileMime     String?  @map("file_mime")
+  fileSize     Int?     @map("file_size")
+  createdById  String   @map("created_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event     Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  request   QuoteRequest   @relation("QuoteQuotes", fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
+  createdBy User           @relation("SupplierQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  chosenBy  QuoteRequest[] @relation("QuoteChosen")
+
+  @@unique([requestId, position])
+  @@unique([requestId, id])
+  @@unique([eventId, id])
+  @@map("supplier_quotes")
 }

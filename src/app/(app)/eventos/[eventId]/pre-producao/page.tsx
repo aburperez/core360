@@ -7,6 +7,7 @@ import { getEvent } from "@/modules/events/events.service";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
 import { getCostSheet } from "@/modules/costs/costs.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
+import { quotesSummary } from "@/modules/quotes/quotes.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
@@ -24,9 +25,18 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn] = await Promise.all([
+  const [event, types, sheet, fn, quotes] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
+    quotesSummary(actor, eventId),
   ]);
+  const manager = canReviewSla(actor, eventId);
+  const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
+  const quoteLine = quotes.total === 0 ? "Nenhuma cotação ainda"
+    : [
+        quotes.late && `${quotes.late} atrasada${quotes.late > 1 ? "s" : ""}`,
+        manager && quotes.noDeadline && `${quotes.noDeadline} sem prazo`,
+        manager && quotes.toDecide && `${quotes.toDecide} para escolher`,
+      ].filter(Boolean).join(" · ") || `${quotes.closed} de ${quotes.total} fechadas`;
   const base = `/eventos/${eventId}/pre-producao`;
   const toReview = canReviewSla(actor, eventId) ? types.filter((t) => t.pending) : [];
   const proposed = types.filter((t) => t.pending).length;
@@ -44,6 +54,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
     { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
     { href: `${base}/quem-faz`, icon: "matrix", title: "Quem faz o quê", line: `${withPeople} de ${types.length} tipos com pessoas` },
     { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
+    { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
     { href: `${base}/funcoes`, icon: "functions", title: "Funções e briefing", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
     { href: `${base}/relatorio`, icon: "report", title: "Relatório diário", line: "Chamados e recebimentos do dia" },
   ];
@@ -90,6 +101,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
                 <ProgressRow label="Funções" done={withFunction} total={people} hint={`${withFunction} de ${people} pessoas`} i={2} href={`${base}/funcoes`} />
                 <ProgressRow label="Fichas" done={fullProfile} total={people} hint={`${fullProfile} de ${people} completas`} i={3} href={`${base}/funcoes`} />
                 <ProgressRow label="Briefing lido" done={read} total={briefed.length} hint={`${read} de ${briefed.length} pessoas`} i={4} href={`${base}/funcoes`} />
+                {quotes.total > 0 && (
+                  <ProgressRow label="Cotações" done={quotes.closed} total={quotes.total} hint={`${quotes.closed} de ${quotes.total} fechadas`} i={1} href={`${base}/cotacoes`} />
+                )}
                 <ProgressRow label="Custos" done={priced} total={sheet.itemCount} hint={`${priced} de ${sheet.itemCount} itens com valor`} i={5} href={`${base}/custos`} />
                 {sheet.field.sent > 0 && (
                   <ProgressRow label="Conferidos" done={sheet.field.ok + sheet.field.different} total={sheet.field.sent} hint={`${sheet.field.ok + sheet.field.different} de ${sheet.field.sent} itens no campo`} i={0} href={`${base}/relatorio`} />
