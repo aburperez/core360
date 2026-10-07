@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction } from "@/server/authz/policy";
-import { isAgencyAdmin, isEventAdmin, membershipFor } from "@/server/authz/actor";
+import { isAgencyAdmin, isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { EventNav } from "@/components/event-nav";
 import { hasReceipts } from "@/modules/receipts/receipts.service";
 import { myBriefingState } from "@/modules/briefings/briefings.service";
@@ -15,6 +15,11 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
   const [receipts, briefing, plan] = await Promise.all([hasReceipts(actor, eventId), myBriefingState(actor, eventId), myPlanSummary(actor, eventId)]);
   return (
     <div className="pb-nav lg:pb-0 lg:pl-60">
+      {isEventSupport(actor, eventId) && (
+        <p className="bg-amber-500/15 px-4 py-2 text-center text-sm text-amber-100">
+          Você está aqui como <b>Suporte</b>, autorizado pela agência. Tudo o que você faz fica registrado.
+        </p>
+      )}
       {children}
       <EventNav
         eventId={eventId}

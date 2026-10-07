@@ -283,17 +283,27 @@ model Agency {
 }
 
 /// Admin de uma agência: cria clientes e eventos e cadastra diretores dela.
+enum AgencyAdminRole {
+  ADMIN
+  SUPORTE
+
+  @@map("agency_admin_role")
+}
+
 model AgencyAdmin {
-  id          String   @id @default(uuid(7)) @db.Uuid
-  agencyId    String   @map("agency_id") @db.Uuid
+  id          String          @id @default(uuid(7)) @db.Uuid
+  agencyId    String          @map("agency_id") @db.Uuid
   name        String
-  email       String   @db.Citext
+  email       String          @db.Citext
+  /// SUPORTE: quem a agência autorizou a entrar para ajudar. Pode o que o
+  /// Admin pode nos eventos, menos cadastrar ou tirar Admins e Suporte.
+  role        AgencyAdminRole @default(ADMIN)
   /// Preenchido quando a pessoa aceita o convite.
-  userId      String?  @map("user_id") @db.Uuid
-  active      Boolean  @default(true)
-  createdById String?  @map("created_by") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  userId      String?         @map("user_id") @db.Uuid
+  active      Boolean         @default(true)
+  createdById String?         @map("created_by") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   agency      Agency             @relation(fields: [agencyId], references: [id], onDelete: Restrict)
   user        User?              @relation("AgencyAdminUser", fields: [userId], references: [id], onDelete: SetNull)

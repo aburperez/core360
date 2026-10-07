@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { isAgencyAdmin } from "../../server/authz/actor";
+import { isAgencyAdmin, isAgencyFullAdmin } from "../../server/authz/actor";
 import { audit, diff } from "../../server/audit/audit";
-import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
 import { hashToken, newToken } from "../../lib/tokens";
 import { parse, text, uuid } from "../../lib/validation";
@@ -11,26 +11,43 @@ import { INVITE_TTL_DAYS } from "../participants/participants.service";
 /**
  * Agências que alugam o CORE 360. O Admin da plataforma cria a agência e o
  * primeiro Admin dela, suspende e reativa. O Admin da agência cadastra outros
- * Admins da própria agência. A RLS (migration 20261007120000_agencias) garante
- * que ninguém veja agência alheia.
+ * Admins e o Suporte (equipe CORE 360 que ela autoriza a entrar para ajudar).
+ * O Suporte vê a agência, mas não mexe em Admins nem em Suporte. A RLS
+ * (migrations 20261007120000_agencias e 20261007140000_suporte_agencia)
+ * garante o mesmo no banco.
  */
+
+type AgencyAdminRole = "ADMIN" | "SUPORTE";
 
 function requirePlatform(actor: Actor) {
   if (!actor.isPlatformAdmin) throw new NotFoundError("Página");
 }
 
-/** Plataforma, ou Admin desta agência. */
-function requireAgencyManager(actor: Actor, agencyId: string) {
+/** Plataforma, ou Admin/Suporte desta agência: pode ver a agência. */
+function requireAgencyViewer(actor: Actor, agencyId: string) {
   if (!uuid.safeParse(agencyId).success || !(actor.isPlatformAdmin || isAgencyAdmin(actor, agencyId))) {
     throw new NotFoundError("Agência");
   }
 }
 
+/**
+ * Quem cadastra, convida ou desliga uma pessoa deste papel: o Admin da agência
+ * sempre; a plataforma só Admins (o Suporte é autorização da agência).
+ */
+function requireTeamManager(actor: Actor, agencyId: string, role: AgencyAdminRole) {
+  requireAgencyViewer(actor, agencyId);
+  if (isAgencyFullAdmin(actor, agencyId)) return;
+  if (role === "ADMIN" && actor.isPlatformAdmin) return;
+  throw new ForbiddenError(
+    role === "SUPORTE" ? "Só um Admin da agência autoriza ou desliga o Suporte" : "Só um Admin da agência cuida dos Admins",
+  );
+}
+
 const email = z.email({ message: "E-mail inválido" }).trim().toLowerCase();
 
-const adminSelect = { id: true, name: true, email: true, active: true, userId: true, createdAt: true } as const;
+const adminSelect = { id: true, name: true, email: true, role: true, active: true, userId: true, createdAt: true } as const;
 
-function adminView(a: { id: string; name: string; email: string; active: boolean; userId: string | null; createdAt: Date }) {
+function adminView(a: { id: string; name: string; email: string; role: AgencyAdminRole; active: boolean; userId: string | null; createdAt: Date }) {
   const { userId, ...rest } = a;
   return { ...rest, linked: !!userId };
 }
@@ -48,7 +65,7 @@ export async function listAgencies(actor: Actor) {
 
 /** Uma agência com os Admins dela (para a plataforma ou para o próprio Admin). */
 export async function getAgency(actor: Actor, agencyId: string) {
-  requireAgencyManager(actor, agencyId);
+  requireAgencyViewer(actor, agencyId);
   const g = await actor.run((tx) =>
     tx.agency.findUnique({
       where: { id: agencyId },
@@ -105,12 +122,12 @@ export async function updateAgency(actor: Actor, agencyId: string, input: unknow
   });
 }
 
-const adminSchema = z.object({ name: text(120), email });
+const adminSchema = z.object({ name: text(120), email, role: z.enum(["ADMIN", "SUPORTE"]).default("ADMIN") });
 
-/** Mais um Admin na agência (a plataforma ou um Admin dela). */
+/** Mais um Admin (a plataforma ou um Admin dela) ou o Suporte (só um Admin dela). */
 export async function addAgencyAdmin(actor: Actor, agencyId: string, input: unknown) {
-  requireAgencyManager(actor, agencyId);
   const data = parse(adminSchema, input);
+  requireTeamManager(actor, agencyId, data.role);
   try {
     return await actor.run(async (tx) => {
       const a = await tx.agencyAdmin.create({ data: { agencyId, ...data }, select: adminSelect });
@@ -118,7 +135,7 @@ export async function addAgencyAdmin(actor: Actor, agencyId: string, input: unkn
       return adminView(a);
     });
   } catch (e) {
-    if (isUniqueViolation(e)) throw new ConflictError("Esta pessoa já é Admin desta agência");
+    if (isUniqueViolation(e)) throw new ConflictError("Esta pessoa já está cadastrada nesta agência (como Admin ou Suporte)");
     throw e;
   }
 }
@@ -129,9 +146,9 @@ export async function updateAgencyAdmin(actor: Actor, adminId: string, input: un
   if (!uuid.safeParse(adminId).success) throw new NotFoundError("Admin");
   const data = parse(adminUpdateSchema, input);
   return actor.run(async (tx) => {
-    const before = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, name: true, active: true, userId: true } });
+    const before = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, role: true, name: true, active: true, userId: true } });
     if (!before) throw new NotFoundError("Admin");
-    requireAgencyManager(actor, before.agencyId);
+    requireTeamManager(actor, before.agencyId, before.role);
     if (data.active === false && before.userId === actor.userId) throw new ValidationError("Você não pode tirar o seu próprio acesso de Admin");
     const changes = diff({ name: before.name, active: before.active }, data);
     if (!Object.keys(changes.after).length) return { id: adminId };
@@ -148,9 +165,9 @@ export async function createAgencyAdminInvitation(actor: Actor, adminId: string)
   const token = newToken();
   const expiresAt = inviteExpiry();
   await actor.run(async (tx) => {
-    const a = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, active: true, userId: true } });
+    const a = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, role: true, active: true, userId: true } });
     if (!a) throw new NotFoundError("Admin");
-    requireAgencyManager(actor, a.agencyId);
+    requireTeamManager(actor, a.agencyId, a.role);
     if (!a.active) throw new ValidationError("Admin desativado");
     if (a.userId) throw new ValidationError("Esta pessoa já entrou no app. Ela usa a senha de sempre.");
     await tx.agencyInvitation.create({
@@ -163,4 +180,14 @@ export async function createAgencyAdminInvitation(actor: Actor, adminId: string)
 
 function inviteExpiry() {
   return new Date(Date.now() + INVITE_TTL_DAYS * 24 * 3600_000);
+}
+
+/** Agências em que a pessoa é Admin e que ainda não autorizaram o Suporte (para o lembrete). */
+export async function agenciesWithoutSupport(actor: Actor): Promise<Set<string>> {
+  const mine = actor.adminAgencies.filter((a) => a.role === "ADMIN").map((a) => a.id);
+  if (!mine.length) return new Set();
+  const rows = await actor.run((tx) =>
+    tx.agencyAdmin.findMany({ where: { agencyId: { in: mine }, role: "SUPORTE", active: true }, select: { agencyId: true } }),
+  );
+  return new Set(mine.filter((id) => !rows.some((r) => r.agencyId === id)));
 }

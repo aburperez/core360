@@ -26,10 +26,10 @@ function useGuard() {
 }
 
 /** Abre o compartilhar do celular (ou copia) e devolve o link completo. */
-async function shareInvite(path: string, name: string) {
+async function shareInvite(path: string, name: string, as = "Admin") {
   const url = `${location.origin}${path}`;
   if (navigator.share) {
-    await navigator.share({ title: "Acesso CORE 360", text: `${name}, este é seu acesso de Admin ao CORE 360:`, url }).catch(() => {});
+    await navigator.share({ title: "Acesso CORE 360", text: `${name}, este é seu acesso de ${as} ao CORE 360:`, url }).catch(() => {});
   } else {
     await navigator.clipboard?.writeText(url).catch(() => {});
   }
@@ -129,26 +129,34 @@ export function AgencySettings({ agency }: { agency: { id: string; name: string;
   );
 }
 
-type Admin = { id: string; name: string; email: string; active: boolean; linked: boolean };
+type Admin = { id: string; name: string; email: string; role: "ADMIN" | "SUPORTE"; active: boolean; linked: boolean };
 
-/** Admins da agência: convite, desativar, cadastrar outro. */
-export function AgencyAdmins({ agencyId, admins, me }: { agencyId: string; admins: Admin[]; me: string }) {
+/**
+ * Admins ou Suporte da agência: convite, desativar, cadastrar outro. Sem
+ * canManage a lista é só para ver (o servidor recusa do mesmo jeito).
+ */
+export function AgencyAdmins({
+  agencyId, admins, me, role = "ADMIN", canManage,
+}: { agencyId: string; admins: Admin[]; me: string; role?: "ADMIN" | "SUPORTE"; canManage: boolean }) {
   const { error, guard } = useGuard();
   const [open, setOpen] = useState(false);
+  const label = role === "SUPORTE" ? "Suporte" : "Admin";
   return (
     <div className="space-y-3">
-      <Card className="divide-y divide-border p-0">
-        {admins.map((a) => <AdminRow key={a.id} a={a} guard={guard} isMe={a.email === me} />)}
-      </Card>
+      {admins.length > 0 && (
+        <Card className="divide-y divide-border p-0">
+          {admins.map((a) => <AdminRow key={a.id} a={a} guard={guard} isMe={a.email === me} canManage={canManage} label={label} />)}
+        </Card>
+      )}
       <FormError message={error} />
-      {open ? (
+      {!canManage ? null : open ? (
         <Card>
           <form
             className="space-y-3"
             onSubmit={async (e) => {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
-              const ok = await guard(() => api(`/api/agencies/${agencyId}/admins`, { body: { name: f.get("name"), email: f.get("email") } }));
+              const ok = await guard(() => api(`/api/agencies/${agencyId}/admins`, { body: { name: f.get("name"), email: f.get("email"), role } }));
               if (ok) setOpen(false);
             }}
           >
@@ -161,13 +169,15 @@ export function AgencyAdmins({ agencyId, admins, me }: { agencyId: string; admin
           </form>
         </Card>
       ) : (
-        <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setOpen(true)}>+ Outro Admin</Button>
+        <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setOpen(true)}>
+          {role === "SUPORTE" ? "+ Autorizar Suporte" : "+ Outro Admin"}
+        </Button>
       )}
     </div>
   );
 }
 
-function AdminRow({ a, guard, isMe }: { a: Admin; guard: Guard; isMe: boolean }) {
+function AdminRow({ a, guard, isMe, canManage, label }: { a: Admin; guard: Guard; isMe: boolean; canManage: boolean; label: string }) {
   const [link, setLink] = useState<string | null>(null);
   const state = !a.active ? "Inativo" : a.linked ? "Com acesso" : "Sem acesso";
   return (
@@ -181,31 +191,33 @@ function AdminRow({ a, guard, isMe }: { a: Admin; guard: Guard; isMe: boolean })
           {state}
         </span>
       </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {a.active && !a.linked && (
-          <button
-            type="button"
-            className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"
-            onClick={() =>
-              guard(async () => {
-                const r = await api<{ path: string }>(`/api/agency-admins/${a.id}/invitation`, { body: {} });
-                setLink(await shareInvite(r.path, a.name));
-              })
-            }
-          >
-            Enviar convite
-          </button>
-        )}
-        {!isMe && (
-          <button
-            type="button"
-            className="rounded-lg border border-border px-3 py-1.5 text-sm"
-            onClick={() => guard(() => api(`/api/agency-admins/${a.id}`, { method: "PATCH", body: { active: !a.active } }))}
-          >
-            {a.active ? "Desativar" : "Reativar"}
-          </button>
-        )}
-      </div>
+      {canManage && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {a.active && !a.linked && (
+            <button
+              type="button"
+              className="rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary"
+              onClick={() =>
+                guard(async () => {
+                  const r = await api<{ path: string }>(`/api/agency-admins/${a.id}/invitation`, { body: {} });
+                  setLink(await shareInvite(r.path, a.name, label));
+                })
+              }
+            >
+              Enviar convite
+            </button>
+          )}
+          {!isMe && (
+            <button
+              type="button"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm"
+              onClick={() => guard(() => api(`/api/agency-admins/${a.id}`, { method: "PATCH", body: { active: !a.active } }))}
+            >
+              {label === "Suporte" ? (a.active ? "Desligar acesso" : "Religar acesso") : a.active ? "Desativar" : "Reativar"}
+            </button>
+          )}
+        </div>
+      )}
       {link && <InviteLink url={link} />}
     </div>
   );

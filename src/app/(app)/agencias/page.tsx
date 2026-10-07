@@ -30,7 +30,9 @@ export default async function AgenciesPage() {
         ) : (
           <ul className="space-y-2">
             {agencies.map((a) => {
-              const linked = a.admins.filter((x) => x.active && x.linked).length;
+              const admins = a.admins.filter((x) => x.role === "ADMIN");
+              const linked = admins.filter((x) => x.active && x.linked).length;
+              const support = a.admins.some((x) => x.role === "SUPORTE" && x.active);
               return (
                 <li key={a.id}>
                   <Link
@@ -43,7 +45,10 @@ export default async function AgenciesPage() {
                     <span className="min-w-0">
                       <span className="block truncate font-semibold">{a.name}</span>
                       <span className="block truncate text-sm text-muted">
-                        {a.admins.length} {a.admins.length === 1 ? "Admin" : "Admins"} · {linked} com acesso
+                        {admins.length} {admins.length === 1 ? "Admin" : "Admins"} · {linked} com acesso
+                      </span>
+                      <span className={cx("block truncate text-sm", support ? "text-emerald-300" : "text-amber-300")}>
+                        {support ? "Suporte autorizado" : "Sem Suporte autorizado"}
                       </span>
                     </span>
                     <span

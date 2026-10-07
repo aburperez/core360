@@ -94,7 +94,7 @@ const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];
 function asActor(p: Person, clientId: string): Actor {
   return {
     userId: p.userId, name: "", email: "", meta: {},
-    isPlatformAdmin: false, adminAgencies: [], adminEventIds: new Set(), suspendedAgencies: [],
+    isPlatformAdmin: false, adminAgencies: [], adminEventIds: new Set(), supportEventIds: new Set(), suspendedAgencies: [],
     memberships: [{ participantId: p.participantId, eventId: p.eventId, clientId, role: p.role, areaId: p.areaId, teamId: p.teamId }],
     run: () => Promise.reject(new Error("somente leitura")),
   };

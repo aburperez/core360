@@ -24,17 +24,17 @@ export async function previewInvitation(db: PrismaClient, token: string) {
     where: { tokenHash },
     include: { participant: { select: { name: true, email: true, phone: true, active: true, deletedAt: true } } },
   });
-  let person: { name: string; email: string; phone: string | null; agency?: string } | null = null;
+  let person: { name: string; email: string; phone: string | null; agency?: string; agencyRole?: string } | null = null;
   if (inv) {
     if (!inv.usedAt && inv.expiresAt >= new Date() && inv.participant.active && !inv.participant.deletedAt) person = inv.participant;
   } else {
     // Convite para Admin de uma agência.
     const ai = await db.agencyInvitation.findUnique({
       where: { tokenHash },
-      include: { admin: { select: { name: true, email: true, active: true } }, agency: { select: { name: true } } },
+      include: { admin: { select: { name: true, email: true, active: true, role: true } }, agency: { select: { name: true } } },
     });
     if (ai && !ai.usedAt && ai.expiresAt >= new Date() && ai.admin.active) {
-      person = { name: ai.admin.name, email: ai.admin.email, phone: null, agency: ai.agency.name };
+      person = { name: ai.admin.name, email: ai.admin.email, phone: null, agency: ai.agency.name, agencyRole: ai.admin.role };
     }
   }
   if (!person) throw new ValidationError(INVALID);
@@ -44,6 +44,7 @@ export async function previewInvitation(db: PrismaClient, token: string) {
     email: person.email,
     phone: normalizePhone(person.phone),
     agency: person.agency ?? null,
+    agencyRole: person.agencyRole ?? null,
     hasAccount: !!existing,
   };
 }

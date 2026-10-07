@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { canUseField, canUsePreProduction } from "@/server/authz/policy";
-import { isAgencyAdmin } from "@/server/authz/actor";
+import { isAgencyAdmin, isEventSupport } from "@/server/authz/actor";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
@@ -32,7 +32,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
 
   return (
     <>
-      <TopBar title={event.name} subtitle={`${ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
+      <TopBar title={event.name} subtitle={`${isEventSupport(actor, eventId) ? "Suporte" : ROLE_LABEL[dash.role]} · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
       {canUsePreProduction(actor, eventId) && <EventTabs eventId={eventId} active="campo" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         {(briefing === "NAO_LIDO" || briefing === "MUDOU") && (

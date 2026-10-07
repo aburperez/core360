@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { isAgencyAdmin } from "@/server/authz/actor";
+import { isAgencyAdmin, isEventSupport } from "@/server/authz/actor";
 import { listEvents } from "@/modules/events/events.service";
+import { agenciesWithoutSupport } from "@/modules/agencies/agencies.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
@@ -22,6 +23,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   // Quem só participa de um evento vai direto para ele (os Admins veem a lista e o painel da agência).
   if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
   const many = actor.adminAgencies.length > 1;
+  const noSupport = await agenciesWithoutSupport(actor);
 
   return (
     <>
@@ -45,15 +47,20 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
           const q = many ? `?agencia=${a.id}` : "";
           return (
             <div key={a.id} className="rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Agência</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{a.role === "SUPORTE" ? "Agência · você é Suporte" : "Agência"}</p>
               <p className="text-lg font-semibold">{a.name}</p>
+              {noSupport.has(a.id) && (
+                <Link href={`/agencias/${a.id}`} className="mt-1 block text-sm text-amber-200 underline">
+                  Autorize o Suporte CORE 360 para a gente poder ajudar quando algo der errado ›
+                </Link>
+              )}
               <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <Link href={`/eventos/novo${q}`} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 font-semibold text-primary-foreground sm:col-span-1">
                   + Novo evento
                 </Link>
                 <AdminLink href={`/clientes${q}`}>Clientes</AdminLink>
                 <AdminLink href={`/diretores${q}`}>Diretores</AdminLink>
-                <AdminLink href={`/agencias/${a.id}`}>Admins</AdminLink>
+                <AdminLink href={`/agencias/${a.id}`}>Admins e Suporte</AdminLink>
               </div>
             </div>
           );
@@ -76,7 +83,11 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
                 <p className="mt-1 text-sm text-muted">{formatDate(e.startsAt)} – {formatDate(e.endsAt)}</p>
               </div>
               <div className="shrink-0 text-right">
-                {e.myRole && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{ROLE_LABEL[e.myRole]}</span>}
+                {e.myRole && (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                    {isEventSupport(actor, e.id) ? "Suporte" : ROLE_LABEL[e.myRole]}
+                  </span>
+                )}
                 <p className="mt-2 text-xs text-muted">{EVENT_STATUS[e.status]}</p>
               </div>
             </div>

@@ -15,6 +15,8 @@ export interface Membership {
 export interface AgencyRef {
   id: string;
   name: string;
+  /** SUPORTE: equipe CORE 360 autorizada pela agência. */
+  role: "ADMIN" | "SUPORTE";
 }
 
 export interface RequestMeta {
@@ -32,10 +34,12 @@ export interface Actor {
   email: string;
   /** Admin da plataforma: cria e suspende agências. Não abre eventos de ninguém. */
   isPlatformAdmin: boolean;
-  /** Agências (ativas) em que a pessoa é Admin. */
+  /** Agências (ativas) em que a pessoa é Admin ou Suporte. */
   adminAgencies: AgencyRef[];
   /** Eventos dessas agências: neles a pessoa pode tudo, como Admin. */
   adminEventIds: ReadonlySet<string>;
+  /** Os que ela vê só por ser Suporte (para o aviso na tela). */
+  supportEventIds: ReadonlySet<string>;
   /** Agências suspensas em que a pessoa é Admin (só para o aviso na tela). */
   suspendedAgencies: AgencyRef[];
   memberships: Membership[];
@@ -59,12 +63,12 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
     });
     const admin = await tx.agencyAdmin.findMany({
       where: { userId, active: true },
-      select: { agency: { select: { id: true, name: true, status: true } } },
+      select: { role: true, agency: { select: { id: true, name: true, status: true } } },
       orderBy: { agency: { name: "asc" } },
     });
-    const active = admin.filter((a) => a.agency.status === "ACTIVE").map((a) => a.agency);
+    const active = admin.filter((a) => a.agency.status === "ACTIVE").map((a) => ({ ...a.agency, role: a.role }));
     const events = active.length
-      ? await tx.event.findMany({ where: { agencyId: { in: active.map((a) => a.id) } }, select: { id: true } })
+      ? await tx.event.findMany({ where: { agencyId: { in: active.map((a) => a.id) } }, select: { id: true, agencyId: true } })
       : [];
     return { user, participations, admin, active, events };
   });
@@ -75,9 +79,12 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
     name: data.user.name,
     email: data.user.email,
     isPlatformAdmin: data.user.isAdmin,
-    adminAgencies: data.active.map(({ id, name }) => ({ id, name })),
+    adminAgencies: data.active.map(({ id, name, role }) => ({ id, name, role })),
     adminEventIds: new Set(data.events.map((e) => e.id)),
-    suspendedAgencies: data.admin.filter((a) => a.agency.status !== "ACTIVE").map(({ agency: { id, name } }) => ({ id, name })),
+    supportEventIds: new Set(
+      data.events.filter((e) => data.active.some((a) => a.id === e.agencyId && a.role === "SUPORTE")).map((e) => e.id),
+    ),
+    suspendedAgencies: data.admin.filter((a) => a.agency.status !== "ACTIVE").map(({ role, agency: { id, name } }) => ({ id, name, role })),
     memberships: data.participations.map((p) => ({
       participantId: p.id,
       eventId: p.eventId,
@@ -100,7 +107,17 @@ export function isEventAdmin(actor: Actor, eventId: string): boolean {
   return actor.adminEventIds.has(eventId);
 }
 
-/** Admin desta agência (ou de alguma, sem agencyId). */
+/** Admin ou Suporte desta agência (ou de alguma, sem agencyId). */
 export function isAgencyAdmin(actor: Actor, agencyId?: string): boolean {
   return agencyId ? actor.adminAgencies.some((a) => a.id === agencyId) : actor.adminAgencies.length > 0;
+}
+
+/** Admin de verdade (não Suporte): cuida dos Admins e do Suporte da agência. */
+export function isAgencyFullAdmin(actor: Actor, agencyId: string): boolean {
+  return actor.adminAgencies.some((a) => a.id === agencyId && a.role === "ADMIN");
+}
+
+/** Está neste evento como Suporte (para o aviso na tela). */
+export function isEventSupport(actor: Actor, eventId: string): boolean {
+  return actor.supportEventIds.has(eventId);
 }

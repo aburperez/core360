@@ -23,7 +23,7 @@ export default async function InvitePage({ params }: PageProps<"/convite/[token]
             </p>
             {invite.agency && (
               <p className="mt-2 text-muted">
-                Você foi convidado como Admin da agência <strong className="text-foreground">{invite.agency}</strong>.
+                Você foi convidado como {invite.agencyRole === "SUPORTE" ? "Suporte" : "Admin"} da agência <strong className="text-foreground">{invite.agency}</strong>.
               </p>
             )}
             <div className="mt-6">

@@ -223,4 +223,67 @@ describe("agências separadas", () => {
     await expectStatus(updateEvent(await actorFor(app, "rafael"), d.events.rock.id, { name: "X" }), 403);
     await expectStatus(updateEvent(await actorFor(app, "marina"), beta.eventId, { name: "X" }), 404);
   });
+
+  it("Suporte: só a agência autoriza; ele ajuda nos eventos dela, mas não mexe em Admins", async () => {
+    const platform = await actorFor(app, "admin");
+    const betaAdmin = await actorOf(beta.adminUserId);
+    const email = `suporte-${uniq()}@core360.dev`;
+
+    // A plataforma não se autoriza sozinha, nem pelo banco.
+    await expectStatus(addAgencyAdmin(platform, beta.id, { name: "Sup", email, role: "SUPORTE" }), 403);
+    await expectPgError(
+      as(d.users.admin!, (tx) =>
+        tx.$executeRaw`INSERT INTO agency_admins (id, agency_id, name, email, role, updated_at)
+                       VALUES (gen_random_uuid(), ${beta.id}::uuid, 'Sup', ${email}, 'SUPORTE', now())`),
+      "42501",
+    );
+
+    // O Admin da Beta autoriza e manda o convite.
+    const sup = await addAgencyAdmin(betaAdmin, beta.id, { name: "Sueli Suporte", email, role: "SUPORTE" });
+    expect(sup.role).toBe("SUPORTE");
+    const inv = await createAgencyAdminInvitation(betaAdmin, sup.id);
+    expect((await previewInvitation(auth$, inv.token)).agencyRole).toBe("SUPORTE");
+    const r = await acceptInvitation(auth$, { token: inv.token, password: "senha-sup-1" });
+    const support = await actorOf(r.userId);
+    expect(support.adminAgencies).toEqual([expect.objectContaining({ id: beta.id, role: "SUPORTE" })]);
+    expect(support.supportEventIds.has(beta.eventId)).toBe(true);
+    expect(betaAdmin.supportEventIds.size).toBe(0);
+
+    // Ajuda nos eventos da Beta, e só nela.
+    expect((await listEvents(support)).map((e) => e.id)).toEqual([beta.eventId]);
+    await updateEvent(support, beta.eventId, { venue: "Pavilhão 2" });
+    await expectStatus(getEvent(support, d.events.rock.id), 404);
+    expect((await listClients(support)).map((c) => c.id)).toEqual([beta.clientId]);
+
+    // Não cadastra, convida nem desliga Admins ou Suporte.
+    await expectStatus(addAgencyAdmin(support, beta.id, { name: "Outro", email: `x-${uniq()}@x.dev` }), 403);
+    const bia = (await getAgency(betaAdmin, beta.id)).admins.find((a) => a.role === "ADMIN")!;
+    await expectStatus(updateAgencyAdmin(support, bia.id, { active: false }), 403);
+    await expectPgError(
+      as(r.userId, (tx) =>
+        tx.$executeRaw`INSERT INTO agency_admins (id, agency_id, name, email, updated_at)
+                       VALUES (gen_random_uuid(), ${beta.id}::uuid, 'Intruso', ${`i-${uniq()}@x.dev`}, now())`),
+      "42501",
+    );
+    expect(await as(r.userId, (tx) => tx.$executeRaw`UPDATE agency_admins SET active = false WHERE id = ${bia.id}::uuid`)).toBe(0);
+    await expectPgError(
+      as(r.userId, (tx) =>
+        tx.agencyInvitation.create({
+          data: { agencyId: beta.id, agencyAdminId: bia.id, tokenHash: `h-${uniq()}`, expiresAt: new Date(Date.now() + 1e6), createdById: r.userId },
+        })),
+      "42501",
+    );
+
+    // Nem a plataforma desliga o Suporte; quem desliga é a agência. O papel não muda.
+    await expectStatus(updateAgencyAdmin(platform, sup.id, { active: false }), 403);
+    await expectPgError(owner.agencyAdmin.update({ where: { id: sup.id }, data: { role: "ADMIN" } }), "23514");
+    expect((await listAgencies(platform)).find((a) => a.id === beta.id)!.admins.some((a) => a.role === "SUPORTE" && a.active)).toBe(true);
+
+    await updateAgencyAdmin(betaAdmin, sup.id, { active: false });
+    const off = await actorOf(r.userId);
+    expect(off.adminAgencies).toEqual([]);
+    expect(await listEvents(off)).toEqual([]);
+    await expectStatus(getEvent(off, beta.eventId), 404);
+    expect(await as(r.userId, (tx) => tx.event.findMany({ where: { id: beta.eventId } }))).toEqual([]);
+  });
 });
