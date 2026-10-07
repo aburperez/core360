@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canManageAreas, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
@@ -10,6 +10,7 @@ import { BriefingPill } from "@/components/briefing-view";
 import { Card, EmptyState, PAGE, SectionTitle, cx } from "@/components/ui";
 import { ROLE_LABEL } from "@/lib/format";
 import { DefaultsButton, FunctionSelect, NewFunctionForm } from "./forms";
+import { SheetPanel } from "./sheet";
 
 export const metadata = { title: "Funções e briefing" };
 
@@ -55,6 +56,8 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
           Crie as funções uma vez, com as atividades de cada uma, e dê a função a cada pessoa. Ela vê a função,
           a agenda e o briefing em &ldquo;Meu briefing&rdquo;, marca o que já fez e preenche a própria ficha.
         </p>
+
+        <div className="mb-4"><SheetPanel eventId={eventId} canEditAreas={canManageAreas(actor, eventId)} /></div>
 
         <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {stats.map((s) => (

@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { ValidationError } from "../../server/errors";
-import { parseDecimal } from "../../lib/money";
+import { clean, norm, openWorkbook, raw } from "../../server/xlsx";
 import { costTotals, DEFAULT_RATES, lineSubtotal, type CostBilling, type CostRates, type CostTotals } from "./totals";
 
 /**
@@ -16,8 +16,6 @@ import { costTotals, DEFAULT_RATES, lineSubtotal, type CostBilling, type CostRat
  */
 
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
-const MAX_UNZIPPED_BYTES = 40 * 1024 * 1024;
-const MAX_ZIP_ENTRIES = 500;
 const MAX_ITEMS = 2000;
 const MAX_SECTIONS = 100;
 
@@ -66,79 +64,6 @@ export interface ParsedMatrix extends Matrix {
 
 // ───────────────────────────── Leitura ─────────────────────────────
 
-/**
- * Confere o .xlsx (um zip) antes de abrir: tamanho descompactado e número de
- * arquivos dentro, para um arquivo pequeno não virar gigabytes na memória.
- */
-function checkZip(bytes: Uint8Array) {
-  const fail = () => {
-    throw new ValidationError("Arquivo não é uma planilha .xlsx válida");
-  };
-  if (bytes.length < 22 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) fail();
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let eocd = -1;
-  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 65535); i--) {
-    if (view.getUint32(i, true) === 0x06054b50) {
-      eocd = i;
-      break;
-    }
-  }
-  if (eocd < 0) fail();
-  const entries = view.getUint16(eocd + 10, true);
-  let offset = view.getUint32(eocd + 16, true);
-  if (entries > MAX_ZIP_ENTRIES) throw new ValidationError("Planilha com partes demais");
-  let total = 0;
-  for (let n = 0; n < entries; n++) {
-    if (offset + 46 > bytes.length || view.getUint32(offset, true) !== 0x02014b50) fail();
-    const size = view.getUint32(offset + 24, true);
-    if (size === 0xffffffff) throw new ValidationError("Planilha grande demais");
-    total += size;
-    offset += 46 + view.getUint16(offset + 28, true) + view.getUint16(offset + 30, true) + view.getUint16(offset + 32, true);
-  }
-  if (total > MAX_UNZIPPED_BYTES) throw new ValidationError("Planilha grande demais");
-}
-
-type Raw = { text: string; num: number | null; formula: string | null; result: number | null };
-
-function raw(cell: ExcelJS.Cell): Raw {
-  const v = cell.value as unknown;
-  const out: Raw = { text: "", num: null, formula: null, result: null };
-  if (v === null || v === undefined) return out;
-  if (typeof v === "number") return { ...out, text: String(v), num: v };
-  if (typeof v === "string") return { ...out, text: v, num: parseDecimal(v) };
-  if (typeof v === "boolean" || v instanceof Date) return { ...out, text: String(v) };
-  if (typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    if (Array.isArray(o.richText)) {
-      const t = (o.richText as { text?: string }[]).map((r) => r.text ?? "").join("");
-      return { ...out, text: t, num: parseDecimal(t) };
-    }
-    if (typeof o.formula === "string" || typeof o.sharedFormula === "string") {
-      const r = typeof o.result === "number" ? o.result : null;
-      // Fórmula compartilhada: o getter devolve a fórmula já traduzida para esta célula.
-      const formula = cell.formula || String(o.formula ?? o.sharedFormula);
-      return { ...out, formula, result: r, num: r, text: r === null ? String(o.result ?? "") : String(r) };
-    }
-    if (typeof o.text === "string") return { ...out, text: o.text };
-  }
-  return out;
-}
-
-/** Texto limpo: quebras do Mac/Excel viram "\n", sem espaços sobrando no fim das linhas. */
-function clean(s: string, max: number): string | null {
-  const t = s
-    .replace(/\r\n?|[\u2028\u2029]/g, "\n")
-    .split("\n")
-    .map((l) => l.trimEnd())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return t ? t.slice(0, max) : null;
-}
-
-const norm = (s: string) =>
-  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-
 const HEADERS: [keyof Cols, RegExp][] = [
   ["code", /^#$|^n[ºo°]?\.?$|^item #$/],
   ["name", /^item$/],
@@ -180,14 +105,7 @@ const pctIn = (s: string) => {
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
 
 export async function readMatrix(bytes: Uint8Array): Promise<ParsedMatrix> {
-  if (bytes.length > MAX_IMPORT_BYTES) throw new ValidationError("Planilha maior que 2 MB");
-  checkZip(bytes);
-  const wb = new ExcelJS.Workbook();
-  try {
-    await wb.xlsx.load(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength) as unknown as ExcelJS.Buffer);
-  } catch {
-    throw new ValidationError("Não consegui abrir a planilha. Salve como .xlsx e tente de novo.");
-  }
+  const wb = await openWorkbook(bytes, MAX_IMPORT_BYTES);
 
   // A aba com a linha de títulos (Item + Descritivo); normalmente a "JOB".
   let ws: ExcelJS.Worksheet | undefined;
