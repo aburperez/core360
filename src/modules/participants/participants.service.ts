@@ -28,9 +28,11 @@ function scopeWhere(actor: Actor, eventId: string): Prisma.ParticipantWhereInput
   const m = membershipFor(actor, eventId);
   switch (m?.role) {
     case "GERENTE":
-    case "CLIENTE":
     case "PRE_PRODUTOR":
       return { eventId };
+    case "CLIENTE":
+      // O Cliente vê a equipe só quando o Gerente libera; senão, só a si mesmo.
+      return m.clientView?.team ? { eventId } : { eventId, userId: actor.userId };
     case "HEAD":
       return { eventId, OR: [{ areaId: m.areaId }, { role: "GERENTE" }, { userId: actor.userId }] };
     case "OPERACIONAL":

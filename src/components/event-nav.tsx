@@ -15,6 +15,8 @@ type NavProps = {
   hasReceipts: boolean;
   /** A pessoa tem briefing, função ou agenda (no celular fica no cartão da tela inicial). */
   hasBriefing: boolean;
+  /** Cliente: o que o Gerente liberou para ele acompanhar (null para os outros). */
+  client: { costs: boolean; team: boolean; progress: boolean } | null;
 };
 
 type Item = { href: string; label: string; short?: string; icon: IconName; active: boolean; primary?: boolean; desktopOnly?: boolean; bar?: boolean };
@@ -68,9 +70,25 @@ export function EventNav(props: NavProps) {
     ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", short: "Receber", icon: "receipts" as const, active: path.startsWith(`${base}/recebimentos`), desktopOnly: true }] : []),
     ...(props.hasBriefing ? [{ href: `${base}/briefing`, label: "Meu briefing", short: "Briefing", icon: "briefing" as const, active: path.startsWith(`${base}/briefing`), desktopOnly: true }] : []),
   ];
+  // O Cliente só acompanha: a tela inicial e o que foi liberado para ele.
+  const c = props.client;
+  const clientItems: Item[] | null = c
+    ? [
+        { href: base, label: "Acompanhamento", short: "Início", icon: "overview", active: path === base },
+        ...(c.progress
+          ? [
+              { href: `${base}/ocorrencias`, label: "Chamados", icon: "tickets" as const, active: path.startsWith(`${base}/ocorrencias`) },
+              { href: `${base}/planta`, label: "Planta do evento", short: "Planta", icon: "map" as const, active: path.startsWith(`${base}/planta`) },
+            ]
+          : []),
+        ...(c.team ? [{ href: `${base}/equipe`, label: "Equipe", icon: "team" as const, active: path.startsWith(`${base}/equipe`) }] : []),
+        ...(c.costs ? [{ href: `${base}/custos`, label: "Custos", icon: "costs" as const, active: path.startsWith(`${base}/custos`) }] : []),
+      ]
+    : null;
   const create = items.find((it) => it.primary);
   const links = items.filter((it) => !it.primary);
-  const bar: Item[] = !props.canUseField ? preItems.filter((it) => it.bar)
+  const bar: Item[] = clientItems ? clientItems
+    : !props.canUseField ? preItems.filter((it) => it.bar)
     : inPre && props.canUsePre ? [...preItems.filter((it) => it.bar), { href: base, label: "Campo", icon: "field", active: false }]
     : items.filter((it) => !it.desktopOnly);
 
@@ -82,6 +100,7 @@ export function EventNav(props: NavProps) {
       inPre={inPre}
       fieldItems={links}
       preItems={preItems}
+      clientItems={clientItems}
       create={create}
       onClose={open ? () => setOpen(false) : undefined}
     />
@@ -128,7 +147,7 @@ export function EventNav(props: NavProps) {
 
 function SideMenu(
   props: NavProps & {
-    base: string; pre: string; inPre: boolean; fieldItems: Item[]; preItems: Item[]; create?: Item; onClose?: () => void;
+    base: string; pre: string; inPre: boolean; fieldItems: Item[]; preItems: Item[]; clientItems: Item[] | null; create?: Item; onClose?: () => void;
   },
 ) {
   return (
@@ -152,6 +171,9 @@ function SideMenu(
         </Link>
       )}
       <nav className="mt-2 flex-1 overflow-y-auto px-3 pb-3">
+        {props.clientItems && (
+          <SideGroup title="Acompanhamento" icon="overview" href={props.base} current items={props.clientItems.filter((it) => it.href !== props.base)} />
+        )}
         {props.canUseField && (
           <SideGroup title="Gestão de campo" icon="field" href={props.base} current={!props.inPre} items={props.fieldItems} />
         )}

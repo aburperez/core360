@@ -40,13 +40,14 @@ export async function expectPgError(p: Promise<unknown>, code: string) {
 }
 
 /** Espera que a promessa falhe com um erro de domínio de certo status HTTP. */
-export async function expectStatus(p: Promise<unknown>, status: number) {
+export async function expectStatus(p: Promise<unknown>, status: number | number[]) {
+  const ok = Array.isArray(status) ? status : [status];
   try {
     await p;
   } catch (err) {
     const got = (err as { status?: number }).status;
-    if (got !== status) throw new Error(`esperava erro ${status}, recebi ${got ?? "outro"}: ${String(err)}`);
+    if (got === undefined || !ok.includes(got)) throw new Error(`esperava erro ${ok.join(" ou ")}, recebi ${got ?? "outro"}: ${String(err)}`);
     return;
   }
-  throw new Error(`esperava erro ${status}, mas a operação foi aceita`);
+  throw new Error(`esperava erro ${ok.join(" ou ")}, mas a operação foi aceita`);
 }

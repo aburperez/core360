@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
 import { membershipFor } from "../../server/authz/actor";
-import { canEditPlanPoint, canManagePlans, canUseField, canWorkPlanPoint } from "../../server/authz/policy";
+import { canEditPlanPoint, canManagePlans, canSeePlans, canWorkPlanPoint } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { getStorage } from "../../server/storage/storage";
@@ -29,7 +29,7 @@ const FIELD_ROLES = ["GERENTE", "HEAD", "OPERACIONAL"] as const;
 
 function requireField(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUseField(actor, eventId)) throw new NotFoundError("Planta");
+  if (!canSeePlans(actor, eventId)) throw new NotFoundError("Planta");
 }
 
 async function eventTimeZone(actor: Actor, eventId: string) {
@@ -90,7 +90,7 @@ export async function uploadPlan(actor: Actor, eventId: string, input: unknown, 
 
 async function loadPlan(actor: Actor, planId: string) {
   const plan = uuid.safeParse(planId).success ? await actor.run((tx) => tx.floorPlan.findUnique({ where: { id: planId } })) : null;
-  if (!plan || !canUseField(actor, plan.eventId)) throw new NotFoundError("Planta");
+  if (!plan || !canSeePlans(actor, plan.eventId)) throw new NotFoundError("Planta");
   return plan;
 }
 
@@ -218,7 +218,7 @@ async function pointOptions(actor: Actor, eventId: string, onlyArea: string | nu
 
 /** Para o painel do campo: quantas etapas concluídas e quais estão atrasadas. */
 export async function plansSummary(actor: Actor, eventId: string, now = new Date()) {
-  if (!canUseField(actor, eventId)) return null;
+  if (!canSeePlans(actor, eventId)) return null;
   const points = await actor.run((tx) =>
     tx.planPoint.findMany({
       where: { eventId },
@@ -330,7 +330,7 @@ export async function createPoint(actor: Actor, planId: string, input: unknown) 
 
 async function loadPoint(actor: Actor, pointId: string) {
   const p = uuid.safeParse(pointId).success ? await actor.run((tx) => tx.planPoint.findUnique({ where: { id: pointId } })) : null;
-  if (!p || !canUseField(actor, p.eventId)) throw new NotFoundError("Etapa");
+  if (!p || !canSeePlans(actor, p.eventId)) throw new NotFoundError("Etapa");
   return p;
 }
 
@@ -442,6 +442,6 @@ export async function addPointPhoto(actor: Actor, pointId: string, bytes: Uint8A
 /** Abre a foto da etapa, depois de conferir o acesso. */
 export async function pointPhoto(actor: Actor, photoId: string) {
   const f = uuid.safeParse(photoId).success ? await actor.run((tx) => tx.planPointPhoto.findUnique({ where: { id: photoId } })) : null;
-  if (!f || !canUseField(actor, f.eventId)) throw new NotFoundError("Foto");
+  if (!f || !canSeePlans(actor, f.eventId)) throw new NotFoundError("Foto");
   return readFile(actor, f.storageKey, f.mimeType, "Foto");
 }

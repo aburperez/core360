@@ -16,7 +16,7 @@ export function OccurrenceActions({
   people,
 }: {
   occurrence: { id: string; status: Status; version: number; responsibleParticipantId: string | null; priority: string };
-  can: { work: boolean; manage: boolean; validate: boolean; conclude: boolean; claim: boolean };
+  can: { work: boolean; manage: boolean; validate: boolean; conclude: boolean; claim: boolean; watchOnly?: boolean };
   people: { id: string; name: string; teamName: string | null }[];
 }) {
   const router = useRouter();
@@ -83,7 +83,9 @@ export function OccurrenceActions({
       )}
 
       {!closed && !can.conclude && !can.claim && (
-        <p className="px-1 text-sm text-muted">Só o responsável, o Head da área ou o Gerente podem atualizar este chamado.</p>
+        <p className="px-1 text-sm text-muted">
+          {can.watchOnly ? "Você acompanha este chamado. Quem atualiza é a equipe do evento." : "Só o responsável, o Head da área ou o Gerente podem atualizar este chamado."}
+        </p>
       )}
 
       {can.validate && (

@@ -200,6 +200,7 @@ model User {
   dailyNotesUpdated    DailyNote[]          @relation("DailyNoteUpdatedBy")
   functionsCreated     EventFunction[]      @relation("EventFunctionCreatedBy")
   activitiesCreated    Activity[]           @relation("ActivityCreatedBy")
+  clientViewsUpdated   ClientView[]         @relation("ClientViewUpdatedBy")
   profilesUpdated      ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
   directors            Director[]           @relation("DirectorUser")
   directorsCreated     Director[]           @relation("DirectorCreatedBy")
@@ -403,6 +404,7 @@ model Event {
   dailyNotes     DailyNote[]
   functions      EventFunction[]
   activities     Activity[]
+  clientViews    ClientView[]
   profiles       ParticipantProfile[]
   activityChecks ActivityCheck[]
   quoteRequests  QuoteRequest[]
@@ -502,6 +504,7 @@ model Participant {
   costItemsToReceive     CostItem[]          @relation("CostItemReceiver")
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
   briefing               Briefing?
+  clientView             ClientView?
   profile                ParticipantProfile?
   ownActivities          Activity[]
   activityChecks         ActivityCheck[]
@@ -1307,4 +1310,26 @@ model PlanPointPhoto {
 
   @@unique([pointId, sha256])
   @@map("plan_point_photos")
+}
+
+/// O que o Cliente vê no evento. Ele só olha; quem libera cada parte é o
+/// Gerente do evento (diretor ou executivo) ou o Admin da agência.
+model ClientView {
+  participantId String   @id @map("participant_id") @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  /// Planilha de custos, com valores.
+  costs         Boolean  @default(false)
+  /// Áreas, equipes e pessoas (sem a ficha).
+  team          Boolean  @default(false)
+  /// Chamados e planta do evento.
+  progress      Boolean  @default(false)
+  updatedById   String   @map("updated_by") @db.Uuid
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  participant Participant @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Cascade)
+  updatedBy   User        @relation("ClientViewUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, participantId])
+  @@map("client_views")
 }

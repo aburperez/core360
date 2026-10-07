@@ -1,6 +1,8 @@
 import { requireUser } from "@/server/http/session";
 import { membershipFor } from "@/server/authz/actor";
-import { assignableRoles, canManageAreas, canManageTeams } from "@/server/authz/policy";
+import { notFound } from "next/navigation";
+import { assignableRoles, canGrantClientView, canManageAreas, canManageTeams, clientCan, isClient } from "@/server/authz/policy";
+import { listClientViews } from "@/modules/participants/client-views.service";
 import { getEvent } from "@/modules/events/events.service";
 import { listAreas } from "@/modules/areas/areas.service";
 import { listTeams } from "@/modules/teams/teams.service";
@@ -18,11 +20,14 @@ export const metadata = { title: "Montar equipe" };
 export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]/equipe">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  const [event, areas, teams, people] = await Promise.all([
+  // O Cliente vê a equipe só quando o Gerente libera.
+  if (isClient(actor, eventId) && !clientCan(actor, eventId, "team")) notFound();
+  const [event, areas, teams, people, clientViews] = await Promise.all([
     getEvent(actor, eventId),
     listAreas(actor, eventId),
     listTeams(actor, eventId),
     listParticipants(actor, eventId, { includeInactive: true }),
+    listClientViews(actor, eventId),
   ]);
   const me = membershipFor(actor, eventId);
 
@@ -42,6 +47,8 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
               roles: assignableRoles(actor, eventId, a.id),
             }))}
             eventRoles={assignableRoles(actor, eventId, null)}
+            canGrantClientView={canGrantClientView(actor, eventId)}
+            clientViews={clientViews}
             teams={teams.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId }))}
             people={people.map((p) => ({
               id: p.id, name: p.name, email: p.email, phone: p.phone, jobTitle: p.jobTitle, role: p.role,

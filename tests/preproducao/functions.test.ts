@@ -194,7 +194,7 @@ describe("ficha da pessoa", () => {
     expect((await owner.participantProfile.findUnique({ where: { participantId: P.pedro.id } }))?.uniformSize).toBe("GG");
     // Ficha não é para o Cliente.
     await expectStatus(savePersonProfile(marina, rock, P.claudia.id, { uniformSize: "P" }), 422);
-    expect(await getMyPlan(await actorFor(db, "claudia"), rock)).toBeNull();
+    await expectStatus(getMyPlan(await actorFor(db, "claudia"), rock), 404);
     await expectStatus(saveMyProfile(await actorFor(db, "claudia"), rock, { uniformSize: "P" }), 404);
   });
 });

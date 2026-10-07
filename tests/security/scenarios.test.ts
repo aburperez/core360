@@ -166,24 +166,20 @@ describe("Cenário 6: Operacional da Elétrica tenta acessar Cenografia", () => 
   });
 });
 
-describe("Cenário 7: Cliente cadastra participante", () => {
-  it("monta a equipe: cria área, equipe e participantes", async () => {
+describe("Cenário 7: Cliente só olha", () => {
+  it("não cria área, equipe nem pessoas", async () => {
     const claudia = await actorFor(db, "claudia");
     const rock = d.events.rock.id;
-
-    const area = await createArea(claudia, { eventId: rock, name: `Credenciamento ${uniq()}` });
-    const team = await createTeam(claudia, { areaId: area.id, name: "Portaria" });
-    const p = await createParticipant(claudia, {
-      eventId: rock, name: "Fernanda", email: `fernanda-${uniq()}@rockfestival.dev`,
-      phone: "+55 11 90000-0000", jobTitle: "Recepcionista", role: "OPERACIONAL", teamId: team.id,
-    });
-    expect(p).toMatchObject({ role: "OPERACIONAL", areaId: area.id, teamId: team.id, userId: null });
-
-    const off = await updateParticipant(claudia, p.id, { active: false });
-    expect(off.active).toBe(false);
+    await expectStatus(createArea(claudia, { eventId: rock, name: `Credenciamento ${uniq()}` }), 403);
+    await expectStatus(createTeam(claudia, { areaId: d.areas.infra.id, name: "Portaria" }), [403, 404]);
+    await expectStatus(
+      createParticipant(claudia, { eventId: rock, name: "Fernanda", email: `fernanda-${uniq()}@rockfestival.dev`, role: "OPERACIONAL", teamId: d.teams.eletrica.id }),
+      [403, 404],
+    );
+    await expectStatus(updateParticipant(claudia, d.participants.pedro.id, { active: false }), [403, 404]);
   });
 
-  it("cliente não vê ocorrências (informação interna da operação)", async () => {
+  it("cliente não vê ocorrências enquanto o andamento não for liberado", async () => {
     const claudia = await actorFor(db, "claudia");
     expect(await listOccurrences(claudia, d.events.rock.id)).toEqual([]);
     await expectStatus(getOccurrence(claudia, d.occurrences.quadroEletrico.id), 404);
@@ -193,23 +189,24 @@ describe("Cenário 7: Cliente cadastra participante", () => {
 describe("Cenário 8: Cliente tenta criar Admin (e outras escaladas)", () => {
   const base = () => ({ eventId: d.events.rock.id, name: "Escalada", email: `esc-${uniq()}@x.dev` });
 
-  it("ADMIN não é um papel aceito", async () => {
+  it("ADMIN não é um papel aceito, e o Cliente não cadastra ninguém", async () => {
     const claudia = await actorFor(db, "claudia");
     await expectStatus(createParticipant(claudia, { ...base(), role: "ADMIN" }), 422);
+    await expectStatus(createParticipant(claudia, { ...base(), role: "CLIENTE", isAdmin: true }), 403);
     // Campo extra "isAdmin" é descartado; não existe privilégio global por participante.
-    const p = await createParticipant(claudia, { ...base(), role: "CLIENTE", isAdmin: true });
+    const p = await createParticipant(await actorFor(db, "marina"), { ...base(), role: "CLIENTE", isAdmin: true });
     expect(p).not.toHaveProperty("isAdmin");
   });
 
   it("Cliente não cria Gerente nem Head", async () => {
     const claudia = await actorFor(db, "claudia");
     await expectStatus(createParticipant(claudia, { ...base(), role: "GERENTE" }), 403);
-    await expectStatus(createParticipant(claudia, { ...base(), role: "HEAD", areaId: d.areas.infra.id }), 403);
+    await expectStatus(createParticipant(claudia, { ...base(), role: "HEAD", areaId: d.areas.infra.id }), [403, 404]);
   });
 
   it("Cliente não promove um Operacional a Head", async () => {
     const claudia = await actorFor(db, "claudia");
-    await expectStatus(updateParticipant(claudia, d.participants.pedro.id, { role: "HEAD" }), 403);
+    await expectStatus(updateParticipant(claudia, d.participants.pedro.id, { role: "HEAD" }), [403, 404]);
   });
 
   it("ninguém altera a própria participação", async () => {

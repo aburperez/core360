@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/server/http/session";
-import { isEventAdmin, membershipFor } from "@/server/authz/actor";
+import { isClient } from "@/server/authz/policy";
 import { listOccurrences } from "@/modules/occurrences/occurrences.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
@@ -26,14 +26,14 @@ export default async function OccurrencesPage({ params, searchParams }: PageProp
   const key = typeof sp.filtro === "string" ? sp.filtro : status ? FILTERS.find((f) => "status" in f.q && f.q.status === status)?.key : "abertas";
   const filter = FILTERS.find((f) => f.key === key) ?? { key: "status", label: status, q: { status } };
   const items = await listOccurrences(actor, eventId, filter.q);
-  const isClient = membershipFor(actor, eventId)?.role === "CLIENTE" && !isEventAdmin(actor, eventId);
+  const watching = isClient(actor, eventId);
 
   return (
     <>
-      <TopBar title="Chamados" subtitle={`${items.length} ${items.length === 1 ? "item" : "itens"}`} />
+      <TopBar title="Chamados" subtitle={`${items.length} ${items.length === 1 ? "item" : "itens"}${watching ? " · só acompanhamento" : ""}`} />
       <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-10 bg-background">
         <div className={cx(PAGE, "flex gap-2 overflow-x-auto py-2")}>
-          {FILTERS.map((f) => (
+          {FILTERS.filter((f) => !watching || f.key !== "minhas").map((f) => (
             <Link
               key={f.key}
               href={`?filtro=${f.key}`}
@@ -50,8 +50,8 @@ export default async function OccurrencesPage({ params, searchParams }: PageProp
       <main className={cx(PAGE, "grid gap-3 py-2 lg:grid-cols-2 lg:py-4 xl:grid-cols-3")}>
         {items.length === 0 && (
           <div className="lg:col-span-2 xl:col-span-3">
-            <EmptyState title={isClient ? "Ocorrências são internas da operação" : "Nada por aqui"}>
-              {isClient ? "Como cliente, você acompanha a estrutura e a equipe do evento." : `Nenhum chamado em "${filter.label ?? STATUS_LABEL[status as keyof typeof STATUS_LABEL]}".`}
+            <EmptyState title="Nada por aqui">
+              {`Nenhum chamado em "${filter.label ?? STATUS_LABEL[status as keyof typeof STATUS_LABEL]}".`}
             </EmptyState>
           </div>
         )}

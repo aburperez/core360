@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
-import { isAgencyAdmin, isEventSupport } from "@/server/authz/actor";
+import { canUseField, canUsePreProduction, isClient } from "@/server/authz/policy";
+import { isAgencyAdmin, isEventSupport, type Actor } from "@/server/authz/actor";
+import { getClientCosts } from "@/modules/costs/costs.service";
+import { brl } from "@/lib/money";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
@@ -11,7 +13,7 @@ import { plansSummary } from "@/modules/floorplans/floorplans.service";
 import Link from "next/link";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
-import { EmptyState, LinkButton, PAGE, PriorityText, SectionTitle, SlaPill, Stat, cx } from "@/components/ui";
+import { EmptyState, PAGE, PriorityText, SectionTitle, SlaPill, Stat, cx } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, pct, serie } from "@/components/panel";
 import { OccurrenceCard, type OccurrenceRow } from "@/components/occurrence-card";
@@ -22,12 +24,15 @@ export const metadata = { title: "Gestão de campo" };
 export default async function DashboardPage({ params }: PageProps<"/eventos/[eventId]">) {
   const actor = await requireUser();
   const { eventId } = await params;
+  // O Cliente tem a tela dele: só o que o Gerente liberou, para acompanhar.
+  if (isClient(actor, eventId)) return <ClientHome actor={actor} eventId={eventId} />;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
   const [event, dash, toReceive, briefing, plan, stages] = await Promise.all([
     getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId), myBriefingState(actor, eventId),
     myPlanSummary(actor, eventId), plansSummary(actor, eventId),
   ]);
+  if ("views" in dash) return null; // Cliente: já tratado acima.
   const base = `/eventos/${eventId}`;
   const scopeLabel =
     dash.role === "HEAD" ? "da sua área" : dash.role === "OPERACIONAL" ? "da sua equipe" : "do evento";
@@ -78,30 +83,6 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
       {canUsePreProduction(actor, eventId) && <EventTabs eventId={eventId} active="campo" />}
     </>
   );
-
-  // Cliente: só a estrutura do evento (não vê chamados).
-  if ("structure" in dash) {
-    return (
-      <>
-        {header}
-        <main className={cx(PAGE, "py-4 lg:py-6")}>
-          <PageHeading trail={[event.name, "Gestão de campo"]} title="Painel do campo" />
-          <MobileHero name={actor.name} role={role} detail={event.name} />
-          {alerts}
-          <div className="grid grid-cols-3 gap-3 lg:max-w-2xl">
-            <Stat label="Áreas" value={dash.structure.areas} />
-            <Stat label="Equipes" value={dash.structure.teams} />
-            <Stat label="Pessoas" value={dash.structure.people} />
-          </div>
-          {stages && <div className="mt-4 lg:max-w-2xl"><StagesPanel stages={stages} base={base} /></div>}
-          <div className="mt-4 flex flex-col gap-2 lg:flex-row">
-            <LinkButton href={`${base}/planta`} variant="secondary">Ver a planta do evento</LinkButton>
-            <LinkButton href={`${base}/equipe`}>Ver a equipe</LinkButton>
-          </div>
-        </main>
-      </>
-    );
-  }
 
   const t = dash.totals;
   const open = t.pendente + t.emAndamento + t.urgente + t.bloqueio;
@@ -298,4 +279,68 @@ function Mine({ rows, eventId }: { rows: OccurrenceRow[]; eventId: string }) {
 function formatDay(day: string) {
   const [, m, d] = day.split("-");
   return `${d}/${m}`;
+}
+
+/**
+ * Tela do Cliente: ele acompanha o evento e vê só o que o Gerente liberou
+ * (andamento, equipe, custos). Nada aqui muda o evento.
+ */
+async function ClientHome({ actor, eventId }: { actor: Actor; eventId: string }) {
+  const [event, dash, stages] = await Promise.all([getEvent(actor, eventId), getDashboard(actor, eventId), plansSummary(actor, eventId)]);
+  if (!("views" in dash)) return null;
+  const { views, structure, progress } = dash;
+  const costs = views.costs ? await getClientCosts(actor, eventId) : null;
+  const base = `/eventos/${eventId}`;
+  const multi = actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin;
+  const n = (k: keyof NonNullable<typeof progress>) => progress?.[k] ?? 0;
+  const open = n("PENDENTE") + n("EM_ANDAMENTO") + n("URGENTE") + n("BLOQUEIO");
+  const nothing = !views.costs && !views.team && !views.progress;
+
+  return (
+    <>
+      <TopBar title={event.name} subtitle={`Cliente · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
+      <main className={cx(PAGE, "py-4 lg:py-6")}>
+        <PageHeading trail={[event.name]} title="Acompanhamento do evento" />
+        <MobileHero name={actor.name} role="Cliente" detail={event.name} />
+        {nothing ? (
+          <EmptyState title="Ainda não há nada liberado para você">
+            A equipe do evento escolhe o que você acompanha por aqui: custos, equipe e andamento. Fale com o gestor do evento.
+          </EmptyState>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {progress && (
+              <Panel title="Andamento" action={<Link href={`${base}/ocorrencias`} className="text-sm font-semibold text-primary">Ver chamados</Link>}>
+                <div className="grid grid-cols-3 gap-3">
+                  <Stat label="abertos" value={open} href={`${base}/ocorrencias`} />
+                  <Stat label="urgentes" value={n("URGENTE") + n("BLOQUEIO")} tone={n("URGENTE") + n("BLOQUEIO") ? "text-red-300" : undefined} href={`${base}/ocorrencias?filtro=urgentes`} />
+                  <Stat label="concluídos" value={n("CONCLUIDO")} tone="text-emerald-300" href={`${base}/ocorrencias?filtro=concluidas`} />
+                </div>
+                {stages ? <div className="mt-3"><StagesPanel stages={stages} base={base} /></div> : (
+                  <p className="mt-3 text-sm text-muted">A planta do evento ainda não foi enviada.</p>
+                )}
+              </Panel>
+            )}
+            {structure && (
+              <Panel title="Equipe" action={<Link href={`${base}/equipe`} className="text-sm font-semibold text-primary">Ver a equipe</Link>}>
+                <div className="grid grid-cols-3 gap-3">
+                  <Stat label="áreas" value={structure.areas} href={`${base}/equipe`} />
+                  <Stat label="equipes" value={structure.teams} href={`${base}/equipe`} />
+                  <Stat label="pessoas" value={structure.people} href={`${base}/equipe`} />
+                </div>
+              </Panel>
+            )}
+            {costs && (
+              <Panel title="Custos" action={<Link href={`${base}/custos`} className="text-sm font-semibold text-primary">Ver a planilha</Link>}>
+                <Link href={`${base}/custos`} className="block rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60">
+                  <p className="text-sm text-muted">Total do orçamento</p>
+                  <p className="text-3xl font-bold tabular-nums">{brl(costs.totals.total)}</p>
+                  <p className="mt-1 text-sm text-muted">{costs.itemCount} {costs.itemCount === 1 ? "item" : "itens"} em {costs.sections.length} {costs.sections.length === 1 ? "seção" : "seções"}</p>
+                </Link>
+              </Panel>
+            )}
+          </div>
+        )}
+      </main>
+    </>
+  );
 }

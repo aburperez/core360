@@ -1,5 +1,5 @@
 import type { OccurrenceStatus } from "../../generated/prisma/enums";
-import { isEventAdmin, membershipFor, type Actor, type EventRole } from "./actor";
+import { isEventAdmin, membershipFor, type Actor, type ClientView, type EventRole } from "./actor";
 
 /**
  * Matriz de permissões do backend. Espelha as funções app.* da migration de RLS
@@ -14,17 +14,41 @@ export function canSeeEvent(a: Actor, eventId: string): boolean {
   return isEventAdmin(a, eventId) || !!membershipFor(a, eventId);
 }
 
+// ─────────────────────── Cliente ───────────────────────
+// O Cliente só olha, e só o que o Gerente (ou o Admin) liberar. Espelha
+// app.is_client, app.client_can e app.can_grant_client_view.
+
+/** A pessoa está neste evento como Cliente (e não é Admin dele). */
+export function isClient(a: Actor, eventId: string): boolean {
+  return !isEventAdmin(a, eventId) && membershipFor(a, eventId)?.role === "CLIENTE";
+}
+
+/** O Cliente tem esta parte liberada: custos, equipe ou andamento. */
+export function clientCan(a: Actor, eventId: string, view: keyof ClientView): boolean {
+  const m = membershipFor(a, eventId);
+  return m?.role === "CLIENTE" && !!m.clientView?.[view];
+}
+
+/** Liberar ou fechar o que o Cliente vê: o Gerente do evento ou o Admin. */
+export function canGrantClientView(a: Actor, eventId: string): boolean {
+  if (isEventAdmin(a, eventId)) return true;
+  return membershipFor(a, eventId)?.role === "GERENTE";
+}
+
+const clientSeesStructure = (a: Actor, eventId: string) => clientCan(a, eventId, "team") || clientCan(a, eventId, "progress");
+
 export function canSeeArea(a: Actor, s: Scope): boolean {
   if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
-  return m.role === "GERENTE" || m.role === "CLIENTE" || m.role === "HEAD" || m.role === "PRE_PRODUTOR" || m.areaId === s.areaId;
+  if (m.role === "CLIENTE") return clientSeesStructure(a, s.eventId);
+  return m.role === "GERENTE" || m.role === "HEAD" || m.role === "PRE_PRODUTOR" || m.areaId === s.areaId;
 }
 
 export function canManageAreas(a: Actor, eventId: string): boolean {
   if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
-  return m?.role === "GERENTE" || m?.role === "CLIENTE";
+  return m?.role === "GERENTE";
 }
 
 export function canSeeTeam(a: Actor, s: Scope): boolean {
@@ -33,9 +57,10 @@ export function canSeeTeam(a: Actor, s: Scope): boolean {
   if (!m) return false;
   switch (m.role) {
     case "GERENTE":
-    case "CLIENTE":
     case "PRE_PRODUTOR":
       return true;
+    case "CLIENTE":
+      return clientSeesStructure(a, s.eventId);
     case "HEAD":
       return m.areaId === s.areaId;
     case "OPERACIONAL":
@@ -47,7 +72,7 @@ export function canManageTeams(a: Actor, s: Scope): boolean {
   if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
-  return m.role === "GERENTE" || m.role === "CLIENTE" || (m.role === "HEAD" && m.areaId === s.areaId);
+  return m.role === "GERENTE" || (m.role === "HEAD" && m.areaId === s.areaId);
 }
 
 /** Anti-escalada: quem pode atribuir qual papel (seção 7.4 da proposta). */
@@ -57,8 +82,6 @@ export function assignableRoles(a: Actor, eventId: string, areaId?: string | nul
   switch (m?.role) {
     case "GERENTE":
       return ["HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
-    case "CLIENTE":
-      return ["CLIENTE", "OPERACIONAL"];
     case "HEAD":
       return areaId && areaId === m.areaId ? ["OPERACIONAL"] : [];
     default:
@@ -89,6 +112,7 @@ export function canSeeOccurrence(a: Actor, o: OccScope): boolean {
     case "OPERACIONAL":
       return m.teamId === o.teamId || m.participantId === o.responsibleParticipantId;
     case "CLIENTE":
+      return clientCan(a, o.eventId, "progress");
     case "PRE_PRODUTOR":
       return false;
   }
@@ -149,11 +173,11 @@ export function canUsePreProduction(a: Actor, eventId: string): boolean {
   return m?.role === "GERENTE" || m?.role === "PRE_PRODUTOR";
 }
 
-/** Gestão de campo (painel, chamados): todos menos o Pré-produtor. */
+/** Gestão de campo (painel, chamados): quem trabalha no campo. O Cliente tem a tela dele. */
 export function canUseField(a: Actor, eventId: string): boolean {
   if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
-  return !!m && m.role !== "PRE_PRODUTOR";
+  return !!m && m.role !== "PRE_PRODUTOR" && m.role !== "CLIENTE";
 }
 
 /** Aprovar, ajustar, recusar ou definir o SLA: só o gestor. */
@@ -180,8 +204,13 @@ export function canWriteReport(a: Actor, eventId: string): boolean {
 }
 
 // ─────────────────────── Planta do evento ───────────────────────
-// Todos do campo veem (canUseField). Espelha app.can_manage_plans,
-// app.can_edit_plan_point e app.can_work_plan_point.
+// O campo vê, e o Cliente com o andamento liberado (só olhando). Espelha
+// app.can_see_plans, app.can_manage_plans, app.can_edit_plan_point e
+// app.can_work_plan_point.
+
+export function canSeePlans(a: Actor, eventId: string): boolean {
+  return canUseField(a, eventId) || clientCan(a, eventId, "progress");
+}
 
 /** Enviar, renomear e apagar plantas: o gestor. */
 export function canManagePlans(a: Actor, eventId: string): boolean {

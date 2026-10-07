@@ -10,6 +10,7 @@ import { ROLE_LABEL } from "@/lib/format";
 type Role = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
 const EVENT_LEVEL: Role[] = ["GERENTE", "CLIENTE", "PRE_PRODUTOR"];
 type Area = { id: string; name: string; canAddTeam: boolean; roles: Role[] };
+type ClientView = { costs: boolean; team: boolean; progress: boolean };
 type Team = { id: string; name: string; areaId: string };
 type Person = {
   id: string; name: string; email: string; phone: string | null; jobTitle: string | null; role: Role;
@@ -24,6 +25,8 @@ export function TeamBuilder(props: {
   eventRoles: Role[];
   teams: Team[];
   people: Person[];
+  canGrantClientView: boolean;
+  clientViews: Record<string, ClientView>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(props.areas.length === 1 ? props.areas[0].id : null);
@@ -53,7 +56,8 @@ export function TeamBuilder(props: {
           <Card className="divide-y divide-border p-0">
             {coordination.map((p) => (
               <PersonRow key={p.id} p={p} areaName={props.areas.find((a) => a.id === p.areaId)?.name} guard={guard}
-                canManage={canManagePerson(p, props)} />
+                canManage={canManagePerson(p, props)}
+                clientView={p.role === "CLIENTE" && props.canGrantClientView ? (props.clientViews[p.id] ?? NO_VIEW) : undefined} />
             ))}
           </Card>
         </>
@@ -150,8 +154,10 @@ function TeamBlock({ team, area, eventId, people, guard, canManage }: {
   );
 }
 
-function PersonRow({ p, areaName, guard, canManage }: {
+function PersonRow({ p, areaName, guard, canManage, clientView }: {
   p: Person; areaName?: string; guard: (fn: () => Promise<unknown>) => Promise<boolean>; canManage: boolean;
+  /** Só para o Cliente, quando quem vê a tela pode liberar a visão dele. */
+  clientView?: ClientView;
 }) {
   const [link, setLink] = useState<string | null>(null);
   const state = !p.active ? "Inativo" : p.joined ? "Com acesso" : p.invited ? "Convidado" : "Sem acesso";
@@ -200,11 +206,64 @@ function PersonRow({ p, areaName, guard, canManage }: {
           </button>
         )}
       </div>
+      {clientView && p.active && <ClientViewSwitches participantId={p.id} view={clientView} guard={guard} />}
       {link && (
         <p className="mt-2 break-all rounded-lg bg-background p-2 text-xs">
           Link copiado (vale 7 dias, uso único): {link}
         </p>
       )}
+    </div>
+  );
+}
+
+const NO_VIEW: ClientView = { costs: false, team: false, progress: false };
+
+const VIEW_OPTIONS: { key: keyof ClientView; label: string; hint: string }[] = [
+  { key: "progress", label: "Andamento", hint: "chamados e planta" },
+  { key: "team", label: "Equipe", hint: "áreas, equipes e pessoas" },
+  { key: "costs", label: "Custos", hint: "planilha com valores" },
+];
+
+/** O que o Cliente acompanha: ele só olha, e só o que estiver ligado aqui. */
+function ClientViewSwitches({ participantId, view, guard }: {
+  participantId: string; view: ClientView; guard: (fn: () => Promise<unknown>) => Promise<boolean>;
+}) {
+  const [busy, setBusy] = useState<keyof ClientView | null>(null);
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-background p-3">
+      <p className="text-sm font-semibold">O que este cliente vê</p>
+      <p className="text-xs text-muted">Ele só olha, não muda nada.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {VIEW_OPTIONS.map((o) => {
+          const on = view[o.key];
+          return (
+            <button
+              key={o.key}
+              type="button"
+              role="switch"
+              aria-checked={on}
+              disabled={!!busy}
+              onClick={async () => {
+                setBusy(o.key);
+                await guard(() => api(`/api/participants/${participantId}/client-view`, { method: "PATCH", body: { [o.key]: !on } }));
+                setBusy(null);
+              }}
+              className={cx(
+                "flex min-h-11 items-center gap-2 rounded-xl border px-3 text-left text-sm transition",
+                on ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted hover:border-primary/60",
+              )}
+            >
+              <span aria-hidden className={cx("relative h-5 w-9 shrink-0 rounded-full transition", on ? "bg-primary" : "bg-border")}>
+                <span className={cx("absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all", on ? "left-[18px]" : "left-0.5")} />
+              </span>
+              <span>
+                <span className="block font-medium">{o.label}</span>
+                <span className="block text-xs text-muted">{o.hint}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

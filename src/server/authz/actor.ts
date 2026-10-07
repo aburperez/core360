@@ -10,6 +10,14 @@ export interface Membership {
   role: EventRole;
   areaId: string | null;
   teamId: string | null;
+  /** Só do Cliente: o que o Gerente liberou para ele ver. */
+  clientView: ClientView | null;
+}
+
+export interface ClientView {
+  costs: boolean;
+  team: boolean;
+  progress: boolean;
 }
 
 export interface AgencyRef {
@@ -59,7 +67,10 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
     // Evento de agência suspensa não aparece aqui: a RLS de events o esconde.
     const participations = await tx.participant.findMany({
       where: { userId, active: true, deletedAt: null, event: { deletedAt: null } },
-      select: { id: true, eventId: true, role: true, areaId: true, teamId: true, event: { select: { clientId: true } } },
+      select: {
+        id: true, eventId: true, role: true, areaId: true, teamId: true, event: { select: { clientId: true } },
+        clientView: { select: { costs: true, team: true, progress: true } },
+      },
     });
     const admin = await tx.agencyAdmin.findMany({
       where: { userId, active: true },
@@ -92,6 +103,7 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
       role: p.role,
       areaId: p.areaId,
       teamId: p.teamId,
+      clientView: p.role === "CLIENTE" ? (p.clientView ?? { costs: false, team: false, progress: false }) : null,
     })),
     meta,
     run: (fn) => withUser(db, userId, fn),

@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Actor } from "../../server/authz/actor";
-import { canSeeOccurrence } from "../../server/authz/policy";
+import { canSeeOccurrence, isClient } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
-import { NotFoundError, ValidationError } from "../../server/errors";
+import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { getStorage } from "../../server/storage/storage";
 import { uuid } from "../../lib/validation";
 import { sniffImage } from "./image";
@@ -25,6 +25,8 @@ export async function addPhoto(actor: Actor, occurrenceId: string, input: Upload
   if (!uuid.safeParse(occurrenceId).success) throw new NotFoundError("Ocorrência");
   const occ = await actor.run((tx) => tx.occurrence.findUnique({ where: { id: occurrenceId } }));
   if (!occ || !canSeeOccurrence(actor, occ)) throw new NotFoundError("Ocorrência");
+  // O Cliente acompanha o chamado, mas não anexa fotos.
+  if (isClient(actor, occ.eventId)) throw new ForbiddenError();
 
   if (input.bytes.length === 0) throw new ValidationError("Arquivo vazio");
   if (input.bytes.length > MAX_PHOTO_BYTES) throw new ValidationError("Foto maior que 10 MB");

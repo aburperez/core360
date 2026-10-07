@@ -168,7 +168,7 @@ describe("convite", () => {
     const joao = await actorFor(app, "joao");
     await expectStatus(createInvitation(joao, d.participants.carlos.id), 403);
     const claudia = await actorFor(app, "claudia");
-    await expectStatus(createInvitation(claudia, d.participants.rafael.id), 403);
+    await expectStatus(createInvitation(claudia, d.participants.rafael.id), [403, 404]);
   });
 });
 

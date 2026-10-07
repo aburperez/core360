@@ -9,6 +9,7 @@ import {
   canSeeOccurrence,
   canValidateOccurrence,
   canWorkOccurrence,
+  isClient,
 } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
@@ -34,8 +35,10 @@ export function occurrenceScope(actor: Actor, eventId: string): Prisma.Occurrenc
       return { eventId, areaId: m.areaId! };
     case "OPERACIONAL":
       return { eventId, OR: [{ teamId: m.teamId! }, { responsibleParticipantId: m.participantId }] };
+    case "CLIENTE":
+      // O Cliente vê os chamados (só olhando) quando o andamento foi liberado.
+      return m.clientView?.progress ? { eventId } : { id: { in: [] } };
     default:
-      // CLIENTE não vê ocorrências.
       return { id: { in: [] } };
   }
 }
@@ -126,6 +129,8 @@ export async function getOccurrence(actor: Actor, id: string) {
         validate: canValidateOccurrence(actor, base) && base.status === "CONCLUIDO",
         conclude: canWorkOccurrence(actor, base) && !CLOSED.includes(base.status),
         claim: canClaimOccurrence(actor, base),
+        /** Cliente: acompanha, não mexe. */
+        watchOnly: isClient(actor, base.eventId),
       },
     };
   });

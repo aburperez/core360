@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canSeePlans, canUsePreProduction, isClient } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getPlanBoard } from "@/modules/floorplans/floorplans.service";
 import { TopBar } from "@/components/top-bar";
@@ -19,7 +19,7 @@ export const metadata = { title: "Planta do evento" };
 export default async function PlantaPage({ params, searchParams }: PageProps<"/eventos/[eventId]/planta">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUseField(actor, eventId)) notFound();
+  if (!canSeePlans(actor, eventId)) notFound();
   const p = (await searchParams).p;
   const [event, board] = await Promise.all([getEvent(actor, eventId), getPlanBoard(actor, eventId, typeof p === "string" ? p : null)]);
 
@@ -28,7 +28,7 @@ export default async function PlantaPage({ params, searchParams }: PageProps<"/e
       <TopBar title="Planta do evento" subtitle={event.name} />
       {canUsePreProduction(actor, eventId) && <EventTabs eventId={eventId} active="campo" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
-        <PageHeading trail={[event.name, "Gestão de campo"]} title="Planta do evento" />
+        <PageHeading trail={[event.name, isClient(actor, eventId) ? "Acompanhamento" : "Gestão de campo"]} title="Planta do evento" />
         <PlanBoard key={board.plan?.id ?? "none"} board={board} eventId={eventId} />
       </main>
     </>

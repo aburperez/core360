@@ -242,7 +242,8 @@ describe("direto no banco (sem o backend)", () => {
   it("Head, Operacional e Cliente: leem o tipo da equipe (chamado), mas nada da Pré-produção", async () => {
     const { t, scope } = await base();
     for (const person of ["rafael", "joao", "claudia"] as const) {
-      expect(await as(person, (tx) => tx.serviceType.count({ where: { id: t.id } }))).toBe(1);
+      // O Cliente sem nada liberado não vê nem a equipe.
+      expect(await as(person, (tx) => tx.serviceType.count({ where: { id: t.id } }))).toBe(person === "claudia" ? 0 : 1);
       expect(await as(person, (tx) => tx.slaProposal.count({ where: { serviceTypeId: t.id } }))).toBe(0);
       expect(await as(person, (tx) => tx.serviceTypePerson.count({ where: { serviceTypeId: t.id } }))).toBe(0);
       expect((await as(person, (tx) => tx.serviceType.updateMany({ where: { id: t.id }, data: { name: "x" } }))).count).toBe(0);

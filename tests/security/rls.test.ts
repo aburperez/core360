@@ -121,25 +121,18 @@ describe("Operacional da Elétrica", () => {
 });
 
 describe("Cliente", () => {
-  it("cadastra Operacional mas não Gerente/Head, e não vê ocorrências (cenários 7 e 8)", async () => {
+  it("só olha: não cadastra ninguém nem cria áreas, e sem nada liberado não vê ocorrências (cenários 7 e 8)", async () => {
     const base = { eventId: d.events.rock.id, name: "Via SQL", createdById: d.users.claudia! };
-    await as("claudia", async (tx) => {
-      const ok = await tx.participant.create({
-        data: { ...base, email: `sql-${Date.now()}@x.dev`, role: "OPERACIONAL", areaId: d.areas.infra.id, teamId: d.teams.eletrica.id },
-      });
-      expect(ok.id).toBeTruthy();
-      expect(await tx.occurrence.count()).toBe(0);
-    });
-    await expectPgError(
-      as("claudia", (tx) => tx.participant.create({ data: { ...base, email: `g-${Date.now()}@x.dev`, role: "GERENTE" } })),
-      RLS,
-    );
-    await expectPgError(
-      as("claudia", (tx) =>
-        tx.participant.create({ data: { ...base, email: `h-${Date.now()}@x.dev`, role: "HEAD", areaId: d.areas.infra.id } }),
-      ),
-      RLS,
-    );
+    await as("claudia", async (tx) => expect(await tx.occurrence.count()).toBe(0));
+    for (const data of [
+      { ...base, email: `o-${Date.now()}@x.dev`, role: "OPERACIONAL" as const, areaId: d.areas.infra.id, teamId: d.teams.eletrica.id },
+      { ...base, email: `c-${Date.now()}@x.dev`, role: "CLIENTE" as const },
+      { ...base, email: `g-${Date.now()}@x.dev`, role: "GERENTE" as const },
+      { ...base, email: `h-${Date.now()}@x.dev`, role: "HEAD" as const, areaId: d.areas.infra.id },
+    ]) {
+      await expectPgError(as("claudia", (tx) => tx.participant.create({ data })), RLS);
+    }
+    await expectPgError(as("claudia", (tx) => tx.area.create({ data: { eventId: d.events.rock.id, name: `X ${Date.now()}` } })), RLS);
   });
 
   it("não se torna admin nem cria usuários", async () => {

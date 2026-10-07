@@ -91,12 +91,12 @@ export const HEADLINE: Record<NotificationType, string> = {
 
 const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];
 
-/** Monta um "Actor" mínimo para reaproveitar a matriz de permissões. */
+/** Monta um "Actor" mínimo para reaproveitar a matriz de permissões. O Cliente só olha: não recebe avisos. */
 function asActor(p: Person, clientId: string): Actor {
   return {
     userId: p.userId, name: "", email: "", meta: {},
     isPlatformAdmin: false, adminAgencies: [], adminEventIds: new Set(), supportEventIds: new Set(), suspendedAgencies: [],
-    memberships: [{ participantId: p.participantId, eventId: p.eventId, clientId, role: p.role, areaId: p.areaId, teamId: p.teamId }],
+    memberships: [{ participantId: p.participantId, eventId: p.eventId, clientId, role: p.role, areaId: p.areaId, teamId: p.teamId, clientView: null }],
     run: () => Promise.reject(new Error("somente leitura")),
   };
 }

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction, isClient } from "@/server/authz/policy";
 import { isAgencyAdmin, isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { EventNav } from "@/components/event-nav";
 import { hasReceipts } from "@/modules/receipts/receipts.service";
@@ -30,6 +30,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
         canBuildTeam={canBuildTeam(actor, eventId)}
         hasReceipts={receipts}
         hasBriefing={briefing !== "SEM" || plan.has}
+        client={isClient(actor, eventId) ? (membershipFor(actor, eventId)?.clientView ?? null) : null}
         canSwitchEvent={actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin}
       />
     </div>

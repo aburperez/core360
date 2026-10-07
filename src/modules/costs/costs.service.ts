@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canSendToField, canUsePreProduction } from "../../server/authz/policy";
+import { canSendToField, canUsePreProduction, clientCan } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -16,6 +16,7 @@ import { fieldText } from "../receipts/field-text";
  * matriz de orçamento da equipe. Só a Pré-produção (Gerente, Pré-produtor,
  * Admin) vê e edita; para os outros ela não existe (404). A RLS
  * (migration *_pre_producao_custos) aplica o mesmo perímetro no banco.
+ * O Cliente, quando o Gerente libera os custos, só lê (getClientCosts).
  */
 
 function requirePreProduction(actor: Actor, eventId: string) {
@@ -134,6 +135,29 @@ async function loadSheet(tx: Tx, eventId: string) {
       /** Algo mudou (pessoa ou item) desde o último envio. */
       outdated: rows.some((i) => (i.receiverId && !i.receipt) || i.receipt?.stale) || receipts.length > rows.filter((i) => i.receiverId).length,
     },
+  };
+}
+
+/**
+ * Custos para o Cliente: a planilha com valores, só para ler, quando o
+ * Gerente liberou. Sem quem recebe e sem a conferência do campo.
+ */
+export async function getClientCosts(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  if (!clientCan(actor, eventId, "costs")) throw new NotFoundError("Custos");
+  const sheet = await actor.run((tx) => loadSheet(tx, eventId));
+  return {
+    header: sheet.header,
+    rates: sheet.rates,
+    totals: sheet.totals,
+    itemCount: sheet.itemCount,
+    sections: sheet.sections.map((s) => ({
+      id: s.id, name: s.name, total: s.total,
+      items: s.items.map((i) => ({
+        id: i.id, name: i.name, description: i.description, paymentTerms: i.paymentTerms, unitValue: i.unitValue,
+        quantity: i.quantity, frequency: i.frequency, optional: i.optional, billing: i.billing, subtotal: i.subtotal,
+      })),
+    })),
   };
 }
 
@@ -420,7 +444,9 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
 
 /** Gera o .xlsx da planilha do evento, no layout da matriz. */
 export async function exportCostSheet(actor: Actor, eventId: string) {
-  requirePreProduction(actor, eventId);
+  requireEventAccess(actor, eventId);
+  // Baixar Excel: a Pré-produção e o Cliente com os custos liberados.
+  if (!canUsePreProduction(actor, eventId) && !clientCan(actor, eventId, "costs")) throw new NotFoundError("Pré-produção");
   const { sheet, event } = await actor.run(async (tx) => ({
     sheet: await loadSheet(tx, eventId),
     event: await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true } }),

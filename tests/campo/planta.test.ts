@@ -17,18 +17,24 @@ import {
   updatePoint,
   uploadPlan,
 } from "@/modules/floorplans/floorplans.service";
+import { setClientView } from "@/modules/participants/client-views.service";
 
 /**
  * Planta do evento (Gestão de campo): Marina (Gerente) envia a planta e marca
  * etapas; Rafael (Head de Infra) marca só na área dele; a equipe da etapa
- * inicia e conclui. Todos do campo veem; Pré-produtor e outro evento não.
+ * inicia e conclui. Todos do campo veem, e o Cliente com o andamento
+ * liberado (só olhando); Pré-produtor e outro evento não.
  * Pelo serviço e direto no banco (RLS e gatilhos seguram sozinhos).
  */
 
 const db = appDb();
 const d = demo();
-afterAll(() => db.$disconnect());
 beforeAll(() => setStorageForTests(memoryStorage()));
+// A Cláudia (Cliente) volta a não ver nada, como os outros testes esperam.
+afterAll(async () => {
+  await setClientView(await actorFor(db, "marina"), d.participants.claudia.id, { progress: false });
+  await db.$disconnect();
+});
 
 const rock = d.events.rock.id;
 const as = <T>(p: Person, fn: (tx: Tx) => Promise<T>) => withUser(db, d.users[p]!, fn);
@@ -65,6 +71,11 @@ describe("Planta do começo ao fim", () => {
     const plan = await uploadPlan(marina, rock, { name: "Planta geral" }, PNG);
     planId = plan.id;
     await renamePlan(marina, planId, { name: "Geral" });
+
+    // O Cliente só vê a planta com o andamento liberado pelo Gerente.
+    await expectStatus(getPlanBoard(await actorFor(db, "claudia"), rock), 404);
+    await expectStatus(planImage(await actorFor(db, "claudia"), planId), 404);
+    await setClientView(marina, d.participants.claudia.id, { progress: true });
 
     for (const p of ["rafael", "joao", "claudia"] as const) {
       const board = await getPlanBoard(await actorFor(db, p), rock);

@@ -14,15 +14,24 @@ export async function getDashboard(actor: Actor, eventId: string) {
   const m = membershipFor(actor, eventId);
   const role = isEventAdmin(actor, eventId) ? "ADMIN" : m!.role;
 
+  // Cliente: só o que o Gerente liberou (equipe, andamento), em números.
   if (role === "CLIENTE") {
-    const [areas, teams, people] = await actor.run((tx) =>
-      Promise.all([
-        tx.area.count({ where: { eventId, deletedAt: null } }),
-        tx.team.count({ where: { eventId, deletedAt: null } }),
-        tx.participant.count({ where: { eventId, deletedAt: null, active: true } }),
-      ]),
-    );
-    return { role, structure: { areas, teams, people } } as const;
+    const views = m!.clientView ?? { costs: false, team: false, progress: false };
+    return actor.run(async (tx) => {
+      const structure = views.team
+        ? {
+            areas: await tx.area.count({ where: { eventId, deletedAt: null } }),
+            teams: await tx.team.count({ where: { eventId, deletedAt: null } }),
+            people: await tx.participant.count({ where: { eventId, deletedAt: null, active: true } }),
+          }
+        : null;
+      const progress = views.progress
+        ? Object.fromEntries(
+            (await tx.occurrence.groupBy({ by: ["status"], where: { eventId }, _count: { _all: true } })).map((r) => [r.status, r._count._all]),
+          ) as Partial<Record<OccurrenceStatus, number>>
+        : null;
+      return { role, views, structure, progress } as const;
+    });
   }
 
   const scope = occurrenceScope(actor, eventId);
