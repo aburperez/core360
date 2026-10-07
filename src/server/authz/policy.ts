@@ -178,3 +178,31 @@ export function canWriteReport(a: Actor, eventId: string): boolean {
   if (isEventAdmin(a, eventId)) return true;
   return membershipFor(a, eventId)?.role === "GERENTE";
 }
+
+// ─────────────────────── Planta do evento ───────────────────────
+// Todos do campo veem (canUseField). Espelha app.can_manage_plans,
+// app.can_edit_plan_point e app.can_work_plan_point.
+
+/** Enviar, renomear e apagar plantas: o gestor. */
+export function canManagePlans(a: Actor, eventId: string): boolean {
+  if (isEventAdmin(a, eventId)) return true;
+  return membershipFor(a, eventId)?.role === "GERENTE";
+}
+
+/** Marcar, editar e apagar uma etapa: o gestor, ou o Head da área da etapa. */
+export function canEditPlanPoint(a: Actor, s: { eventId: string; areaId: string | null }): boolean {
+  if (isEventAdmin(a, s.eventId)) return true;
+  const m = membershipFor(a, s.eventId);
+  return m?.role === "GERENTE" || (m?.role === "HEAD" && !!s.areaId && m.areaId === s.areaId);
+}
+
+/** Iniciar e concluir a etapa: quem edita, o responsável e o Operacional da equipe dela. */
+export function canWorkPlanPoint(
+  a: Actor,
+  s: { eventId: string; areaId: string | null; teamId: string | null; responsibleId: string | null },
+): boolean {
+  if (canEditPlanPoint(a, s)) return true;
+  const m = membershipFor(a, s.eventId);
+  if (m?.role !== "HEAD" && m?.role !== "OPERACIONAL") return false;
+  return (!!s.responsibleId && m.participantId === s.responsibleId) || (m.role === "OPERACIONAL" && !!s.teamId && m.teamId === s.teamId);
+}
