@@ -17,6 +17,8 @@ type NavProps = {
   hasBriefing: boolean;
   /** O gestor liberou documentos para o campo. */
   hasDocuments: boolean;
+  /** Fornecedores contratados (o gestor e o Head da área). */
+  canSeeSuppliers: boolean;
   /** Cliente: o que o Gerente liberou para ele acompanhar (null para os outros). */
   client: { costs: boolean; team: boolean; progress: boolean } | null;
 };
@@ -59,6 +61,7 @@ export function EventNav(props: NavProps) {
     { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`) },
     { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`), bar: true },
     { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`) },
+    { href: `${pre}/fornecedores`, label: "Fornecedores", icon: "suppliers", active: path.startsWith(`${pre}/fornecedores`) },
     { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`) },
     { href: `${pre}/documentos`, label: "Documentos", short: "Docs", icon: "docs", active: path.startsWith(`${pre}/documentos`) },
     { href: `${pre}/funcoes`, label: "Produtores e Funções", short: "Produtores", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || path.startsWith(`${pre}/quem-faz`) || (path.startsWith(`${pre}/briefing`) && !path.startsWith(`${pre}/briefing-evento`)), bar: true },
@@ -73,6 +76,7 @@ export function EventNav(props: NavProps) {
     { href: `${base}/equipe`, label: props.canBuildTeam ? "Montar equipe" : "Equipe", short: "Equipe", icon: "team", active: path.startsWith(`${base}/equipe`) },
     // Na barra de baixo cabem cinco: os recebimentos ficam no menu ☰ e no aviso do painel.
     ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", short: "Receber", icon: "receipts" as const, active: path.startsWith(`${base}/recebimentos`), desktopOnly: true }] : []),
+    ...(props.canSeeSuppliers ? [{ href: `${base}/fornecedores`, label: "Fornecedores", icon: "suppliers" as const, active: path.startsWith(`${base}/fornecedores`), desktopOnly: true }] : []),
     ...(props.hasDocuments ? [{ href: `${base}/documentos`, label: "Documentos", short: "Docs", icon: "docs" as const, active: path.startsWith(`${base}/documentos`), desktopOnly: true }] : []),
     ...(props.hasBriefing ? [{ href: `${base}/briefing`, label: "Meu briefing", short: "Briefing", icon: "briefing" as const, active: path.startsWith(`${base}/briefing`), desktopOnly: true }] : []),
   ];

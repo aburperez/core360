@@ -155,9 +155,10 @@ describe("Cotação do começo ao fim", () => {
     expect((await cotacaoNotices("marina", id)).map((n) => n.title)).toContain("3 orçamentos recebidos: compare e escolha");
 
     // No banco: quarto orçamento não existe.
+    const { supplierId } = await as("sofia", (tx) => tx.supplierQuote.findUniqueOrThrow({ where: { id: quoteIds[0]! } }));
     await expectPgError(
       as("sofia", (tx) => tx.supplierQuote.create({
-        data: { ...supplier(1, 1), cnpj: "11222333000181", phone: "+5511987654321", eventId: rock, requestId: id, position: 4, createdById: d.users.sofia! },
+        data: { ...supplier(1, 1), cnpj: "11222333000181", phone: "+5511987654321", supplierId, eventId: rock, requestId: id, position: 4, createdById: d.users.sofia! },
       })),
       "23514",
     );

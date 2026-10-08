@@ -111,7 +111,7 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
               const x = q.quotes.find((y) => y.position === pos);
               const row = x && q.comparison.rows.find((r) => r.id === x.id);
               if (!x) {
-                return q.can.addQuote && pos === q.quotes.length + 1 ? <AddQuote key={pos} requestId={q.id} /> : (
+                return q.can.addQuote && pos === q.quotes.length + 1 ? <AddQuote key={pos} requestId={q.id} suppliers={q.suppliers} /> : (
                   <div key={pos} className="flex min-h-40 items-center justify-center rounded-2xl border-2 border-dashed border-border/60 text-sm text-muted">
                     Orçamento {pos}
                   </div>

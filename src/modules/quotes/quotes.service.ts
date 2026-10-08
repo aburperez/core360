@@ -13,6 +13,7 @@ import { parseDecimal } from "../../lib/money";
 import { normalizePhone } from "../../lib/phone";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
+import { resolveSupplier, supplierOptions } from "../suppliers/suppliers.service";
 import { sniffImage } from "../attachments/image";
 
 /**
@@ -91,14 +92,14 @@ const requestSelect = {
   sentAt: true, slaMinutes: true, dueAt: true, slaSetAt: true, completedAt: true,
   chosenQuoteId: true, chosenReason: true, closedAt: true, createdAt: true, updatedAt: true,
   responsible: { select: { id: true, name: true, role: true, userId: true } },
-  costItem: { select: { id: true, name: true, quantity: true, frequency: true, unitValue: true, section: { select: { name: true } } } },
+  costItem: { select: { id: true, name: true, quantity: true, frequency: true, unitValue: true, category: true, section: { select: { name: true } } } },
   slaSetBy: { select: { name: true } },
   closedBy: { select: { name: true } },
   createdBy: { select: { name: true } },
 } satisfies Prisma.QuoteRequestSelect;
 
 const quoteSelect = {
-  id: true, requestId: true, position: true, cnpj: true, companyName: true, phone: true, email: true,
+  id: true, requestId: true, supplierId: true, position: true, cnpj: true, companyName: true, phone: true, email: true,
   contactName: true, totalValue: true, paymentTerms: true, notes: true, fileName: true, fileMime: true, fileSize: true,
   createdAt: true, updatedAt: true,
 } satisfies Prisma.SupplierQuoteSelect;
@@ -175,6 +176,8 @@ export async function getQuote(actor: Actor, id: string, now = new Date()) {
     const event = await tx.event.findUniqueOrThrow({ where: { id: base.eventId }, select: { name: true } });
     const list = quotes.map(toQuote);
     const editable = r.status === "ABERTA" || r.status === "ENVIADA";
+    // O formulário do orçamento escolhe do cadastro (os da categoria do item primeiro).
+    const suppliers = editable ? await supplierOptions(tx, base.eventId, r.costItem?.category ?? null) : [];
     const manager = canReviewSla(actor, base.eventId);
     const { costItem, ...rest } = r;
     return {
@@ -187,6 +190,7 @@ export async function getQuote(actor: Actor, id: string, now = new Date()) {
       },
       quotes: list,
       comparison: compareQuotes(list),
+      suppliers,
       people,
       costItems: items.map((i) => ({ id: i.id, label: `${i.section.name} › ${i.name}` })),
       can: {
@@ -402,16 +406,17 @@ export async function addSupplierQuote(actor: Actor, requestId: string, input: u
       const position = [1, 2, 3].find((p) => !used.includes(p));
       if (!position) throw new ValidationError(`A cotação já tem ${MAX_QUOTES} orçamentos. Edite ou remova um deles.`);
       if (stored) await stored.save(tx);
+      const supplier = await resolveSupplier(tx, actor, r.eventId, data);
       const q = await tx.supplierQuote.create({
         data: {
-          ...data, eventId: r.eventId, requestId: r.id, position, createdById: actor.userId,
+          ...data, supplierId: supplier.id, eventId: r.eventId, requestId: r.id, position, createdById: actor.userId,
           ...(stored && { fileKey: stored.key, fileName: stored.name, fileMime: stored.mime, fileSize: stored.size }),
         },
         select: quoteSelect,
       });
       await audit(tx, actor, { eventId: r.eventId, entity: "supplier_quote", entityId: q.id, action: "CREATE", after: auditQuote({ ...data, requestId: r.id, file: !!stored }) });
       await syncCompleted(tx, r);
-      return toQuote(q);
+      return { ...toQuote(q), newSupplier: supplier.created };
     });
   } catch (e) {
     if (isUniqueViolation(e)) throw new ConflictError("Outra pessoa acabou de registrar um orçamento. Atualize a tela e tente de novo.");
@@ -444,6 +449,14 @@ export async function updateSupplierQuote(actor: Actor, quoteId: string, input: 
       Object.assign(patch, { fileKey: stored.key, fileName: stored.name, fileMime: stored.mime, fileSize: stored.size });
     }
     if (!Object.keys(patch).length) return toQuote(await tx.supplierQuote.findUniqueOrThrow({ where: { id: q.id }, select: quoteSelect }));
+    // Outro CNPJ é outro fornecedor: aponta para o do cadastro (ou um novo).
+    if (typeof patch.cnpj === "string" && patch.cnpj !== q.cnpj) {
+      const s = await resolveSupplier(tx, actor, q.eventId, {
+        cnpj: patch.cnpj, companyName: String(patch.companyName ?? q.companyName), contactName: String(patch.contactName ?? q.contactName),
+        phone: String(patch.phone ?? q.phone), email: String(patch.email ?? q.email),
+      });
+      patch.supplierId = s.id;
+    }
     const updated = await tx.supplierQuote.update({ where: { id: q.id }, data: patch, select: quoteSelect });
     await audit(tx, actor, {
       eventId: q.eventId, entity: "supplier_quote", entityId: q.id, action: "UPDATE",

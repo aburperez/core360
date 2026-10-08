@@ -220,10 +220,30 @@ const cnpjMask = (v: string) => {
   return d.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
 };
 
-/** Novo orçamento ou correção de um existente, com o arquivo recebido. */
-export function QuoteForm({ requestId, quote, onDone }: { requestId: string; quote?: QuoteView; onDone?: () => void }) {
+export type SupplierOption = {
+  id: string; cnpj: string; companyName: string; tradeName: string | null; contactName: string | null;
+  phone: string | null; email: string | null; suggested: boolean;
+};
+
+const NEW = "novo";
+
+/**
+ * Novo orçamento ou correção de um existente, com o arquivo recebido. O
+ * fornecedor vem do cadastro da agência (os da categoria do item primeiro) ou
+ * entra como "Novo fornecedor", que vai para o cadastro junto com o orçamento.
+ */
+export function QuoteForm({ requestId, quote, suppliers = [], onDone }: { requestId: string; quote?: QuoteView; suppliers?: SupplierOption[]; onDone?: () => void }) {
+  const [pick, setPick] = useState<string>(quote ? NEW : suppliers.length ? "" : NEW);
   const [cnpj, setCnpj] = useState(quote ? cnpjMask(quote.cnpj) : "");
   const { busy, error, run } = useAction();
+  const chosen = suppliers.find((s) => s.id === pick) ?? null;
+  // Digitou no "Novo fornecedor" um CNPJ que já está no cadastro: usa o do cadastro.
+  const known = !quote && pick === NEW ? suppliers.find((s) => s.cnpj === cnpj.replace(/\D/g, "")) ?? null : null;
+  const suggested = suppliers.filter((s) => s.suggested);
+  const others = suppliers.filter((s) => !s.suggested);
+  const label = (s: SupplierOption) => s.tradeName ? `${s.tradeName} (${s.companyName})` : s.companyName;
+  // Campos de contato: do orçamento, do fornecedor escolhido ou em branco.
+  const contact = quote ?? chosen;
   return (
     <form
       className="grid gap-3 sm:grid-cols-2"
@@ -232,7 +252,8 @@ export function QuoteForm({ requestId, quote, onDone }: { requestId: string; quo
         const f = new FormData(e.currentTarget);
         const body = new FormData();
         body.set("data", JSON.stringify({
-          cnpj, companyName: f.get("companyName"), phone: f.get("phone"), email: f.get("email"), contactName: f.get("contactName"),
+          cnpj: chosen ? chosen.cnpj : cnpj, companyName: chosen ? chosen.companyName : f.get("companyName"),
+          phone: f.get("phone"), email: f.get("email"), contactName: f.get("contactName"),
           totalValue: f.get("totalValue"), paymentTerms: f.get("paymentTerms") || null, notes: f.get("notes") || null,
         }));
         const file = f.get("file");
@@ -243,45 +264,83 @@ export function QuoteForm({ requestId, quote, onDone }: { requestId: string; quo
         if (ok) onDone?.();
       }}
     >
-      <label className="block">
-        <Label>CNPJ</Label>
-        <Input value={cnpj} onChange={(e) => setCnpj(cnpjMask(e.target.value))} inputMode="numeric" required placeholder="00.000.000/0000-00" />
-      </label>
-      <label className="block">
-        <Label>Razão social</Label>
-        <Input name="companyName" required maxLength={160} defaultValue={quote?.companyName} />
-      </label>
-      <label className="block">
-        <Label>Responsável</Label>
-        <Input name="contactName" required maxLength={120} defaultValue={quote?.contactName} />
-      </label>
-      <label className="block">
-        <Label>Telefone</Label>
-        <Input name="phone" type="tel" required maxLength={30} defaultValue={quote?.phone} placeholder="(11) 98765-4321" />
-      </label>
-      <label className="block">
-        <Label>E-mail</Label>
-        <Input name="email" type="email" required maxLength={160} defaultValue={quote?.email} />
-      </label>
-      <label className="block">
-        <Label>Valor total (R$)</Label>
-        <Input name="totalValue" inputMode="decimal" required defaultValue={quote ? String(quote.totalValue).replace(".", ",") : ""} placeholder="Ex.: 27.500,00" />
-      </label>
-      <label className="block">
-        <Label hint="(opcional)">Condição de pagamento</Label>
-        <Input name="paymentTerms" maxLength={300} defaultValue={quote?.paymentTerms ?? ""} placeholder="Ex.: 30dd após o evento" />
-      </label>
-      <label className="block">
-        <Label hint={quote?.hasFile ? "(envie outro para trocar)" : "(PDF, foto, Excel ou Word, até 10 MB)"}>Arquivo recebido</Label>
-        <Input name="file" type="file" accept=".pdf,image/*,.xlsx,.docx" className="py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1 file:text-foreground" />
-      </label>
-      <label className="block sm:col-span-2">
-        <Label hint="(opcional)">Observações</Label>
-        <Textarea name="notes" maxLength={2000} rows={2} defaultValue={quote?.notes ?? ""} placeholder="Prazo de entrega, o que está incluso, validade da proposta" />
-      </label>
+      {!quote && (
+        <label className="block sm:col-span-2">
+          <Label hint="(do cadastro da agência)">Fornecedor</Label>
+          <Select value={pick} required onChange={(e) => setPick(e.target.value)}>
+            <option value="" disabled>Escolha o fornecedor</option>
+            {suggested.length > 0 && (
+              <optgroup label="Sugeridos para a categoria do item">
+                {suggested.map((s) => <option key={s.id} value={s.id}>{label(s)}</option>)}
+              </optgroup>
+            )}
+            {others.length > 0 && (
+              <optgroup label={suggested.length ? "Outros do cadastro" : "Cadastro da agência"}>
+                {others.map((s) => <option key={s.id} value={s.id}>{label(s)}</option>)}
+              </optgroup>
+            )}
+            <option value={NEW}>+ Novo fornecedor</option>
+          </Select>
+        </label>
+      )}
+      {chosen ? (
+        <div className="rounded-xl border border-border px-3 py-2 sm:col-span-2">
+          <p className="font-semibold">{chosen.companyName}</p>
+          <p className="text-sm tabular-nums text-muted">CNPJ {cnpjMask(chosen.cnpj)}</p>
+        </div>
+      ) : (pick === NEW || quote) && (
+        <>
+          {!quote && <p className="text-sm text-muted sm:col-span-2">O fornecedor novo entra no cadastro da agência junto com este orçamento.</p>}
+          <label className="block">
+            <Label>CNPJ</Label>
+            <Input value={cnpj} onChange={(e) => setCnpj(cnpjMask(e.target.value))} inputMode="numeric" required placeholder="00.000.000/0000-00" />
+            {known && (
+              <button type="button" onClick={() => setPick(known.id)} className="mt-1 text-left text-sm text-primary underline">
+                Esse CNPJ já está no cadastro: {known.companyName}. Usar este.
+              </button>
+            )}
+          </label>
+          <label className="block">
+            <Label>Razão social</Label>
+            <Input name="companyName" required maxLength={160} defaultValue={quote?.companyName} />
+          </label>
+        </>
+      )}
+      {(pick || quote) && (
+        <div key={pick} className="contents">
+          <label className="block">
+            <Label>Responsável</Label>
+            <Input name="contactName" required maxLength={120} defaultValue={contact?.contactName ?? ""} />
+          </label>
+          <label className="block">
+            <Label>Telefone</Label>
+            <Input name="phone" type="tel" required maxLength={30} defaultValue={contact?.phone ?? ""} placeholder="(11) 98765-4321" />
+          </label>
+          <label className="block">
+            <Label>E-mail</Label>
+            <Input name="email" type="email" required maxLength={160} defaultValue={contact?.email ?? ""} />
+          </label>
+          <label className="block">
+            <Label>Valor total (R$)</Label>
+            <Input name="totalValue" inputMode="decimal" required defaultValue={quote ? String(quote.totalValue).replace(".", ",") : ""} placeholder="Ex.: 27.500,00" />
+          </label>
+          <label className="block">
+            <Label hint="(opcional)">Condição de pagamento</Label>
+            <Input name="paymentTerms" maxLength={300} defaultValue={quote?.paymentTerms ?? ""} placeholder="Ex.: 30dd após o evento" />
+          </label>
+          <label className="block">
+            <Label hint={quote?.hasFile ? "(envie outro para trocar)" : "(PDF, foto, Excel ou Word, até 10 MB)"}>Arquivo recebido</Label>
+            <Input name="file" type="file" accept=".pdf,image/*,.xlsx,.docx" className="py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1 file:text-foreground" />
+          </label>
+          <label className="block sm:col-span-2">
+            <Label hint="(opcional)">Observações</Label>
+            <Textarea name="notes" maxLength={2000} rows={2} defaultValue={quote?.notes ?? ""} placeholder="Prazo de entrega, o que está incluso, validade da proposta" />
+          </label>
+        </div>
+      )}
       <div className="sm:col-span-2"><FormError message={error} /></div>
       <div className="flex gap-2 sm:col-span-2">
-        <Button type="submit" disabled={busy}>{quote ? "Salvar" : "Registrar orçamento"}</Button>
+        <Button type="submit" disabled={busy || (!pick && !quote)}>{quote ? "Salvar" : "Registrar orçamento"}</Button>
         {onDone && <Button type="button" variant="secondary" onClick={onDone}>Cancelar</Button>}
       </div>
     </form>
@@ -289,7 +348,7 @@ export function QuoteForm({ requestId, quote, onDone }: { requestId: string; quo
 }
 
 /** Espaço de um orçamento: botão para registrar ou o formulário aberto. */
-export function AddQuote({ requestId }: { requestId: string }) {
+export function AddQuote({ requestId, suppliers }: { requestId: string; suppliers: SupplierOption[] }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
@@ -302,7 +361,7 @@ export function AddQuote({ requestId }: { requestId: string }) {
       </button>
     );
   }
-  return <Card className="sm:col-span-2 lg:col-span-3"><p className="mb-3 font-semibold">Novo orçamento</p><QuoteForm requestId={requestId} onDone={() => setOpen(false)} /></Card>;
+  return <Card className="sm:col-span-2 lg:col-span-3"><p className="mb-3 font-semibold">Novo orçamento</p><QuoteForm requestId={requestId} suppliers={suppliers} onDone={() => setOpen(false)} /></Card>;
 }
 
 /** Editar ou remover um orçamento registrado. */

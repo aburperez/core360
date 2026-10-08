@@ -219,6 +219,8 @@ model User {
   quotesSlaSet         QuoteRequest[]       @relation("QuoteSlaSetBy")
   quotesClosed         QuoteRequest[]       @relation("QuoteClosedBy")
   supplierQuotes       SupplierQuote[]      @relation("SupplierQuoteCreatedBy")
+  suppliersCreated     Supplier[]           @relation("SupplierCreatedBy")
+  supplierBonuses      SupplierBonus[]      @relation("SupplierBonusUpdatedBy")
   visitsCreated        TechnicalVisit[]     @relation("TechnicalVisitCreatedBy")
 
   @@map("users")
@@ -294,6 +296,7 @@ model Agency {
   clients     Client[]
   events      Event[]
   directors   Director[]
+  suppliers   Supplier[]
 
   @@map("agencies")
 }
@@ -1316,6 +1319,8 @@ model SupplierQuote {
   id           String   @id @default(uuid(7)) @db.Uuid
   eventId      String   @map("event_id") @db.Uuid
   requestId    String   @map("request_id") @db.Uuid
+  /// Fornecedor do cadastro da agência. CNPJ e razão social aqui ficam como estavam no orçamento.
+  supplierId   String   @map("supplier_id") @db.Uuid
   /// 1, 2 ou 3.
   position     Int
   cnpj         String
@@ -1336,12 +1341,14 @@ model SupplierQuote {
 
   event     Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
   request   QuoteRequest   @relation("QuoteQuotes", fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
+  supplier  Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   createdBy User           @relation("SupplierQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   chosenBy  QuoteRequest[] @relation("QuoteChosen")
 
   @@unique([requestId, position])
   @@unique([requestId, id])
   @@unique([eventId, id])
+  @@index([supplierId])
   @@map("supplier_quotes")
 }
 
@@ -1648,4 +1655,67 @@ model EventDocument {
   @@unique([eventId, sha256])
   @@index([eventId, category])
   @@map("event_documents")
+}
+
+/// Bonificação que o fornecedor dá à agência: percentual ou valor.
+enum BonusKind {
+  PERCENTUAL
+  VALOR
+
+  @@map("bonus_kind")
+}
+
+/// Cadastro de fornecedores da agência (um por CNPJ), usado em todos os eventos
+/// dela. A Pré-produção cadastra e edita; só o diretor arquiva. Nunca é apagado.
+model Supplier {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  agencyId    String         @map("agency_id") @db.Uuid
+  cnpj        String
+  companyName String         @map("company_name")
+  tradeName   String?        @map("trade_name")
+  contactName String?        @map("contact_name")
+  phone       String?
+  whatsapp    String?
+  email       String?        @db.Citext
+  city        String?
+  /// UF, duas letras.
+  state       String?
+  /// Região de atendimento, em texto.
+  region      String?
+  categories  ItemCategory[] @default([])
+  specialty   String?
+  team        String?
+  equipment   String?
+  capacity    String?
+  notes       String?
+  archivedAt  DateTime?      @map("archived_at") @db.Timestamptz(3)
+  createdById String         @map("created_by") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  agency    Agency          @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  createdBy User            @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  bonus     SupplierBonus?
+  quotes    SupplierQuote[]
+
+  @@unique([agencyId, cnpj])
+  @@index([agencyId, companyName])
+  @@map("suppliers")
+}
+
+/// Bonificação do fornecedor. Só o diretor preenche; o diretor e o Head da área
+/// em que ele foi contratado veem (RLS própria, separada do cadastro).
+model SupplierBonus {
+  supplierId  String    @id @map("supplier_id") @db.Uuid
+  kind        BonusKind
+  value       Decimal   @db.Decimal(14, 2)
+  notes       String?
+  updatedById String    @map("updated_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  updatedBy User     @relation("SupplierBonusUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("supplier_bonuses")
 }
