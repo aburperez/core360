@@ -6,13 +6,16 @@ import { EventNav } from "@/components/event-nav";
 import { hasReceipts } from "@/modules/receipts/receipts.service";
 import { myBriefingState } from "@/modules/briefings/briefings.service";
 import { myPlanSummary } from "@/modules/functions/functions.service";
+import { fieldDocumentCount } from "@/modules/documents/documents.service";
 
 export default async function EventLayout({ children, params }: LayoutProps<"/eventos/[eventId]">) {
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canSeeEvent(actor, eventId)) notFound();
   const role = isEventAdmin(actor, eventId) ? "ADMIN" : membershipFor(actor, eventId)?.role;
-  const [receipts, briefing, plan] = await Promise.all([hasReceipts(actor, eventId), myBriefingState(actor, eventId), myPlanSummary(actor, eventId)]);
+  const [receipts, briefing, plan, docs] = await Promise.all([
+    hasReceipts(actor, eventId), myBriefingState(actor, eventId), myPlanSummary(actor, eventId), fieldDocumentCount(actor, eventId),
+  ]);
   return (
     <div className="pb-nav lg:pb-0 lg:pl-60 print:p-0">
       {isEventSupport(actor, eventId) && (
@@ -30,6 +33,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
         canBuildTeam={canBuildTeam(actor, eventId)}
         hasReceipts={receipts}
         hasBriefing={briefing !== "SEM" || plan.has}
+        hasDocuments={docs > 0}
         client={isClient(actor, eventId) ? (membershipFor(actor, eventId)?.clientView ?? null) : null}
         canSwitchEvent={actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin}
       />

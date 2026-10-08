@@ -4,6 +4,7 @@ import { canUseField, canUsePreProduction, isClient } from "@/server/authz/polic
 import { isAgencyAdmin, isEventSupport, type Actor } from "@/server/authz/actor";
 import { getClientCosts } from "@/modules/costs/costs.service";
 import { brl } from "@/lib/money";
+import { fieldDocumentCount } from "@/modules/documents/documents.service";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
@@ -29,9 +30,9 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   if (isClient(actor, eventId)) return <ClientHome actor={actor} eventId={eventId} />;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
-  const [event, dash, toReceive, briefing, plan, stages] = await Promise.all([
+  const [event, dash, toReceive, briefing, plan, stages, docs] = await Promise.all([
     getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId), myBriefingState(actor, eventId),
-    myPlanSummary(actor, eventId), plansSummary(actor, eventId),
+    myPlanSummary(actor, eventId), plansSummary(actor, eventId), fieldDocumentCount(actor, eventId),
   ]);
   if ("views" in dash) return null; // Cliente: já tratado acima.
   const base = `/eventos/${eventId}`;
@@ -99,6 +100,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
     ...(briefing !== "SEM" || plan.has
       ? [{ href: `${base}/briefing`, icon: "briefing" as const, title: "Meu briefing", line: plan.pending ? `${plan.pending} atividades a fazer` : "Função e agenda" }]
       : []),
+    ...(docs > 0 ? [{ href: `${base}/documentos`, icon: "docs" as const, title: "Documentos", line: `${docs} ${docs === 1 ? "liberado" : "liberados"} pela produção` }] : []),
     ...(toReceive > 0 ? [{ href: `${base}/recebimentos`, icon: "receipts" as const, title: "Recebimentos", line: `${toReceive} a conferir`, alert: true }] : []),
     ...(manager ? [{ href: `${base}/editar`, icon: "edit" as const, title: "Ficha do evento", line: `${EVENT_STATUS_LABEL[event.status]} · datas, local e responsáveis` }] : []),
   ];

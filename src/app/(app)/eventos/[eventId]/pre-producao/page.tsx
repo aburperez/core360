@@ -5,6 +5,7 @@ import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/p
 import { isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { getEvent, getEventFinances } from "@/modules/events/events.service";
 import { getEventBriefing } from "@/modules/events/briefing.service";
+import { listDocuments } from "@/modules/documents/documents.service";
 import { EventStages } from "@/components/event-stages";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
 import { getCostSheet } from "@/modules/costs/costs.service";
@@ -28,9 +29,10 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn, quotes, visits, finances, brief] = await Promise.all([
+  const [event, types, sheet, fn, quotes, visits, finances, brief, docs] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
     quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId), getEventBriefing(actor, eventId),
+    listDocuments(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
   const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
@@ -65,6 +67,10 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
     {
       href: `${base}/visitas`, icon: "visit", title: "Visitas técnicas",
       line: visits.next ? `Próxima: ${formatDateTime(visits.next.scheduledAt)} · ${visits.next.responsible.name}` : visits.total ? `${visits.total} feitas` : "Nenhuma marcada",
+    },
+    {
+      href: `${base}/documentos`, icon: "docs", title: "Documentos",
+      line: docs.documents.length ? `${docs.documents.length} ${docs.documents.length === 1 ? "arquivo" : "arquivos"} · ${docs.documents.filter((d) => d.visibleToField).length} no campo` : "Nenhum enviado",
     },
     { href: `${base}/funcoes`, icon: "functions", title: "Funções e briefing", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
     { href: `${base}/relatorio`, icon: "report", title: "Relatório diário", line: "Chamados e recebimentos do dia" },

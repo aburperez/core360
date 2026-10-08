@@ -15,6 +15,8 @@ type NavProps = {
   hasReceipts: boolean;
   /** A pessoa tem briefing, função ou agenda (no celular fica no cartão da tela inicial). */
   hasBriefing: boolean;
+  /** O gestor liberou documentos para o campo. */
+  hasDocuments: boolean;
   /** Cliente: o que o Gerente liberou para ele acompanhar (null para os outros). */
   client: { costs: boolean; team: boolean; progress: boolean } | null;
 };
@@ -58,6 +60,7 @@ export function EventNav(props: NavProps) {
     { href: `${pre}/custos`, label: "Custos", icon: "costs", active: path.startsWith(`${pre}/custos`), bar: true },
     { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`) },
     { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`) },
+    { href: `${pre}/documentos`, label: "Documentos", short: "Docs", icon: "docs", active: path.startsWith(`${pre}/documentos`) },
     { href: `${pre}/funcoes`, label: "Funções e briefing", short: "Funções", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || (path.startsWith(`${pre}/briefing`) && !path.startsWith(`${pre}/briefing-evento`)), bar: true },
     { href: `${pre}/relatorio`, label: "Relatório diário", short: "Relatório", icon: "report", active: path.startsWith(`${pre}/relatorio`) },
   ];
@@ -70,6 +73,7 @@ export function EventNav(props: NavProps) {
     { href: `${base}/equipe`, label: props.canBuildTeam ? "Montar equipe" : "Equipe", short: "Equipe", icon: "team", active: path.startsWith(`${base}/equipe`) },
     // Na barra de baixo cabem cinco: os recebimentos ficam no menu ☰ e no aviso do painel.
     ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", short: "Receber", icon: "receipts" as const, active: path.startsWith(`${base}/recebimentos`), desktopOnly: true }] : []),
+    ...(props.hasDocuments ? [{ href: `${base}/documentos`, label: "Documentos", short: "Docs", icon: "docs" as const, active: path.startsWith(`${base}/documentos`), desktopOnly: true }] : []),
     ...(props.hasBriefing ? [{ href: `${base}/briefing`, label: "Meu briefing", short: "Briefing", icon: "briefing" as const, active: path.startsWith(`${base}/briefing`), desktopOnly: true }] : []),
   ];
   // O Cliente só acompanha: a tela inicial e o que foi liberado para ele.

@@ -191,6 +191,7 @@ model User {
   sessions             Session[]
   accounts             Account[]
   participations       Participant[]        @relation("ParticipantUser")
+  documentsUploaded    EventDocument[]      @relation("EventDocumentUploadedBy")
   participantsCreated  Participant[]        @relation("ParticipantCreatedBy")
   invitationsCreated   Invitation[]
   occurrencesCreated   Occurrence[]         @relation("OccurrenceCreatedBy")
@@ -438,6 +439,7 @@ model Event {
   finances       EventFinances?
   briefing       EventBriefing?
   briefingFronts EventBriefingFront[]
+  documents      EventDocument[]
   lead           Participant?          @relation("EventLead", fields: [id, leadId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_lead_fkey")
   producer       Participant?          @relation("EventProducer", fields: [id, producerId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_producer_fkey")
 
@@ -1501,4 +1503,51 @@ model EventBriefingFront {
 
   @@id([eventId, front])
   @@map("event_briefing_fronts")
+}
+
+/// Categorias da central de documentos do evento.
+enum DocumentCategory {
+  BRIEFING
+  PLANTA
+  MEMORIAL
+  MANUAL
+  IDENTIDADE_VISUAL
+  PROJETO_3D
+  ORCAMENTO_CLIENTE
+  CONTRATO
+  PEDIDO
+  NOTA_FISCAL
+  ART_RRT
+  LAUDO
+  SEGURO
+  CRONOGRAMA
+  MAPA
+  CHECKLIST
+  OUTRO
+
+  @@map("document_category")
+}
+
+/// Documento do evento (Pré-produção). O gestor pode liberar para o campo ler.
+model EventDocument {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  eventId        String           @map("event_id") @db.Uuid
+  category       DocumentCategory
+  title          String
+  fileName       String           @map("file_name")
+  mimeType       String           @map("mime_type")
+  sizeBytes      Int              @map("size_bytes")
+  sha256         String
+  storageKey     String           @unique @map("storage_key")
+  visibleToField Boolean          @default(false) @map("visible_to_field")
+  uploadedById   String           @map("uploaded_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event      Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation("EventDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@unique([eventId, sha256])
+  @@index([eventId, category])
+  @@map("event_documents")
 }
