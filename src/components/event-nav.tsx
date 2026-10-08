@@ -56,6 +56,7 @@ export function EventNav(props: NavProps) {
     { href: `${pre}/quem-faz`, label: "Quem faz o quê", short: "Quem faz", icon: "matrix", active: path.startsWith(`${pre}/quem-faz`) },
     { href: `${pre}/custos`, label: "Custos", icon: "costs", active: path.startsWith(`${pre}/custos`), bar: true },
     { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`) },
+    { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`) },
     { href: `${pre}/funcoes`, label: "Funções e briefing", short: "Funções", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || path.startsWith(`${pre}/briefing`), bar: true },
     { href: `${pre}/relatorio`, label: "Relatório diário", short: "Relatório", icon: "report", active: path.startsWith(`${pre}/relatorio`) },
   ];

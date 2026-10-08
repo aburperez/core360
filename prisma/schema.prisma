@@ -212,6 +212,7 @@ model User {
   quotesSlaSet         QuoteRequest[]       @relation("QuoteSlaSetBy")
   quotesClosed         QuoteRequest[]       @relation("QuoteClosedBy")
   supplierQuotes       SupplierQuote[]      @relation("SupplierQuoteCreatedBy")
+  visitsCreated        TechnicalVisit[]     @relation("TechnicalVisitCreatedBy")
 
   @@map("users")
 }
@@ -412,6 +413,7 @@ model Event {
   floorPlans     FloorPlan[]
   planPoints     PlanPoint[]
   planPhotos     PlanPointPhoto[]
+  visits         TechnicalVisit[]
 
   @@index([clientId])
   @@index([agencyId])
@@ -510,6 +512,7 @@ model Participant {
   activityChecks         ActivityCheck[]
   quoteRequests          QuoteRequest[]
   planPoints             PlanPoint[]
+  visits                 TechnicalVisit[]
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -1310,6 +1313,33 @@ model PlanPointPhoto {
 
   @@unique([pointId, sha256])
   @@map("plan_point_photos")
+}
+
+/// Visita técnica da Pré-produção ao local do evento: quem vai (Gerente ou
+/// Pré-produtor), data e horário, e os EPIs necessários. Só a Pré-produção vê.
+model TechnicalVisit {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  title         String
+  place         String?
+  scheduledAt   DateTime @map("scheduled_at") @db.Timestamptz(3)
+  responsibleId String   @map("responsible_id") @db.Uuid
+  /// EPIs necessários, pelos nomes da lista do app (src/modules/visits/ppe.ts).
+  ppe           String[] @default([])
+  /// Outros EPIs ou cuidados, em texto livre.
+  ppeOther      String?  @map("ppe_other")
+  notes         String?
+  createdById   String   @map("created_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  responsible Participant @relation(fields: [eventId, responsibleId], references: [eventId, id], onDelete: Restrict)
+  createdBy   User        @relation("TechnicalVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, id])
+  @@index([eventId, scheduledAt])
+  @@map("technical_visits")
 }
 
 /// O que o Cliente vê no evento. Ele só olha; quem libera cada parte é o

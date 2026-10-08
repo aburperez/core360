@@ -8,11 +8,12 @@ import { listServiceTypes } from "@/modules/service-types/service-types.service"
 import { getCostSheet } from "@/modules/costs/costs.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
 import { quotesSummary } from "@/modules/quotes/quotes.service";
+import { visitsSummary } from "@/modules/visits/visits.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
 import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, Tile, pct } from "@/components/panel";
-import { ROLE_LABEL, formatDuration } from "@/lib/format";
+import { ROLE_LABEL, formatDateTime, formatDuration } from "@/lib/format";
 import { brl } from "@/lib/money";
 
 export const metadata = { title: "Pré-produção" };
@@ -25,9 +26,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn, quotes] = await Promise.all([
+  const [event, types, sheet, fn, quotes, visits] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
-    quotesSummary(actor, eventId),
+    quotesSummary(actor, eventId), visitsSummary(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
   const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
@@ -55,6 +56,10 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
     { href: `${base}/quem-faz`, icon: "matrix", title: "Quem faz o quê", line: `${withPeople} de ${types.length} tipos com pessoas` },
     { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
     { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
+    {
+      href: `${base}/visitas`, icon: "visit", title: "Visitas técnicas",
+      line: visits.next ? `Próxima: ${formatDateTime(visits.next.scheduledAt)} · ${visits.next.responsible.name}` : visits.total ? `${visits.total} feitas` : "Nenhuma marcada",
+    },
     { href: `${base}/funcoes`, icon: "functions", title: "Funções e briefing", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
     { href: `${base}/relatorio`, icon: "report", title: "Relatório diário", line: "Chamados e recebimentos do dia" },
   ];

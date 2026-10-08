@@ -8,6 +8,7 @@ import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { BriefingView } from "@/components/briefing-view";
 import { MyAgenda, ProfileForm } from "@/components/plan";
+import { MontagemPpe } from "@/components/ppe";
 import { Card, EmptyState, PAGE, SectionTitle, cx } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { ReadButton } from "./read-button";
@@ -62,6 +63,13 @@ export default async function MyBriefingPage({ params }: PageProps<"/eventos/[ev
             </div>
           </div>
         )}
+
+        <section>
+          <SectionTitle>EPIs para a montagem</SectionTitle>
+          <Card>
+            <MontagemPpe intro="Sem estes itens, não entre na área de montagem." />
+          </Card>
+        </section>
 
         {plan && (
           <section>
