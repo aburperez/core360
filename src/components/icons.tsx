@@ -153,6 +153,13 @@ const PATHS = {
       <path d="M10 18h4" />
     </>
   ),
+  pending: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </>
+  ),
   calendar: (
     <>
       <rect width="18" height="18" x="3" y="4" rx="2" />

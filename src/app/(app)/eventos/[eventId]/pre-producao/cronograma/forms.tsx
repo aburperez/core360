@@ -9,7 +9,7 @@ import { Button, Card, cx } from "@/components/ui";
 type Person = { id: string; name: string };
 type Milestone = { id: string; title: string; dueOn: string; responsibleId: string | null; state: string };
 
-function useAction() {
+export function useAction() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +30,15 @@ function useAction() {
   return { busy, error, run };
 }
 
-/** Bolinha de feito: um toque marca, outro desmarca. */
-export function DoneToggle({ id, done, title }: { id: string; done: boolean; title: string }) {
+/** Bolinha de feito: um toque marca, outro desmarca. Serve ao marco e à pendência manual (path). */
+export function DoneToggle({ id, done, title, path = `/api/milestones/${id}/done` }: { id: string; done: boolean; title: string; path?: string }) {
   const { busy, error, run } = useAction();
   return (
     <>
       <button
         type="button" disabled={busy} aria-pressed={done}
         aria-label={done ? `Desmarcar "${title}"` : `Marcar "${title}" como feito`}
-        onClick={() => run(() => api(`/api/milestones/${id}/done`, { body: { done: !done } }))}
+        onClick={() => run(() => api(path, { body: { done: !done } }))}
         className={cx(
           "grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 transition",
           done ? "border-emerald-400 bg-emerald-400 text-background" : "border-border hover:border-primary",

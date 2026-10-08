@@ -12,6 +12,7 @@ import { getCostSheet } from "@/modules/costs/costs.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
 import { quotesSummary } from "@/modules/quotes/quotes.service";
 import { visitsSummary } from "@/modules/visits/visits.service";
+import { pendenciesSummary } from "@/modules/pendencies/pendencies.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
@@ -29,10 +30,10 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn, quotes, visits, finances, brief, docs] = await Promise.all([
+  const [event, types, sheet, fn, quotes, visits, finances, brief, docs, pending] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
     quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId), getEventBriefing(actor, eventId),
-    listDocuments(actor, eventId),
+    listDocuments(actor, eventId), pendenciesSummary(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
   const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
@@ -63,6 +64,12 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       href: `${base}/briefing-evento`, icon: "briefing", title: "Briefing do evento",
       line: brief.updatedAt ? `${brief.progress.answered} de 13 frentes · ${brief.progress.needed} precisam` : "Ainda não preenchido",
     },
+    {
+      href: `${base}/pendencias`, icon: "pending", title: "Pendências", alert: pending.late > 0,
+      line: pending.late ? `${pending.late} atrasada${pending.late > 1 ? "s" : ""} · ${pending.today} vence${pending.today === 1 ? "" : "m"} hoje`
+        : pending.today ? `${pending.today} vence${pending.today === 1 ? "" : "m"} hoje · ${pending.week} na semana` : `Nada atrasado · ${pending.week} na semana`,
+    },
+    { href: `${base}/cronograma`, icon: "calendar", title: "Cronograma", line: "Marcos de T-30 ao dia do evento" },
     { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
     {
       href: `${base}/itens`, icon: "items", title: "Mapa de itens",
@@ -90,6 +97,18 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
         <PageHeading trail={[event.name, "Pré-produção"]} title="Painel da pré-produção" />
         <MobileHero name={actor.name} role={role} detail={event.name} />
         <EventStages status={event.status} className="mb-4" />
+        {pending.late > 0 && (
+          <Link
+            href={`${base}/pendencias`}
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-red-500/50 bg-red-500/10 p-4 transition hover:border-red-400"
+          >
+            <span className="min-w-0">
+              <b className="text-red-300">{pending.late} {pending.late === 1 ? "pendência atrasada" : "pendências atrasadas"}</b>
+              <span className="block text-sm text-muted">Crítico: resolva primeiro. Veja tudo na Central de pendências.</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold text-red-300">Ver ›</span>
+          </Link>
+        )}
         <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-4">
             {/* Celular: cartões quadrados; computador: atalhos em linha. */}

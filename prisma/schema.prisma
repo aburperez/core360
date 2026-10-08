@@ -197,6 +197,8 @@ model User {
   supplierRatings          SupplierRating[]
   milestonesDone           EventMilestone[]     @relation("EventMilestoneDoneBy")
   milestonesCreated        EventMilestone[]     @relation("EventMilestoneCreatedBy")
+  tasksDone                EventTask[]          @relation("EventTaskDoneBy")
+  tasksCreated             EventTask[]          @relation("EventTaskCreatedBy")
   contractsCancelled       Contract[]           @relation("ContractCancelledBy")
   participantsCreated      Participant[]        @relation("ParticipantCreatedBy")
   invitationsCreated       Invitation[]
@@ -453,6 +455,7 @@ model Event {
   contracts       Contract[]
   supplierRatings SupplierRating[]
   milestones      EventMilestone[]
+  tasks           EventTask[]
   floorPlans      FloorPlan[]
   planPoints      PlanPoint[]
   planPhotos      PlanPointPhoto[]
@@ -488,6 +491,7 @@ model Area {
   occurrences  Occurrence[]
   planPoints   PlanPoint[]
   costItems    CostItem[]
+  tasks        EventTask[]
 
   /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
   @@unique([eventId, id])
@@ -562,6 +566,7 @@ model Participant {
   costItemsToReceive     CostItem[]          @relation("CostItemReceiver")
   responsibleItems       CostItem[]          @relation("CostItemResponsible")
   milestones             EventMilestone[]    @relation("EventMilestoneResponsible")
+  tasks                  EventTask[]         @relation("EventTaskResponsible")
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
   briefing               Briefing?
   clientView             ClientView?
@@ -1882,4 +1887,30 @@ model EventMilestone {
 
   @@index([eventId, dueOn])
   @@map("event_milestones")
+}
+
+/// Pendência criada à mão na Central de pendências (fase 4B). As outras
+/// pendências o app junta do cronograma, itens, cotações, contratos e
+/// avaliações. Só a Pré-produção vê.
+model EventTask {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  title         String
+  dueOn         DateTime? @map("due_on") @db.Date
+  areaId        String?   @map("area_id") @db.Uuid
+  responsibleId String?   @map("responsible_id") @db.Uuid
+  doneAt        DateTime? @map("done_at") @db.Timestamptz(3)
+  doneById      String?   @map("done_by") @db.Uuid
+  createdById   String    @map("created_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  area        Area?        @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "event_tasks_area_fkey")
+  responsible Participant? @relation("EventTaskResponsible", fields: [eventId, responsibleId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "event_tasks_responsible_fkey")
+  doneBy      User?        @relation("EventTaskDoneBy", fields: [doneById], references: [id], onDelete: Restrict)
+  createdBy   User         @relation("EventTaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([eventId, dueOn])
+  @@map("event_tasks")
 }
