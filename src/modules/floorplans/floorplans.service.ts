@@ -88,7 +88,7 @@ export async function uploadPlan(actor: Actor, eventId: string, input: unknown, 
   });
 }
 
-async function loadPlan(actor: Actor, planId: string) {
+export async function loadPlan(actor: Actor, planId: string) {
   const plan = uuid.safeParse(planId).success ? await actor.run((tx) => tx.floorPlan.findUnique({ where: { id: planId } })) : null;
   if (!plan || !canSeePlans(actor, plan.eventId)) throw new NotFoundError("Planta");
   return plan;
