@@ -64,7 +64,7 @@ export async function seedTraining(
       startsAt: now,
       endsAt: new Date(now.getTime() + 60 * 24 * 60 * 60_000),
       venue: "Local do teste",
-      status: "OPERACAO",
+      status: "EVENTO",
     },
   });
   await db.slaPolicy.createMany({

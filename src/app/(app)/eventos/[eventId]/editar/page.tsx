@@ -1,36 +1,44 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { isEventAdmin, membershipFor } from "@/server/authz/actor";
-import { getEvent } from "@/modules/events/events.service";
+import { eventLeaders, getEvent, getEventFinances } from "@/modules/events/events.service";
 import { TopBar } from "@/components/top-bar";
-import { Card, PAGE, cx } from "@/components/ui";
-import { EventForm } from "@/components/event-form";
+import { PageHeading } from "@/components/panel";
+import { EventStages } from "@/components/event-stages";
+import { PAGE, cx } from "@/components/ui";
+import { EventRecordForm } from "@/components/event-record-form";
 import { toLocalInput } from "@/lib/tz";
+import { decimal } from "@/lib/money";
 
-export const metadata = { title: "Dados do evento" };
+export const metadata = { title: "Ficha do evento" };
 
-/** Nome, datas, local e fase do evento: Admin da agência ou Gerente. */
+/** Ficha completa e etapa do evento: Admin da agência ou Gerente. */
 export default async function EditEventPage({ params }: PageProps<"/eventos/[eventId]/editar">) {
   const actor = await requireUser();
   const { eventId } = await params;
   if (!isEventAdmin(actor, eventId) && membershipFor(actor, eventId)?.role !== "GERENTE") notFound();
-  const e = await getEvent(actor, eventId);
+  const [e, leaders, finances] = await Promise.all([getEvent(actor, eventId), eventLeaders(actor, eventId), getEventFinances(actor, eventId)]);
+  const at = (d: Date | null) => (d ? toLocalInput(d, e.timezone) : "");
 
   return (
     <>
-      <TopBar title="Dados do evento" subtitle={e.name} back={`/eventos/${eventId}`} />
-      <main className={cx(PAGE, "py-4 lg:max-w-2xl lg:py-6")}>
-        <p className="mb-3 px-1 text-sm text-muted">Cliente: {e.client.name}. Datas e horas no fuso do evento ({e.timezone.replace("_", " ")}).</p>
-        <Card>
-          <EventForm
-            mode="edit"
-            eventId={eventId}
-            initial={{
-              name: e.name, description: e.description, venue: e.venue, address: e.address, status: e.status,
-              startsAt: toLocalInput(e.startsAt, e.timezone), endsAt: toLocalInput(e.endsAt, e.timezone),
-            }}
-          />
-        </Card>
+      <TopBar title="Ficha do evento" subtitle={e.name} back={`/eventos/${eventId}`} />
+      <main className={cx(PAGE, "space-y-4 py-4 lg:max-w-4xl lg:py-6")}>
+        <PageHeading trail={[e.name]} title="Ficha do evento" />
+        <p className="px-1 text-sm text-muted">Cliente: {e.client.name}. Datas e horas no fuso do evento ({e.timezone.replace("_", " ")}).</p>
+        <EventStages status={e.status} />
+        <EventRecordForm
+          eventId={eventId}
+          leaders={leaders}
+          finances={finances && { approvedBudget: finances.approvedBudget === null ? "" : decimal(finances.approvedBudget), costCenter: finances.costCenter }}
+          initial={{
+            name: e.name, project: e.project, eventType: e.eventType, description: e.description, status: e.status,
+            startsAt: at(e.startsAt), endsAt: at(e.endsAt), setupStartsAt: at(e.setupStartsAt), setupEndsAt: at(e.setupEndsAt),
+            teardownStartsAt: at(e.teardownStartsAt), teardownEndsAt: at(e.teardownEndsAt),
+            venue: e.venue, address: e.address, city: e.city, state: e.state, expectedAudience: e.expectedAudience,
+            leadId: e.leadId, producerId: e.producerId, notes: e.notes,
+          }}
+        />
       </main>
     </>
   );

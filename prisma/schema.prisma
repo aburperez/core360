@@ -28,13 +28,19 @@ enum AgencyStatus {
   @@map("agency_status")
 }
 
+/// As 11 etapas do evento (roadmap do Abu), mais Cancelado.
 enum EventStatus {
+  BRIEFING
   PLANEJAMENTO
+  ORCAMENTO
+  APROVACAO
+  CONTRATACAO
   PRE_PRODUCAO
   MONTAGEM
-  OPERACAO
+  EVENTO
   DESMONTAGEM
-  FINALIZADO
+  FECHAMENTO
+  CONCLUIDO
   CANCELADO
 
   @@map("event_status")
@@ -367,23 +373,37 @@ model Client {
 }
 
 model Event {
-  id            String      @id @default(uuid(7)) @db.Uuid
+  id               String      @id @default(uuid(7)) @db.Uuid
   /// Sempre a agência do cliente (chave composta com clients).
-  agencyId      String      @map("agency_id") @db.Uuid
-  clientId      String      @map("client_id") @db.Uuid
-  name          String
-  description   String?
-  startsAt      DateTime    @map("starts_at") @db.Timestamptz(3)
-  endsAt        DateTime    @map("ends_at") @db.Timestamptz(3)
-  venue         String?
-  address       String?
-  timezone      String      @default("America/Sao_Paulo")
-  status        EventStatus @default(PLANEJAMENTO)
+  agencyId         String      @map("agency_id") @db.Uuid
+  clientId         String      @map("client_id") @db.Uuid
+  name             String
+  description      String?
+  startsAt         DateTime    @map("starts_at") @db.Timestamptz(3)
+  endsAt           DateTime    @map("ends_at") @db.Timestamptz(3)
+  venue            String?
+  address          String?
+  timezone         String      @default("America/Sao_Paulo")
+  status           EventStatus @default(BRIEFING)
+  /// Ficha do evento (fase 1 do roadmap). Valores ficam em event_finances.
+  project          String?
+  eventType        String?     @map("event_type")
+  city             String?
+  state            String?
+  setupStartsAt    DateTime?   @map("setup_starts_at") @db.Timestamptz(3)
+  setupEndsAt      DateTime?   @map("setup_ends_at") @db.Timestamptz(3)
+  teardownStartsAt DateTime?   @map("teardown_starts_at") @db.Timestamptz(3)
+  teardownEndsAt   DateTime?   @map("teardown_ends_at") @db.Timestamptz(3)
+  expectedAudience Int?        @map("expected_audience")
+  /// Responsável geral e produtor responsável: Gerente ou Pré-produtor do evento.
+  leadId           String?     @map("lead_id") @db.Uuid
+  producerId       String?     @map("producer_id") @db.Uuid
+  notes            String?
   /// Contador do número curto das ocorrências (#142). Mantido por trigger.
-  occurrenceSeq Int         @default(0) @map("occurrence_seq")
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  occurrenceSeq    Int         @default(0) @map("occurrence_seq")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
   agency         Agency                @relation(fields: [agencyId], references: [id], onDelete: Restrict)
   client         Client                @relation(fields: [agencyId, clientId], references: [agencyId, id], onDelete: Restrict)
@@ -415,6 +435,9 @@ model Event {
   planPhotos     PlanPointPhoto[]
   visits         TechnicalVisit[]
   visitPhotos    TechnicalVisitPhoto[]
+  finances       EventFinances?
+  lead           Participant?          @relation("EventLead", fields: [id, leadId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_lead_fkey")
+  producer       Participant?          @relation("EventProducer", fields: [id, producerId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_producer_fkey")
 
   @@index([clientId])
   @@index([agencyId])
@@ -514,6 +537,8 @@ model Participant {
   quoteRequests          QuoteRequest[]
   planPoints             PlanPoint[]
   visits                 TechnicalVisit[]
+  leadOf                 Event[]             @relation("EventLead")
+  producerOf             Event[]             @relation("EventProducer")
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -1406,4 +1431,18 @@ model ClientView {
 
   @@unique([eventId, participantId])
   @@map("client_views")
+}
+
+/// Valores da ficha do evento: orçamento aprovado e centro de custo. Tabela à
+/// parte para o campo nunca ler (só a Pré-produção e o Admin).
+model EventFinances {
+  eventId        String   @id @map("event_id") @db.Uuid
+  approvedBudget Decimal? @map("approved_budget") @db.Decimal(14, 2)
+  costCenter     String?  @map("cost_center")
+  updatedById    String   @map("updated_by") @db.Uuid
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("event_finances")
 }

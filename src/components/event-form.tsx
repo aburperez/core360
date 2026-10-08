@@ -6,20 +6,15 @@ import { Button } from "./ui";
 import { FormError, Input, Label, Select, Textarea } from "./field";
 import { api } from "./api-client";
 
-export const EVENT_STATUS_LABEL: Record<string, string> = {
-  PLANEJAMENTO: "Planejamento", PRE_PRODUCAO: "Pré-produção", MONTAGEM: "Montagem", OPERACAO: "Operação",
-  DESMONTAGEM: "Desmontagem", FINALIZADO: "Finalizado", CANCELADO: "Cancelado",
-};
-
 type Values = {
   name: string; description: string | null; venue: string | null; address: string | null;
   /** "2027-04-10T12:00", no fuso do evento (o servidor converte). */
-  startsAt: string; endsAt: string; status?: string;
+  startsAt: string; endsAt: string;
 };
 
 /**
- * Criar evento (com cliente) ou editar os dados e a fase. Data e hora vão sem
- * fuso: o servidor entende no fuso do evento.
+ * Criar evento (com cliente). Data e hora vão sem fuso: o servidor entende no
+ * fuso do evento. A ficha completa fica em Editar (EventRecordForm).
  */
 export function EventForm({
   mode, eventId, initial, clients,
@@ -37,7 +32,7 @@ export function EventForm({
       onSubmit={async (e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
-        const keys = ["name", "description", "venue", "address", "startsAt", "endsAt", ...(mode === "create" ? ["clientId"] : ["status"])];
+        const keys = ["name", "description", "venue", "address", "startsAt", "endsAt", ...(mode === "create" ? ["clientId"] : [])];
         const body = Object.fromEntries(keys.map((k) => [k, String(f.get(k) ?? "")]));
         setBusy(true);
         setError(null);
@@ -93,14 +88,6 @@ export function EventForm({
         <Label hint="(opcional)">Descrição</Label>
         <Textarea name="description" maxLength={2000} defaultValue={initial?.description ?? ""} />
       </label>
-      {mode === "edit" && (
-        <label className="block">
-          <Label>Fase do evento</Label>
-          <Select name="status" defaultValue={initial?.status}>
-            {Object.entries(EVENT_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </Select>
-        </label>
-      )}
       <FormError message={error} />
       {saved && <p className="text-sm text-emerald-300">Salvo.</p>}
       <Button type="submit" disabled={busy} className="w-full sm:w-auto">

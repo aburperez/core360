@@ -20,7 +20,7 @@ function requireAdmin(actor: Actor) {
   if (!isAgencyAdmin(actor)) throw new NotFoundError("Página");
 }
 
-const OPEN_EVENT = { deletedAt: null, status: { notIn: ["FINALIZADO" as const, "CANCELADO" as const] } };
+const OPEN_EVENT = { deletedAt: null, status: { notIn: ["CONCLUIDO" as const, "CANCELADO" as const] } };
 
 const select = {
   id: true, name: true, email: true, phone: true, jobTitle: true, active: true, userId: true, createdAt: true,

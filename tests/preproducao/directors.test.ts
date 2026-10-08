@@ -45,7 +45,7 @@ const directorParts = (directorId: string) =>
     select: { eventId: true, role: true, active: true, userId: true, name: true, areaId: true, teamId: true },
   });
 
-async function newEvent(status?: "FINALIZADO" | "CANCELADO") {
+async function newEvent(status?: "CONCLUIDO" | "CANCELADO") {
   const admin = await actorFor(app, "admin");
   const e = await createEvent(admin, {
     clientId: d.clients.rock.id, name: `Evento ${uniq()}`, startsAt: "2027-05-01T10:00:00Z", endsAt: "2027-05-02T22:00:00Z",
@@ -57,7 +57,7 @@ async function newEvent(status?: "FINALIZADO" | "CANCELADO") {
 
 describe("diretor em todos os eventos", () => {
   it("o Admin cadastra uma vez e ele vira Gerente só nos eventos abertos", async () => {
-    const closed = await newEvent("FINALIZADO");
+    const closed = await newEvent("CONCLUIDO");
     const cancelled = await newEvent("CANCELADO");
     const admin = await actorFor(app, "admin");
     const dir = await createDirector(admin, { name: "Helena Diretora", email: `Helena-${uniq()}@agencia.dev`, jobTitle: "Diretora de produção" });

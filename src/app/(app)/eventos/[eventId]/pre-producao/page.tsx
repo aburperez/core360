@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
-import { getEvent } from "@/modules/events/events.service";
+import { getEvent, getEventFinances } from "@/modules/events/events.service";
+import { EventStages } from "@/components/event-stages";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
 import { getCostSheet } from "@/modules/costs/costs.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
@@ -26,9 +27,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn, quotes, visits] = await Promise.all([
+  const [event, types, sheet, fn, quotes, visits, finances] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
-    quotesSummary(actor, eventId), visitsSummary(actor, eventId),
+    quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
   const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
@@ -71,6 +72,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Painel da pré-produção" />
         <MobileHero name={actor.name} role={role} detail={event.name} />
+        <EventStages status={event.status} className="mb-4" />
         <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-4">
             {/* Celular: cartões quadrados; computador: atalhos em linha. */}
@@ -122,10 +124,34 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
             <Panel title="Custo do evento" action={<Link href={`${base}/custos`} className="text-sm font-semibold text-primary">Abrir ›</Link>}>
               <p className="text-3xl font-bold tabular-nums">{brl(sheet.totals.total)}</p>
               <dl className="mt-3 space-y-1.5 text-sm">
+                {finances?.approvedBudget != null && (
+                  <>
+                    <Line label="Orçamento aprovado" value={brl(finances.approvedBudget)} />
+                    <Line
+                      label={finances.approvedBudget >= sheet.totals.total ? "Saldo" : "Estouro"}
+                      value={brl(Math.abs(finances.approvedBudget - sheet.totals.total))}
+                      tone={finances.approvedBudget >= sheet.totals.total ? "text-emerald-300" : "text-red-300"}
+                    />
+                  </>
+                )}
                 <Line label="Fornecedores" value={brl(sheet.totals.suppliers)} />
                 <Line label="Honorários" value={brl(sheet.totals.fee)} />
                 <Line label="Impostos" value={brl(sheet.totals.invoiceTax + sheet.totals.nfTax)} />
                 {sheet.totals.undefinedCount > 0 && <Line label="Itens sem valor" value={String(sheet.totals.undefinedCount)} tone="text-amber-300" />}
+              </dl>
+            </Panel>
+            <Panel
+              title="Ficha do evento"
+              action={canReviewSla(actor, eventId) ? <Link href={`/eventos/${eventId}/editar`} className="text-sm font-semibold text-primary">Editar ›</Link> : undefined}
+            >
+              <dl className="space-y-1.5 text-sm">
+                <Line label="Evento" value={period(event.startsAt, event.endsAt, event.timezone)} />
+                {event.setupStartsAt && <Line label="Montagem" value={period(event.setupStartsAt, event.setupEndsAt, event.timezone)} />}
+                {event.teardownStartsAt && <Line label="Desmontagem" value={period(event.teardownStartsAt, event.teardownEndsAt, event.timezone)} />}
+                {event.expectedAudience != null && <Line label="Público" value={`${event.expectedAudience.toLocaleString("pt-BR")} pessoas`} />}
+                <Line label="Responsável" value={event.lead?.name ?? "—"} />
+                <Line label="Produtor" value={event.producer?.name ?? "—"} />
+                {finances?.costCenter && <Line label="Centro de custo" value={finances.costCenter} />}
               </dl>
             </Panel>
             <Panel title="Situação">
@@ -154,4 +180,12 @@ function Line({ label, value, tone }: { label: string; value: string; tone?: str
       <dd className={cx("font-semibold tabular-nums", tone)}>{value}</dd>
     </div>
   );
+}
+
+/** "10/04 a 12/04" no fuso do evento (um dia só: "10/04"). */
+function period(from: Date, to: Date | null, tz: string) {
+  const day = (d: Date) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz }).format(d);
+  const a = day(from);
+  const b = to ? day(to) : null;
+  return b && b !== a ? `${a} a ${b}` : a;
 }

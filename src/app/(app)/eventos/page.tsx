@@ -7,13 +7,10 @@ import { agenciesWithoutSupport } from "@/modules/agencies/agencies.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
+import { EVENT_STATUS_LABEL as EVENT_STATUS } from "@/lib/event-stages";
 
 export const metadata = { title: "Eventos" };
 
-const EVENT_STATUS: Record<string, string> = {
-  PLANEJAMENTO: "Planejamento", PRE_PRODUCAO: "Pré-produção", MONTAGEM: "Montagem", OPERACAO: "Operação",
-  DESMONTAGEM: "Desmontagem", FINALIZADO: "Finalizado", CANCELADO: "Cancelado",
-};
 
 export default async function EventsPage({ searchParams }: PageProps<"/eventos">) {
   const actor = await requireUser();

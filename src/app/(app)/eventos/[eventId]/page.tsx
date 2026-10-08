@@ -18,6 +18,7 @@ import { Icon } from "@/components/icons";
 import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, pct, serie } from "@/components/panel";
 import { OccurrenceCard, type OccurrenceRow } from "@/components/occurrence-card";
 import { ROLE_LABEL, formatDuration, formatTime } from "@/lib/format";
+import { EVENT_STATUS_LABEL } from "@/lib/event-stages";
 
 export const metadata = { title: "Gestão de campo" };
 
@@ -99,7 +100,7 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
       ? [{ href: `${base}/briefing`, icon: "briefing" as const, title: "Meu briefing", line: plan.pending ? `${plan.pending} atividades a fazer` : "Função e agenda" }]
       : []),
     ...(toReceive > 0 ? [{ href: `${base}/recebimentos`, icon: "receipts" as const, title: "Recebimentos", line: `${toReceive} a conferir`, alert: true }] : []),
-    ...(manager ? [{ href: `${base}/editar`, icon: "edit" as const, title: "Dados do evento", line: "Nome, datas, local e fase" }] : []),
+    ...(manager ? [{ href: `${base}/editar`, icon: "edit" as const, title: "Ficha do evento", line: `${EVENT_STATUS_LABEL[event.status]} · datas, local e responsáveis` }] : []),
   ];
   const teams = dash.byTeam.slice(0, 6);
 
