@@ -27,10 +27,10 @@ export async function getBudget(actor: Actor, eventId: string) {
         quotedValue: true, contractedValue: true, actualValue: true,
       },
     });
-    // Cotado sozinho: o menor orçamento das cotações do item que não foram canceladas.
+    // Cotado sozinho: a menor proposta na disputa (o negociado, se houver) das cotações do item que não foram canceladas.
     const quotes = await tx.supplierQuote.findMany({
       where: { eventId, request: { costItemId: { not: null }, status: { not: "CANCELADA" } } },
-      select: { totalValue: true, request: { select: { costItemId: true } } },
+      select: { totalValue: true, negotiatedValue: true, status: true, request: { select: { costItemId: true } } },
     });
     return { event, finances, items, quotes };
   });
@@ -38,7 +38,8 @@ export async function getBudget(actor: Actor, eventId: string) {
   const lowest = new Map<string, number>();
   for (const q of data.quotes) {
     const id = q.request.costItemId!;
-    const v = Number(q.totalValue);
+    if (q.status === "CANCELADA" || q.totalValue === null) continue;
+    const v = Number(q.negotiatedValue ?? q.totalValue);
     if (!lowest.has(id) || v < lowest.get(id)!) lowest.set(id, v);
   }
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));

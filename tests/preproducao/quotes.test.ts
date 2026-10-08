@@ -69,9 +69,10 @@ describe("CNPJ e arquivos", () => {
   });
 
   it("comparativo e valor unitário", () => {
-    const c = compareQuotes([{ id: "a", totalValue: 1000 }, { id: "b", totalValue: 1250 }]);
+    const c = compareQuotes([{ id: "a", value: 1000, status: "RECEBIDA" }, { id: "b", value: 1250, status: "EM_NEGOCIACAO" }, { id: "c", value: 900, status: "CANCELADA" }, { id: "d", value: null, status: "SOLICITADA" }]);
     expect(c.minValue).toBe(1000);
     expect(c.rows[1]).toMatchObject({ diff: 250, diffPct: 25, lowest: false });
+    expect(c.rows.map((r) => r.id)).toEqual(["a", "b"]);
     expect(unitValueFor(1000, 2, 4)).toBe(125);
     expect(unitValueFor(1000, 0, null)).toBeNull();
   });

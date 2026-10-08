@@ -66,17 +66,26 @@ export function quoteStage(r: { status: string; dueAt: Date | null; completedAt:
   return r.dueAt < now ? "ATRASADA" : "NO_PRAZO";
 }
 
-/** Comparativo: menor valor e a diferença de cada orçamento para ele. */
-export function compareQuotes<Q extends { id: string; totalValue: number }>(quotes: Q[]) {
-  if (quotes.length === 0) return { minValue: null, rows: [] as (Q & { diff: number; diffPct: number | null; lowest: boolean })[] };
-  const minValue = Math.min(...quotes.map((q) => q.totalValue));
+/** Na disputa: tem valor e não foi cancelada. */
+export const inDispute = (q: { value: number | null; status: string }) => q.value !== null && q.status !== "CANCELADA";
+
+/** Comparativo das propostas na disputa: menor valor (o negociado, se houver) e a diferença de cada uma para ele. */
+export function compareQuotes<Q extends { id: string; value: number | null; status: string }>(all: Q[]) {
+  const quotes = all.filter(inDispute) as (Q & { value: number })[];
+  if (quotes.length === 0) return { minValue: null, rows: [] as (Q & { value: number; diff: number; diffPct: number | null; lowest: boolean })[] };
+  const minValue = Math.min(...quotes.map((q) => q.value));
   return {
     minValue,
     rows: quotes.map((q) => {
-      const d = Math.round((q.totalValue - minValue) * 100) / 100;
-      return { ...q, diff: d, diffPct: minValue > 0 ? Math.round((d / minValue) * 1000) / 10 : null, lowest: q.totalValue === minValue };
+      const d = Math.round((q.value - minValue) * 100) / 100;
+      return { ...q, diff: d, diffPct: minValue > 0 ? Math.round((d / minValue) * 1000) / 10 : null, lowest: q.value === minValue };
     }),
   };
+}
+
+/** Status de uma proposta que volta para a disputa (cotação reaberta ou proposta reativada). */
+export function openStatus(q: { totalValue: unknown; negotiatedValue: unknown }) {
+  return q.totalValue === null ? ("SOLICITADA" as const) : q.negotiatedValue !== null ? ("EM_NEGOCIACAO" as const) : ("RECEBIDA" as const);
 }
 
 /** Quem pode cuidar de uma cotação: Gerente ou Pré-produtor ativo do evento. */
@@ -102,11 +111,17 @@ const requestSelect = {
 const quoteSelect = {
   id: true, requestId: true, supplierId: true, position: true, cnpj: true, companyName: true, phone: true, email: true,
   contactName: true, totalValue: true, paymentTerms: true, notes: true, fileName: true, fileMime: true, fileSize: true,
+  status: true, negotiatedValue: true, negotiationNote: true, negotiatedAt: true, negotiatedBy: { select: { name: true } },
   createdAt: true, updatedAt: true,
 } satisfies Prisma.SupplierQuoteSelect;
 
 type QuoteRow = Prisma.SupplierQuoteGetPayload<{ select: typeof quoteSelect }>;
-const toQuote = ({ totalValue, ...q }: QuoteRow) => ({ ...q, totalValue: Number(totalValue), hasFile: !!q.fileName });
+/** value: o que vale na comparação (o negociado, se houver; senão o recebido). */
+const toQuote = ({ totalValue, negotiatedValue, negotiatedBy, ...q }: QuoteRow) => {
+  const received = num(totalValue);
+  const negotiated = num(negotiatedValue);
+  return { ...q, totalValue: received, negotiatedValue: negotiated, negotiatedBy: negotiatedBy?.name ?? null, value: negotiated ?? received, hasFile: !!q.fileName };
+};
 
 /** Lista do evento, com o que a tela de nova cotação precisa. */
 export async function listQuotes(actor: Actor, eventId: string, now = new Date()) {
@@ -116,7 +131,7 @@ export async function listQuotes(actor: Actor, eventId: string, now = new Date()
       tx.quoteRequest.findMany({
         where: { eventId },
         orderBy: [{ createdAt: "desc" }],
-        select: { ...requestSelect, quotes: { select: { totalValue: true } } },
+        select: { ...requestSelect, quotes: { select: { totalValue: true, negotiatedValue: true, status: true } } },
       }),
       pickers(tx, eventId),
       tx.costItem.findMany({
@@ -131,7 +146,7 @@ export async function listQuotes(actor: Actor, eventId: string, now = new Date()
         ...r,
         costItemName: costItem ? `${costItem.section.name} › ${costItem.name}` : null,
         count: quotes.length,
-        minValue: quotes.length ? Math.min(...quotes.map((q) => Number(q.totalValue))) : null,
+        minValue: compareQuotes(quotes.map((q, i) => ({ id: String(i), status: q.status, value: num(q.negotiatedValue) ?? num(q.totalValue) }))).minValue,
         stage: quoteStage(r, now),
         mine: !!me && r.responsibleId === me,
       })),
@@ -316,6 +331,14 @@ export async function setQuoteSla(actor: Actor, id: string, input: unknown) {
 
 // ─────────────────────────── Orçamentos ───────────────────────────
 
+/** Número ou texto no jeito brasileiro ("27.500,00"). */
+const money = z
+  .preprocess(
+    (v) => (typeof v === "string" ? (parseDecimal(v) ?? v) : v),
+    z.number({ message: "Informe o valor" }).min(0, "Valor inválido").max(999_999_999_999, "Valor muito alto"),
+  )
+  .transform((v) => Math.round(v * 100) / 100);
+
 const quoteSchema = z.object({
   cnpj: z.string().trim().transform((v, ctx) => {
     const n = normalizeCnpj(v);
@@ -330,13 +353,8 @@ const quoteSchema = z.object({
   }),
   email: z.string().trim().max(160).pipe(z.email({ message: "E-mail inválido" })),
   contactName: text(120),
-  /** Número ou texto no jeito brasileiro ("27.500,00"). */
-  totalValue: z
-    .preprocess(
-      (v) => (typeof v === "string" ? (parseDecimal(v) ?? v) : v),
-      z.number({ message: "Informe o valor" }).min(0, "Valor inválido").max(999_999_999_999, "Valor muito alto"),
-    )
-    .transform((v) => Math.round(v * 100) / 100),
+  /** Vazio = proposta Solicitada (ainda sem valor). */
+  totalValue: z.preprocess((v) => (v === "" || v === undefined ? null : v), money.nullable()),
   paymentTerms: optionalText(300),
   notes: optionalText(2000),
 });
@@ -466,7 +484,8 @@ async function storeFile(eventId: string, requestId: string, file: QuoteFile) {
 
 /** Chegou ao terceiro orçamento (ou deixou de ter três): marca e avisa o gestor. */
 async function syncCompleted(tx: Tx, r: { id: string; completedAt: Date | null }) {
-  const n = await tx.supplierQuote.count({ where: { requestId: r.id } });
+  // Conta as propostas que chegaram com valor e seguem na disputa.
+  const n = await tx.supplierQuote.count({ where: { requestId: r.id, totalValue: { not: null }, status: { not: "CANCELADA" } } });
   if (n >= MAX_QUOTES && !r.completedAt) {
     await tx.quoteRequest.update({ where: { id: r.id }, data: { completedAt: new Date() } });
     await notify(tx, r.id, "RECEBIDOS");
@@ -478,7 +497,7 @@ async function syncCompleted(tx: Tx, r: { id: string; completedAt: Date | null }
 const auditQuote = (q: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(q).filter(([k]) => !k.startsWith("file")).map(([k, v]) => [k, v !== null && typeof v === "object" && !(v instanceof Date) ? Number(v) : v]));
 
-/** Novo orçamento (até 3 por cotação), com o arquivo recebido opcional. */
+/** Novo orçamento (até 3 por cotação), com o arquivo recebido opcional. Sem valor, entra como Solicitada. */
 export async function addSupplierQuote(actor: Actor, requestId: string, input: unknown, file?: QuoteFile | null) {
   const data = parse(quoteSchema, input);
   const pre = await actor.run((tx) => load(actor, tx, requestId));
@@ -496,6 +515,7 @@ export async function addSupplierQuote(actor: Actor, requestId: string, input: u
       const q = await tx.supplierQuote.create({
         data: {
           ...data, supplierId: supplier.id, eventId: r.eventId, requestId: r.id, position, createdById: actor.userId,
+          status: data.totalValue === null ? "SOLICITADA" : "RECEBIDA",
           ...(stored && { fileKey: stored.key, fileName: stored.name, fileMime: stored.mime, fileSize: stored.size }),
         },
         select: quoteSelect,
@@ -529,7 +549,16 @@ export async function updateSupplierQuote(actor: Actor, quoteId: string, input: 
   const stored = file ? await storeFile(pre.eventId, pre.requestId, file) : null;
   return actor.run(async (tx) => {
     const q = await loadQuote(actor, tx, quoteId);
-    requireEditable(await load(actor, tx, q.requestId));
+    const r = await load(actor, tx, q.requestId);
+    requireEditable(r);
+    if ("totalValue" in patch) {
+      if (patch.totalValue === null && q.totalValue !== null) throw new ValidationError("Informe o valor recebido", { totalValue: ["Informe o valor"] });
+      const changed = patch.totalValue !== num(q.totalValue);
+      if (changed && q.negotiatedValue !== null) requireManager(actor, q.eventId, "corrige o valor recebido depois da negociação");
+      // Chegou o valor de uma proposta Solicitada.
+      if (q.status === "SOLICITADA" && patch.totalValue !== null) patch.status = "RECEBIDA";
+      if (!changed) delete patch.totalValue;
+    }
     if (stored) {
       await stored.save(tx);
       Object.assign(patch, { fileKey: stored.key, fileName: stored.name, fileMime: stored.mime, fileSize: stored.size });
@@ -548,6 +577,7 @@ export async function updateSupplierQuote(actor: Actor, quoteId: string, input: 
       eventId: q.eventId, entity: "supplier_quote", entityId: q.id, action: "UPDATE",
       ...diff(auditQuote(q), auditQuote({ ...patch, ...(stored && { file: true }) })),
     });
+    await syncCompleted(tx, r);
     return toQuote(updated);
   });
 }
@@ -565,6 +595,59 @@ export async function deleteSupplierQuote(actor: Actor, quoteId: string) {
 }
 
 /** Bytes (arquivos no banco/memória) ou link assinado (R2), sempre depois de conferir o acesso. */
+/**
+ * Andamento da proposta pela Pré-produção: Em negociação, Cancelada (o
+ * fornecedor desistiu) ou Reativar. Aprovada e Recusada só pela escolha do
+ * diretor; Solicitada e Recebida seguem o valor (ver updateSupplierQuote).
+ */
+export async function setProposalStatus(actor: Actor, quoteId: string, input: unknown) {
+  const { action } = parse(z.object({ action: z.enum(["NEGOCIACAO", "CANCELAR", "REATIVAR"]) }), input);
+  return actor.run(async (tx) => {
+    const q = await loadQuote(actor, tx, quoteId);
+    const r = await load(actor, tx, q.requestId);
+    requireEditable(r);
+    const status = action === "NEGOCIACAO" ? "EM_NEGOCIACAO" : action === "CANCELAR" ? "CANCELADA" : openStatus(q);
+    const allowed = action === "NEGOCIACAO" ? q.status === "RECEBIDA"
+      : action === "CANCELAR" ? q.status !== "CANCELADA" : q.status === "CANCELADA";
+    if (!allowed) throw new ConflictError("A proposta já mudou. Atualize a tela.");
+    const updated = await tx.supplierQuote.update({ where: { id: q.id }, data: { status }, select: quoteSelect });
+    await audit(tx, actor, {
+      eventId: q.eventId, entity: "supplier_quote", entityId: q.id, action: "STATUS_CHANGE", before: { status: q.status }, after: { status },
+    });
+    await syncCompleted(tx, r);
+    return toQuote(updated);
+  });
+}
+
+const negotiateSchema = z.object({
+  /** Vazio desfaz a negociação (volta a valer o valor recebido). */
+  value: z.preprocess((v) => (v === "" || v === undefined ? null : v), money.nullable()),
+  note: optionalText(500),
+});
+
+/** O diretor registra o valor negociado. O valor recebido fica guardado e aparece riscado. */
+export async function negotiateProposal(actor: Actor, quoteId: string, input: unknown) {
+  const data = parse(negotiateSchema, input);
+  return actor.run(async (tx) => {
+    const q = await loadQuote(actor, tx, quoteId);
+    const r = await load(actor, tx, q.requestId);
+    requireManager(actor, q.eventId, "negocia o valor da proposta");
+    requireEditable(r);
+    if (q.totalValue === null) throw new ValidationError("Registre primeiro o valor recebido do fornecedor");
+    if (q.status === "CANCELADA") throw new ConflictError("Proposta cancelada. Reative antes de negociar.");
+    const patch = data.value === null
+      ? { negotiatedValue: null, negotiationNote: null, negotiatedAt: null, negotiatedById: null }
+      : { negotiatedValue: data.value, negotiationNote: data.note, negotiatedAt: new Date(), negotiatedById: actor.userId, status: "EM_NEGOCIACAO" as const };
+    const updated = await tx.supplierQuote.update({ where: { id: q.id }, data: patch, select: quoteSelect });
+    await audit(tx, actor, {
+      eventId: q.eventId, entity: "supplier_quote", entityId: q.id, action: "UPDATE",
+      before: { totalValue: num(q.totalValue), negotiatedValue: num(q.negotiatedValue), status: q.status },
+      after: { negotiatedValue: data.value, note: data.note, status: updated.status },
+    });
+    return toQuote(updated);
+  });
+}
+
 export async function quoteFile(actor: Actor, quoteId: string) {
   const q = await actor.run((tx) => loadQuote(actor, tx, quoteId));
   if (!q.fileKey || !q.fileMime || !q.fileName) throw new NotFoundError("Arquivo");
@@ -604,11 +687,12 @@ export async function chooseQuote(actor: Actor, id: string, input: unknown) {
     const r = await load(actor, tx, id);
     requireManager(actor, r.eventId, "escolhe o orçamento");
     requireEditable(r);
-    const quotes = await tx.supplierQuote.findMany({ where: { requestId: r.id }, select: { id: true, totalValue: true, companyName: true } });
-    const chosen = quotes.find((q) => q.id === data.quoteId);
-    if (!chosen) throw new NotFoundError("Orçamento");
-    const min = Math.min(...quotes.map((q) => Number(q.totalValue)));
-    if (Number(chosen.totalValue) > min && !data.reason) {
+    const all = await tx.supplierQuote.findMany({ where: { requestId: r.id }, select: { id: true, totalValue: true, negotiatedValue: true, status: true } });
+    const { rows, minValue } = compareQuotes(all.map((q) => ({ id: q.id, status: q.status, value: num(q.negotiatedValue) ?? num(q.totalValue) })));
+    if (!all.some((q) => q.id === data.quoteId)) throw new NotFoundError("Orçamento");
+    const chosen = rows.find((q) => q.id === data.quoteId);
+    if (!chosen) throw new ValidationError("Escolha uma proposta com valor que não foi cancelada");
+    if (chosen.value > minValue! && !data.reason) {
       throw new ValidationError("Explique por que escolheu um orçamento que não é o de menor valor", { reason: ["Explique a escolha"] });
     }
     const now = new Date();
@@ -624,6 +708,9 @@ export async function chooseQuote(actor: Actor, id: string, input: unknown) {
       eventId: r.eventId, entity: "quote_request", entityId: r.id, action: "VALIDATE",
       before: { status: r.status }, after: { status: "FECHADA", chosenQuoteId: chosen.id, reason: data.reason },
     });
+    // A escolhida fica Aprovada; as outras que seguiam na disputa (ou nem chegaram), Recusadas.
+    await tx.supplierQuote.update({ where: { id: chosen.id }, data: { status: "APROVADA" } });
+    await tx.supplierQuote.updateMany({ where: { requestId: r.id, id: { not: chosen.id }, status: { not: "CANCELADA" } }, data: { status: "RECUSADA" } });
 
     // O valor escolhido vira o Contratado do item (o Estimado fica guardado
     // para comparar). Contratado preenchido põe o item em Contratado (banco).
@@ -631,7 +718,7 @@ export async function chooseQuote(actor: Actor, id: string, input: unknown) {
     if (data.applyToCost && r.costItemId) {
       const item = await tx.costItem.findFirst({ where: { id: r.costItemId, eventId: r.eventId } });
       if (!item) throw new NotFoundError("Item");
-      const value = Number(chosen.totalValue);
+      const value = chosen.value;
       await tx.costItem.update({ where: { id: item.id }, data: { contractedValue: value } });
       await audit(tx, actor, {
         eventId: r.eventId, entity: "cost_item", entityId: item.id, action: "UPDATE",
@@ -657,6 +744,11 @@ export async function setQuoteState(actor: Actor, id: string, input: unknown) {
       where: { id: r.id },
       data: { status, chosenQuoteId: null, chosenReason: null, closedAt: null, closedById: null },
     });
+    // Reaberta: Aprovada e Recusadas voltam para a disputa.
+    if (action === "REABRIR") {
+      const closed = await tx.supplierQuote.findMany({ where: { requestId: r.id, status: { in: ["APROVADA", "RECUSADA"] } } });
+      for (const q of closed) await tx.supplierQuote.update({ where: { id: q.id }, data: { status: openStatus(q) } });
+    }
     await audit(tx, actor, { eventId: r.eventId, entity: "quote_request", entityId: r.id, action: "UPDATE", before: { status: r.status }, after: { status } });
     return { id: r.id, status };
   });

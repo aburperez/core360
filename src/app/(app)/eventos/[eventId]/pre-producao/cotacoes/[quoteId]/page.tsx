@@ -15,6 +15,15 @@ import { STAGE } from "../stage";
 
 export const metadata = { title: "Cotação" };
 
+const PROPOSAL = {
+  SOLICITADA: { label: "Solicitada", tone: "bg-white/10 text-muted" },
+  RECEBIDA: { label: "Recebida", tone: "bg-sky-400/15 text-sky-200" },
+  EM_NEGOCIACAO: { label: "Em negociação", tone: "bg-amber-400/15 text-amber-200" },
+  APROVADA: { label: "Aprovada", tone: "bg-emerald-500/15 text-emerald-300" },
+  RECUSADA: { label: "Recusada", tone: "bg-red-500/15 text-red-300" },
+  CANCELADA: { label: "Cancelada", tone: "bg-white/10 text-muted line-through" },
+} as const;
+
 /**
  * Uma cotação: o descritivo para os fornecedores (copiar ou abrir no e-mail),
  * o envio e o prazo, os 3 orçamentos e o comparativo com a escolha do gestor.
@@ -99,14 +108,14 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
         {q.status === "FECHADA" && chosen && (
           <Card className="border-emerald-500/40 bg-emerald-500/10">
             <p className="text-sm font-semibold uppercase tracking-wide text-emerald-300">Orçamento escolhido</p>
-            <p className="mt-1 text-xl font-bold">{chosen.companyName} · {brl(chosen.totalValue)}</p>
+            <p className="mt-1 text-xl font-bold">{chosen.companyName} · {brl(chosen.value ?? 0)}</p>
             {q.chosenReason && <p className="mt-1 text-sm">Motivo: {q.chosenReason}</p>}
             <p className="mt-1 text-sm text-muted">{q.closedBy?.name} · {formatDateTime(q.closedAt)}</p>
           </Card>
         )}
 
         <Panel title={`Orçamentos (${q.quotes.length} de 3)`}>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {slots.map((pos) => {
               const x = q.quotes.find((y) => y.position === pos);
               const row = x && q.comparison.rows.find((r) => r.id === x.id);
@@ -121,8 +130,9 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                 <div
                   key={x.id}
                   className={cx(
-                    "flex flex-col gap-3 rounded-2xl border bg-background/40 p-4",
-                    x.id === q.chosenQuoteId ? "border-emerald-500/60" : row?.lowest && q.quotes.length > 1 ? "border-brand-cyan/60" : "border-border",
+                    "flex min-w-0 flex-col gap-3 rounded-2xl border bg-background/40 p-4",
+                    x.id === q.chosenQuoteId ? "border-emerald-500/60" : row?.lowest && q.comparison.rows.length > 1 ? "border-brand-cyan/60" : "border-border",
+                    x.status === "CANCELADA" && "opacity-70",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -131,9 +141,24 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                       <p className="truncate text-lg font-bold" title={x.companyName}>{x.companyName}</p>
                       <p className="text-sm text-muted tabular-nums">CNPJ {formatCnpj(x.cnpj)}</p>
                     </div>
-                    {row?.lowest && q.quotes.length > 1 && <span className="shrink-0 rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-bold text-brand-cyan">Menor valor</span>}
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={cx("rounded-full px-2 py-0.5 text-xs font-bold", PROPOSAL[x.status].tone)}>{PROPOSAL[x.status].label}</span>
+                      {row?.lowest && q.comparison.rows.length > 1 && <span className="rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-bold text-brand-cyan">Menor valor</span>}
+                    </div>
                   </div>
-                  <p className="text-2xl font-bold tabular-nums">{brl(x.totalValue)}</p>
+                  {x.totalValue === null ? (
+                    <p className="text-lg font-semibold text-muted">{x.status === "SOLICITADA" ? "Aguardando o valor" : "Valor não chegou"}</p>
+                  ) : x.negotiatedValue !== null ? (
+                    <div>
+                      <p className="text-2xl font-bold tabular-nums">{brl(x.negotiatedValue)}</p>
+                      <p className="text-sm text-muted">
+                        Negociado{x.negotiatedBy && ` por ${x.negotiatedBy}`}. Recebido: <span className="tabular-nums line-through">{brl(x.totalValue)}</span>
+                      </p>
+                      {x.negotiationNote && <p className="mt-1 text-sm">{x.negotiationNote}</p>}
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-bold tabular-nums">{brl(x.totalValue)}</p>
+                  )}
                   <dl className="space-y-1 text-sm">
                     <Row label="Responsável" value={x.contactName} />
                     <Row label="Telefone" value={formatPhone(x.phone)} />
@@ -149,7 +174,7 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                     ) : (
                       <span className="text-sm text-amber-300">Sem arquivo</span>
                     )}
-                    {q.can.edit && <QuoteActions quote={x} requestId={q.id} />}
+                    {q.can.edit && <QuoteActions quote={x} requestId={q.id} manager={q.can.manage} />}
                   </div>
                 </div>
               );
@@ -157,15 +182,15 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
           </div>
         </Panel>
 
-        {q.quotes.length > 0 && (
+        {q.comparison.rows.length > 0 && (
           <Panel title="Comparativo">
             {/* Celular: um cartão por fornecedor, do menor para o maior valor. */}
             <ul className="space-y-3 sm:hidden">
-              {[...q.comparison.rows].sort((a, b) => a.totalValue - b.totalValue).map((r) => (
+              {[...q.comparison.rows].sort((a, b) => a.value - b.value).map((r) => (
                 <li key={r.id} className={cx("rounded-xl border p-3", r.id === q.chosenQuoteId ? "border-emerald-500/60 bg-emerald-500/10" : "border-border")}>
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="min-w-0 font-semibold">{r.companyName}</p>
-                    <p className="shrink-0 font-bold tabular-nums">{brl(r.totalValue)}</p>
+                    <p className="shrink-0 text-right font-bold tabular-nums">{brl(r.value)}{r.negotiatedValue !== null && <span className="block text-xs font-semibold text-amber-200">negociado</span>}</p>
                   </div>
                   <p className="mt-1 text-sm">
                     {r.lowest ? <span className="font-semibold text-brand-cyan">Menor valor</span> : (
@@ -177,7 +202,7 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                   {q.can.choose && (
                     <div className="mt-3">
                       <ChooseForm
-                        requestId={q.id} quote={{ id: r.id, companyName: r.companyName, totalValue: r.totalValue }} lowest={r.lowest}
+                        requestId={q.id} quote={{ id: r.id, companyName: r.companyName, value: r.value }} lowest={r.lowest}
                         costItem={q.costItem && { label: q.costItem.label, quantity: q.costItem.quantity, frequency: q.costItem.frequency }}
                       />
                     </div>
@@ -197,13 +222,16 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {[...q.comparison.rows].sort((a, b) => a.totalValue - b.totalValue).map((r) => (
+                  {[...q.comparison.rows].sort((a, b) => a.value - b.value).map((r) => (
                     <tr key={r.id} className={cx(r.id === q.chosenQuoteId && "bg-emerald-500/10")}>
                       <td className="py-3 pr-3 align-top">
                         <p className="font-semibold">{r.companyName}</p>
                         {r.id === q.chosenQuoteId && <p className="text-xs font-semibold text-emerald-300">Escolhido</p>}
                       </td>
-                      <td className="py-3 pr-3 text-right align-top font-bold tabular-nums">{brl(r.totalValue)}</td>
+                      <td className="py-3 pr-3 text-right align-top font-bold tabular-nums">
+                        {brl(r.value)}
+                        {r.negotiatedValue !== null && <span className="block text-xs font-semibold text-amber-200">negociado · recebido {brl(r.totalValue ?? 0)}</span>}
+                      </td>
                       <td className="py-3 pr-3 text-right align-top tabular-nums">
                         {r.lowest ? <span className="font-semibold text-brand-cyan">Menor valor</span> : (
                           <span className="text-amber-300">+{brl(r.diff)}{r.diffPct !== null && ` (+${r.diffPct.toLocaleString("pt-BR")}%)`}</span>
@@ -213,7 +241,7 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                       {q.can.choose && (
                         <td className="py-3 align-top">
                           <ChooseForm
-                            requestId={q.id} quote={{ id: r.id, companyName: r.companyName, totalValue: r.totalValue }} lowest={r.lowest}
+                            requestId={q.id} quote={{ id: r.id, companyName: r.companyName, value: r.value }} lowest={r.lowest}
                             costItem={q.costItem && { label: q.costItem.label, quantity: q.costItem.quantity, frequency: q.costItem.frequency }}
                           />
                         </td>
@@ -223,8 +251,10 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                 </tbody>
               </table>
             </div>
-            {q.quotes.length < 3 && q.status !== "FECHADA" && (
-              <p className="mt-3 text-sm text-muted">Faltam {3 - q.quotes.length} orçamento{q.quotes.length === 2 ? "" : "s"} para fechar o comparativo.</p>
+            {q.comparison.rows.length < 3 && q.status !== "FECHADA" && (
+              <p className="mt-3 text-sm text-muted">
+                {q.comparison.rows.length} de 3 propostas com valor na disputa. Solicitadas e canceladas não entram no comparativo.
+              </p>
             )}
             {!q.can.choose && q.status !== "FECHADA" && q.quotes.length > 0 && (
               <p className="mt-3 text-sm text-muted">Quem escolhe o orçamento é o gestor do evento.</p>

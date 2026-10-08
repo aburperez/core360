@@ -188,40 +188,41 @@ model User {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sessions             Session[]
-  accounts             Account[]
-  participations       Participant[]        @relation("ParticipantUser")
-  documentsUploaded    EventDocument[]      @relation("EventDocumentUploadedBy")
-  participantsCreated  Participant[]        @relation("ParticipantCreatedBy")
-  invitationsCreated   Invitation[]
-  occurrencesCreated   Occurrence[]         @relation("OccurrenceCreatedBy")
-  occurrencesConcluded Occurrence[]         @relation("OccurrenceConcludedBy")
-  occurrencesValidated Occurrence[]         @relation("OccurrenceValidatedBy")
-  attachments          Attachment[]
-  notifications        Notification[]
-  whatsapp             WhatsappContact?
-  serviceTypesCreated  ServiceType[]        @relation("ServiceTypeCreatedBy")
-  slaProposed          SlaProposal[]        @relation("SlaProposalProposedBy")
-  slaReviewed          SlaProposal[]        @relation("SlaProposalReviewedBy")
-  briefingsUpdated     Briefing[]           @relation("BriefingUpdatedBy")
-  dailyNotesUpdated    DailyNote[]          @relation("DailyNoteUpdatedBy")
-  functionsCreated     EventFunction[]      @relation("EventFunctionCreatedBy")
-  activitiesCreated    Activity[]           @relation("ActivityCreatedBy")
-  clientViewsUpdated   ClientView[]         @relation("ClientViewUpdatedBy")
-  profilesUpdated      ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
-  directors            Director[]           @relation("DirectorUser")
-  directorsCreated     Director[]           @relation("DirectorCreatedBy")
-  agencyAdmins         AgencyAdmin[]        @relation("AgencyAdminUser")
-  agencyAdminsCreated  AgencyAdmin[]        @relation("AgencyAdminCreatedBy")
-  agenciesCreated      Agency[]             @relation("AgencyCreatedBy")
-  agencyInvitations    AgencyInvitation[]
-  quotesCreated        QuoteRequest[]       @relation("QuoteCreatedBy")
-  quotesSlaSet         QuoteRequest[]       @relation("QuoteSlaSetBy")
-  quotesClosed         QuoteRequest[]       @relation("QuoteClosedBy")
-  supplierQuotes       SupplierQuote[]      @relation("SupplierQuoteCreatedBy")
-  suppliersCreated     Supplier[]           @relation("SupplierCreatedBy")
-  supplierBonuses      SupplierBonus[]      @relation("SupplierBonusUpdatedBy")
-  visitsCreated        TechnicalVisit[]     @relation("TechnicalVisitCreatedBy")
+  sessions                 Session[]
+  accounts                 Account[]
+  participations           Participant[]        @relation("ParticipantUser")
+  documentsUploaded        EventDocument[]      @relation("EventDocumentUploadedBy")
+  participantsCreated      Participant[]        @relation("ParticipantCreatedBy")
+  invitationsCreated       Invitation[]
+  occurrencesCreated       Occurrence[]         @relation("OccurrenceCreatedBy")
+  occurrencesConcluded     Occurrence[]         @relation("OccurrenceConcludedBy")
+  occurrencesValidated     Occurrence[]         @relation("OccurrenceValidatedBy")
+  attachments              Attachment[]
+  notifications            Notification[]
+  whatsapp                 WhatsappContact?
+  serviceTypesCreated      ServiceType[]        @relation("ServiceTypeCreatedBy")
+  slaProposed              SlaProposal[]        @relation("SlaProposalProposedBy")
+  slaReviewed              SlaProposal[]        @relation("SlaProposalReviewedBy")
+  briefingsUpdated         Briefing[]           @relation("BriefingUpdatedBy")
+  dailyNotesUpdated        DailyNote[]          @relation("DailyNoteUpdatedBy")
+  functionsCreated         EventFunction[]      @relation("EventFunctionCreatedBy")
+  activitiesCreated        Activity[]           @relation("ActivityCreatedBy")
+  clientViewsUpdated       ClientView[]         @relation("ClientViewUpdatedBy")
+  profilesUpdated          ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
+  directors                Director[]           @relation("DirectorUser")
+  directorsCreated         Director[]           @relation("DirectorCreatedBy")
+  agencyAdmins             AgencyAdmin[]        @relation("AgencyAdminUser")
+  agencyAdminsCreated      AgencyAdmin[]        @relation("AgencyAdminCreatedBy")
+  agenciesCreated          Agency[]             @relation("AgencyCreatedBy")
+  agencyInvitations        AgencyInvitation[]
+  quotesCreated            QuoteRequest[]       @relation("QuoteCreatedBy")
+  quotesSlaSet             QuoteRequest[]       @relation("QuoteSlaSetBy")
+  quotesClosed             QuoteRequest[]       @relation("QuoteClosedBy")
+  supplierQuotes           SupplierQuote[]      @relation("SupplierQuoteCreatedBy")
+  supplierQuotesNegotiated SupplierQuote[]      @relation("SupplierQuoteNegotiatedBy")
+  suppliersCreated         Supplier[]           @relation("SupplierCreatedBy")
+  supplierBonuses          SupplierBonus[]      @relation("SupplierBonusUpdatedBy")
+  visitsCreated            TechnicalVisit[]     @relation("TechnicalVisitCreatedBy")
 
   @@map("users")
 }
@@ -1258,6 +1259,22 @@ model ParticipantProfile {
 
 // ─────────────── Pré-produção: cotação com fornecedores ───────────────
 
+/// Andamento de cada proposta da cotação (fase 3C).
+enum ProposalStatus {
+  /// Pedida ao fornecedor, ainda sem valor.
+  SOLICITADA
+  RECEBIDA
+  EM_NEGOCIACAO
+  /// A escolhida pelo diretor (só quando a cotação fecha).
+  APROVADA
+  /// As outras, quando a cotação fecha.
+  RECUSADA
+  /// O fornecedor desistiu ou a proposta saiu da disputa.
+  CANCELADA
+
+  @@map("proposal_status")
+}
+
 enum QuoteStatus {
   /// Criada: o descritivo ainda não saiu para os fornecedores.
   ABERTA
@@ -1316,34 +1333,42 @@ model QuoteRequest {
 
 /// Um dos (até) 3 orçamentos recebidos, com os dados do fornecedor e o arquivo.
 model SupplierQuote {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  eventId      String   @map("event_id") @db.Uuid
-  requestId    String   @map("request_id") @db.Uuid
+  id              String         @id @default(uuid(7)) @db.Uuid
+  eventId         String         @map("event_id") @db.Uuid
+  requestId       String         @map("request_id") @db.Uuid
   /// Fornecedor do cadastro da agência. CNPJ e razão social aqui ficam como estavam no orçamento.
-  supplierId   String   @map("supplier_id") @db.Uuid
+  supplierId      String         @map("supplier_id") @db.Uuid
   /// 1, 2 ou 3.
-  position     Int
-  cnpj         String
-  companyName  String   @map("company_name")
-  phone        String
-  email        String   @db.Citext
-  contactName  String   @map("contact_name")
-  totalValue   Decimal  @map("total_value") @db.Decimal(14, 2)
-  paymentTerms String?  @map("payment_terms")
-  notes        String?
-  fileKey      String?  @unique @map("file_key")
-  fileName     String?  @map("file_name")
-  fileMime     String?  @map("file_mime")
-  fileSize     Int?     @map("file_size")
-  createdById  String   @map("created_by") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  position        Int
+  cnpj            String
+  companyName     String         @map("company_name")
+  phone           String
+  email           String         @db.Citext
+  contactName     String         @map("contact_name")
+  /// Valor recebido do fornecedor (vazio enquanto Solicitada). Fica guardado mesmo depois da negociação.
+  totalValue      Decimal?       @map("total_value") @db.Decimal(14, 2)
+  status          ProposalStatus @default(RECEBIDA)
+  /// Valor negociado pelo diretor; quando existe, é ele que vale.
+  negotiatedValue Decimal?       @map("negotiated_value") @db.Decimal(14, 2)
+  negotiationNote String?        @map("negotiation_note")
+  negotiatedAt    DateTime?      @map("negotiated_at") @db.Timestamptz(3)
+  negotiatedById  String?        @map("negotiated_by") @db.Uuid
+  paymentTerms    String?        @map("payment_terms")
+  notes           String?
+  fileKey         String?        @unique @map("file_key")
+  fileName        String?        @map("file_name")
+  fileMime        String?        @map("file_mime")
+  fileSize        Int?           @map("file_size")
+  createdById     String         @map("created_by") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event     Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  request   QuoteRequest   @relation("QuoteQuotes", fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
-  supplier  Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  createdBy User           @relation("SupplierQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  chosenBy  QuoteRequest[] @relation("QuoteChosen")
+  event        Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  request      QuoteRequest   @relation("QuoteQuotes", fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
+  supplier     Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy    User           @relation("SupplierQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  negotiatedBy User?          @relation("SupplierQuoteNegotiatedBy", fields: [negotiatedById], references: [id], onDelete: Restrict)
+  chosenBy     QuoteRequest[] @relation("QuoteChosen")
 
   @@unique([requestId, position])
   @@unique([requestId, id])

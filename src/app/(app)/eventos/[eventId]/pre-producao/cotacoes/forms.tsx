@@ -211,9 +211,12 @@ export function SlaForm({ id, current }: { id: string; current: number | null })
   );
 }
 
+export type ProposalStatus = "SOLICITADA" | "RECEBIDA" | "EM_NEGOCIACAO" | "APROVADA" | "RECUSADA" | "CANCELADA";
+
 export type QuoteView = {
   id: string; position: number; cnpj: string; companyName: string; phone: string; email: string; contactName: string;
-  totalValue: number; paymentTerms: string | null; notes: string | null; fileName: string | null; hasFile: boolean;
+  totalValue: number | null; paymentTerms: string | null; notes: string | null; fileName: string | null; hasFile: boolean;
+  status: ProposalStatus; negotiatedValue: number | null; negotiationNote: string | null; value: number | null;
 };
 
 const cnpjMask = (v: string) => {
@@ -296,6 +299,9 @@ export function QuoteForm({ requestId, quote, suppliers = [], aiReader = false, 
   const [pick, setPick] = useState<string>(quote ? NEW : suppliers.length ? "" : NEW);
   const [cnpj, setCnpj] = useState(quote ? cnpjMask(quote.cnpj) : "");
   const [reading, setReading] = useState<{ data: AiReading; file: File; key: number } | null>(null);
+  // Proposta pedida e ainda sem valor: entra como Solicitada.
+  const [pending, setPending] = useState(false);
+  const noValueYet = pending || quote?.status === "SOLICITADA";
   const { busy, error, run } = useAction();
   const chosen = suppliers.find((s) => s.id === pick) ?? null;
   const read = reading?.data.fields;
@@ -322,7 +328,7 @@ export function QuoteForm({ requestId, quote, suppliers = [], aiReader = false, 
         body.set("data", JSON.stringify({
           cnpj: chosen ? chosen.cnpj : cnpj, companyName: chosen ? chosen.companyName : f.get("companyName"),
           phone: f.get("phone"), email: f.get("email"), contactName: f.get("contactName"),
-          totalValue: f.get("totalValue"), paymentTerms: f.get("paymentTerms") || null, notes: f.get("notes") || null,
+          totalValue: f.get("totalValue") ?? "", paymentTerms: f.get("paymentTerms") || null, notes: f.get("notes") || null,
         }));
         const file = f.get("file");
         if (file instanceof File && file.size > 0) body.set("file", file);
@@ -404,15 +410,28 @@ export function QuoteForm({ requestId, quote, suppliers = [], aiReader = false, 
             <Label>E-mail</Label>
             <Input name="email" type="email" required maxLength={160} defaultValue={pre("email")} />
           </label>
-          <label className="block">
-            <Label>Valor total (R$)</Label>
-            <Input name="totalValue" inputMode="decimal" required defaultValue={quote ? String(quote.totalValue).replace(".", ",") : moneyText(read?.totalValue ?? null)} placeholder="Ex.: 27.500,00" />
-          </label>
-          <label className="block">
-            <Label hint="(opcional)">Condição de pagamento</Label>
-            <Input name="paymentTerms" maxLength={300} defaultValue={quote?.paymentTerms ?? read?.paymentTerms ?? ""} placeholder="Ex.: 30dd após o evento" />
-          </label>
-          {reading ? (
+          {!quote && !reading && (
+            <label className="flex items-start gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-primary)]" />
+              <span>Pedi o orçamento e o valor ainda não chegou <span className="text-muted">(fica como Solicitada)</span></span>
+            </label>
+          )}
+          {!pending && (
+            <>
+              <label className="block">
+                <Label hint={quote?.status === "SOLICITADA" ? "(deixe vazio se ainda não chegou)" : undefined}>Valor total (R$)</Label>
+                <Input
+                  name="totalValue" inputMode="decimal" required={!noValueYet} placeholder="Ex.: 27.500,00"
+                  defaultValue={quote ? (quote.totalValue === null ? "" : String(quote.totalValue).replace(".", ",")) : moneyText(read?.totalValue ?? null)}
+                />
+              </label>
+              <label className="block">
+                <Label hint="(opcional)">Condição de pagamento</Label>
+                <Input name="paymentTerms" maxLength={300} defaultValue={quote?.paymentTerms ?? read?.paymentTerms ?? ""} placeholder="Ex.: 30dd após o evento" />
+              </label>
+            </>
+          )}
+          {pending ? null : reading ? (
             <div className="block">
               <Label>Arquivo recebido</Label>
               <p className="flex min-h-11 items-center gap-2 truncate rounded-xl border border-border px-3 text-sm"><Icon name="paperclip" className="h-4 w-4 shrink-0 text-muted" />{reading.file.name}</p>
@@ -437,7 +456,7 @@ export function QuoteForm({ requestId, quote, suppliers = [], aiReader = false, 
       )}
       <div className="sm:col-span-2"><FormError message={error} /></div>
       <div className="flex gap-2 sm:col-span-2">
-        <Button type="submit" disabled={busy || (!pick && !quote)}>{quote ? "Salvar" : reading ? "Confirmar e adicionar" : "Registrar orçamento"}</Button>
+        <Button type="submit" disabled={busy || (!pick && !quote)}>{quote ? "Salvar" : reading ? "Confirmar e adicionar" : pending ? "Registrar como Solicitada" : "Registrar orçamento"}</Button>
         {onDone && <Button type="button" variant="secondary" onClick={onDone}>Cancelar</Button>}
       </div>
     </form>
@@ -462,14 +481,17 @@ export function AddQuote({ requestId, suppliers, aiReader = false }: { requestId
 }
 
 /** Editar ou remover um orçamento registrado. */
-export function QuoteActions({ quote, requestId }: { quote: QuoteView; requestId: string }) {
+export function QuoteActions({ quote, requestId, manager }: { quote: QuoteView; requestId: string; manager: boolean }) {
   const [editing, setEditing] = useState(false);
+  const [negotiating, setNegotiating] = useState(false);
   const { busy, error, run } = useAction();
+  const status = (action: "NEGOCIACAO" | "CANCELAR" | "REATIVAR") => run(() => api(`/api/supplier-quotes/${quote.id}/status`, { body: { action } }));
+  if (negotiating) return <NegotiateForm quote={quote} onDone={() => setNegotiating(false)} />;
   if (editing) {
     return (
       <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center" role="dialog" aria-label="Editar orçamento">
         <Card className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto">
-          <p className="mb-3 font-semibold">Editar orçamento {quote.position}</p>
+          <p className="mb-3 font-semibold">{quote.status === "SOLICITADA" ? `Registrar o valor do orçamento ${quote.position}` : `Editar orçamento ${quote.position}`}</p>
           <QuoteForm requestId={requestId} quote={quote} onDone={() => setEditing(false)} />
         </Card>
       </div>
@@ -477,7 +499,23 @@ export function QuoteActions({ quote, requestId }: { quote: QuoteView; requestId
   }
   return (
     <div className="flex flex-wrap items-center gap-1">
-      <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setEditing(true)}>Editar</Button>
+      {manager && quote.totalValue !== null && quote.status !== "CANCELADA" && (
+        <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setNegotiating(true)}>{quote.negotiatedValue === null ? "Negociar valor" : "Mudar negociado"}</Button>
+      )}
+      {!manager && quote.status === "RECEBIDA" && (
+        <Button variant="ghost" className="min-h-9 px-2 text-sm" disabled={busy} onClick={() => status("NEGOCIACAO")}>Em negociação</Button>
+      )}
+      <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setEditing(true)}>{quote.status === "SOLICITADA" ? "Registrar valor" : "Editar"}</Button>
+      {quote.status === "CANCELADA" ? (
+        <Button variant="ghost" className="min-h-9 px-2 text-sm" disabled={busy} onClick={() => status("REATIVAR")}>Reativar</Button>
+      ) : (
+        <Button
+          variant="ghost" className="min-h-9 px-2 text-sm text-amber-300" disabled={busy}
+          onClick={() => { if (confirm(`Cancelar a proposta de ${quote.companyName}? Ela sai do comparativo, mas fica registrada.`)) status("CANCELAR"); }}
+        >
+          Cancelar proposta
+        </Button>
+      )}
       <Button
         variant="ghost" className="min-h-9 px-2 text-sm text-red-300" disabled={busy}
         onClick={() => { if (confirm(`Remover o orçamento de ${quote.companyName}?`)) run(() => api(`/api/supplier-quotes/${quote.id}`, { method: "DELETE" })); }}
@@ -489,9 +527,45 @@ export function QuoteActions({ quote, requestId }: { quote: QuoteView; requestId
   );
 }
 
+/** O diretor registra o valor negociado (o recebido fica guardado). Vazio desfaz. */
+function NegotiateForm({ quote, onDone }: { quote: QuoteView; onDone: () => void }) {
+  const { busy, error, run } = useAction();
+  const save = async (value: string, note: string | null) => {
+    if (await run(() => api(`/api/supplier-quotes/${quote.id}/negotiation`, { method: "PUT", body: { value, note } }))) onDone();
+  };
+  return (
+    <form
+      className="w-full space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const f = new FormData(e.currentTarget);
+        save(String(f.get("value") ?? ""), (f.get("note") as string) || null);
+      }}
+    >
+      <p className="text-sm text-muted">Valor recebido: {brl(quote.totalValue ?? 0)}. Ele fica guardado.</p>
+      <label className="block">
+        <Label>Valor negociado (R$)</Label>
+        <Input name="value" inputMode="decimal" required defaultValue={quote.negotiatedValue === null ? "" : moneyText(quote.negotiatedValue)} placeholder="Ex.: 25.000,00" />
+      </label>
+      <label className="block">
+        <Label hint="(opcional)">Como foi a negociação</Label>
+        <Textarea name="note" rows={2} maxLength={500} defaultValue={quote.negotiationNote ?? ""} placeholder="Ex.: desconto de 7% fechando até sexta" />
+      </label>
+      <FormError message={error} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={busy} className="min-h-10 px-3 text-sm">Salvar negociado</Button>
+        {quote.negotiatedValue !== null && (
+          <Button type="button" variant="ghost" disabled={busy} className="min-h-10 px-3 text-sm" onClick={() => save("", null)}>Desfazer negociação</Button>
+        )}
+        <Button type="button" variant="secondary" className="min-h-10 px-3 text-sm" onClick={onDone}>Voltar</Button>
+      </div>
+    </form>
+  );
+}
+
 /** O gestor escolhe o orçamento: motivo obrigatório quando não é o de menor valor. */
 export function ChooseForm({ requestId, quote, lowest, costItem }: {
-  requestId: string; quote: { id: string; companyName: string; totalValue: number }; lowest: boolean;
+  requestId: string; quote: { id: string; companyName: string; value: number }; lowest: boolean;
   costItem: { label: string; quantity: number; frequency: number | null } | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -517,7 +591,7 @@ export function ChooseForm({ requestId, quote, lowest, costItem }: {
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--primary)]" checked={apply} onChange={(e) => setApply(e.target.checked)} />
           <span>
-            {brl(quote.totalValue)} vira o Contratado do item ({costItem.label})
+            {brl(quote.value)} vira o Contratado do item ({costItem.label})
             <span className="block text-muted">O Estimado da planilha fica como está, para comparar. O item passa para Contratado.</span>
           </span>
         </label>

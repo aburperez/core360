@@ -173,7 +173,7 @@ export async function getSupplier(actor: Actor, eventId: string, supplierId: str
         orderBy: { createdAt: "desc" },
         take: 100,
         select: {
-          id: true, totalValue: true, createdAt: true,
+          id: true, totalValue: true, negotiatedValue: true, status: true, createdAt: true,
           event: { select: { id: true, name: true } },
           request: { select: { id: true, title: true, status: true, chosenQuoteId: true } },
         },
@@ -184,7 +184,7 @@ export async function getSupplier(actor: Actor, eventId: string, supplierId: str
       bonus: toBonus(bonus),
       history: quotes.map((q) => ({
         id: q.id, eventId: q.event.id, eventName: q.event.name, requestId: q.request.id, title: q.request.title,
-        value: Number(q.totalValue), date: q.createdAt,
+        value: q.negotiatedValue !== null ? Number(q.negotiatedValue) : q.totalValue !== null ? Number(q.totalValue) : null, date: q.createdAt,
         result: q.request.chosenQuoteId === q.id ? ("ESCOLHIDO" as const)
           : q.request.status === "FECHADA" ? ("NAO_ESCOLHIDO" as const)
           : q.request.status === "CANCELADA" ? ("CANCELADA" as const) : ("EM_ANDAMENTO" as const),

@@ -111,7 +111,7 @@ export default async function SupplierPage({ params }: PageProps<"/eventos/[even
                     <p className="text-xs text-muted">{h.eventName} · {date(h.date)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="tabular-nums">{brl(h.value)}</p>
+                    <p className="tabular-nums">{h.value === null ? <span className="text-muted">Sem valor</span> : brl(h.value)}</p>
                     <p className={cx("text-xs", RESULT[h.result].tone)}>{RESULT[h.result].label}</p>
                   </div>
                 </li>
