@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/components/api-client";
 import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { Icon } from "@/components/icons";
 import { Button, Card, cx } from "@/components/ui";
 import { brl } from "@/lib/money";
+import { compressPhoto } from "@/components/photo";
 import { DurationInput } from "../sla-forms";
 
 type Option = { id: string; label: string };
@@ -227,23 +228,90 @@ export type SupplierOption = {
 
 const NEW = "novo";
 
+type AiReading = {
+  fields: {
+    cnpj: string; companyName: string | null; tradeName: string | null; contactName: string | null; phone: string | null;
+    email: string | null; totalValue: number | null; paymentTerms: string | null; notes: string | null;
+  };
+  supplierId: string | null;
+  warnings: string[];
+};
+
+const AI_ACCEPT = ".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
+const moneyText = (v: number | null) => (v === null ? "" : v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+/**
+ * "Ler com a IA": anexa o PDF ou a foto, a IA preenche os campos e quem anexou
+ * confere antes de adicionar. Nada é salvo na leitura.
+ */
+function AiReader({ requestId, onRead }: { requestId: string; onRead: (r: AiReading, file: File) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 sm:col-span-2">
+      <p className="flex items-center gap-2 font-semibold"><Icon name="sparkles" className="h-4 w-4 text-primary" />Ler o orçamento com a IA</p>
+      <p className="mt-0.5 text-sm text-muted">Anexe o PDF ou a foto do orçamento. A IA preenche os campos e você confere antes de adicionar. Excel e Word você preenche à mão.</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Input
+          type="file" accept={AI_ACCEPT} aria-label="Arquivo do orçamento para a IA ler"
+          onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); }}
+          className="min-w-0 flex-1 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1 file:text-foreground"
+        />
+        <Button
+          type="button" disabled={!file || busy}
+          onClick={async () => {
+            if (!file) return;
+            setBusy(true);
+            setError(null);
+            try {
+              // Foto: reduz no aparelho (e HEIC vira JPG) para a IA ler rápido.
+              const send = file.type.startsWith("image/") ? (await compressPhoto(file, 2400, 0.85)).blob : file;
+              const body = new FormData();
+              body.set("file", send, file.type.startsWith("image/") && send !== file ? "orcamento.jpg" : file.name);
+              onRead(await api<AiReading>(`/api/quote-requests/${requestId}/quotes/read`, { body }), file);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Lendo o arquivo…" : "Ler o arquivo"}
+        </Button>
+      </div>
+      <FormError message={error} />
+    </div>
+  );
+}
+
 /**
  * Novo orçamento ou correção de um existente, com o arquivo recebido. O
  * fornecedor vem do cadastro da agência (os da categoria do item primeiro) ou
  * entra como "Novo fornecedor", que vai para o cadastro junto com o orçamento.
  */
-export function QuoteForm({ requestId, quote, suppliers = [], onDone }: { requestId: string; quote?: QuoteView; suppliers?: SupplierOption[]; onDone?: () => void }) {
+export function QuoteForm({ requestId, quote, suppliers = [], aiReader = false, onDone }: {
+  requestId: string; quote?: QuoteView; suppliers?: SupplierOption[]; aiReader?: boolean; onDone?: () => void;
+}) {
   const [pick, setPick] = useState<string>(quote ? NEW : suppliers.length ? "" : NEW);
   const [cnpj, setCnpj] = useState(quote ? cnpjMask(quote.cnpj) : "");
+  const [reading, setReading] = useState<{ data: AiReading; file: File; key: number } | null>(null);
   const { busy, error, run } = useAction();
   const chosen = suppliers.find((s) => s.id === pick) ?? null;
+  const read = reading?.data.fields;
   // Digitou no "Novo fornecedor" um CNPJ que já está no cadastro: usa o do cadastro.
   const known = !quote && pick === NEW ? suppliers.find((s) => s.cnpj === cnpj.replace(/\D/g, "")) ?? null : null;
   const suggested = suppliers.filter((s) => s.suggested);
   const others = suppliers.filter((s) => !s.suggested);
   const label = (s: SupplierOption) => s.tradeName ? `${s.tradeName} (${s.companyName})` : s.companyName;
-  // Campos de contato: do orçamento, do fornecedor escolhido ou em branco.
-  const contact = quote ?? chosen;
+  // Campos de contato: do orçamento, do que a IA leu, do fornecedor escolhido ou em branco.
+  const pre = (k: "contactName" | "phone" | "email") => quote?.[k] ?? read?.[k] ?? chosen?.[k] ?? "";
+  const applyReading = (data: AiReading, file: File) => {
+    const known = data.supplierId && suppliers.some((s) => s.id === data.supplierId) ? data.supplierId : null;
+    setPick(known ?? NEW);
+    setCnpj(cnpjMask(data.fields.cnpj));
+    setReading({ data, file, key: Date.now() });
+  };
   return (
     <form
       className="grid gap-3 sm:grid-cols-2"
@@ -258,12 +326,28 @@ export function QuoteForm({ requestId, quote, suppliers = [], onDone }: { reques
         }));
         const file = f.get("file");
         if (file instanceof File && file.size > 0) body.set("file", file);
+        else if (reading) body.set("file", reading.file);
         const ok = await run(() => quote
           ? api(`/api/supplier-quotes/${quote.id}`, { method: "PATCH", body })
           : api(`/api/quote-requests/${requestId}/quotes`, { body }));
         if (ok) onDone?.();
       }}
     >
+      {!quote && aiReader && !reading && <AiReader requestId={requestId} onRead={applyReading} />}
+      {reading && (
+        <div className="rounded-xl border border-amber-400/50 bg-amber-400/10 p-3 text-sm sm:col-span-2" role="status">
+          <p className="font-semibold">A IA leu {reading.file.name}. Nada foi salvo ainda.</p>
+          <p className="mt-0.5">Confira cada campo com o arquivo e corrija o que precisar. O orçamento só entra quando você clicar em Confirmar e adicionar.</p>
+          {reading.data.warnings.length > 0 && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5">
+              {reading.data.warnings.map((w) => <li key={w}>{w}</li>)}
+            </ul>
+          )}
+          <button type="button" onClick={() => { setReading(null); setPick(suppliers.length ? "" : NEW); setCnpj(""); }} className="mt-2 text-primary underline">
+            Descartar a leitura
+          </button>
+        </div>
+      )}
       {!quote && (
         <label className="block sm:col-span-2">
           <Label hint="(do cadastro da agência)">Fornecedor</Label>
@@ -289,7 +373,7 @@ export function QuoteForm({ requestId, quote, suppliers = [], onDone }: { reques
           <p className="text-sm tabular-nums text-muted">CNPJ {cnpjMask(chosen.cnpj)}</p>
         </div>
       ) : (pick === NEW || quote) && (
-        <>
+        <Fragment key={reading?.key ?? 0}>
           {!quote && <p className="text-sm text-muted sm:col-span-2">O fornecedor novo entra no cadastro da agência junto com este orçamento.</p>}
           <label className="block">
             <Label>CNPJ</Label>
@@ -302,45 +386,58 @@ export function QuoteForm({ requestId, quote, suppliers = [], onDone }: { reques
           </label>
           <label className="block">
             <Label>Razão social</Label>
-            <Input name="companyName" required maxLength={160} defaultValue={quote?.companyName} />
+            <Input name="companyName" required maxLength={160} defaultValue={quote?.companyName ?? read?.companyName ?? ""} />
           </label>
-        </>
+        </Fragment>
       )}
       {(pick || quote) && (
-        <div key={pick} className="contents">
+        <div key={`${pick}-${reading?.key ?? 0}`} className="contents">
           <label className="block">
             <Label>Responsável</Label>
-            <Input name="contactName" required maxLength={120} defaultValue={contact?.contactName ?? ""} />
+            <Input name="contactName" required maxLength={120} defaultValue={pre("contactName")} />
           </label>
           <label className="block">
             <Label>Telefone</Label>
-            <Input name="phone" type="tel" required maxLength={30} defaultValue={contact?.phone ?? ""} placeholder="(11) 98765-4321" />
+            <Input name="phone" type="tel" required maxLength={30} defaultValue={pre("phone")} placeholder="(11) 98765-4321" />
           </label>
           <label className="block">
             <Label>E-mail</Label>
-            <Input name="email" type="email" required maxLength={160} defaultValue={contact?.email ?? ""} />
+            <Input name="email" type="email" required maxLength={160} defaultValue={pre("email")} />
           </label>
           <label className="block">
             <Label>Valor total (R$)</Label>
-            <Input name="totalValue" inputMode="decimal" required defaultValue={quote ? String(quote.totalValue).replace(".", ",") : ""} placeholder="Ex.: 27.500,00" />
+            <Input name="totalValue" inputMode="decimal" required defaultValue={quote ? String(quote.totalValue).replace(".", ",") : moneyText(read?.totalValue ?? null)} placeholder="Ex.: 27.500,00" />
           </label>
           <label className="block">
             <Label hint="(opcional)">Condição de pagamento</Label>
-            <Input name="paymentTerms" maxLength={300} defaultValue={quote?.paymentTerms ?? ""} placeholder="Ex.: 30dd após o evento" />
+            <Input name="paymentTerms" maxLength={300} defaultValue={quote?.paymentTerms ?? read?.paymentTerms ?? ""} placeholder="Ex.: 30dd após o evento" />
           </label>
-          <label className="block">
-            <Label hint={quote?.hasFile ? "(envie outro para trocar)" : "(PDF, foto, Excel ou Word, até 10 MB)"}>Arquivo recebido</Label>
-            <Input name="file" type="file" accept=".pdf,image/*,.xlsx,.docx" className="py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1 file:text-foreground" />
-          </label>
+          {reading ? (
+            <div className="block">
+              <Label>Arquivo recebido</Label>
+              <p className="flex min-h-11 items-center gap-2 truncate rounded-xl border border-border px-3 text-sm"><Icon name="paperclip" className="h-4 w-4 shrink-0 text-muted" />{reading.file.name}</p>
+            </div>
+          ) : (
+            <label className="block">
+              <Label hint={quote?.hasFile ? "(envie outro para trocar)" : "(PDF, foto, Excel ou Word, até 10 MB)"}>Arquivo recebido</Label>
+              <Input name="file" type="file" accept=".pdf,image/*,.xlsx,.docx" className="py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1 file:text-foreground" />
+            </label>
+          )}
           <label className="block sm:col-span-2">
             <Label hint="(opcional)">Observações</Label>
-            <Textarea name="notes" maxLength={2000} rows={2} defaultValue={quote?.notes ?? ""} placeholder="Prazo de entrega, o que está incluso, validade da proposta" />
+            <Textarea name="notes" maxLength={2000} rows={2} defaultValue={quote?.notes ?? read?.notes ?? ""} placeholder="Prazo de entrega, o que está incluso, validade da proposta" />
           </label>
         </div>
       )}
+      {reading && (pick || quote) && (
+        <label className="flex items-start gap-2 text-sm sm:col-span-2">
+          <input type="checkbox" required className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-primary)]" />
+          <span>Conferi os dados com o arquivo do orçamento.</span>
+        </label>
+      )}
       <div className="sm:col-span-2"><FormError message={error} /></div>
       <div className="flex gap-2 sm:col-span-2">
-        <Button type="submit" disabled={busy || (!pick && !quote)}>{quote ? "Salvar" : "Registrar orçamento"}</Button>
+        <Button type="submit" disabled={busy || (!pick && !quote)}>{quote ? "Salvar" : reading ? "Confirmar e adicionar" : "Registrar orçamento"}</Button>
         {onDone && <Button type="button" variant="secondary" onClick={onDone}>Cancelar</Button>}
       </div>
     </form>
@@ -348,7 +445,7 @@ export function QuoteForm({ requestId, quote, suppliers = [], onDone }: { reques
 }
 
 /** Espaço de um orçamento: botão para registrar ou o formulário aberto. */
-export function AddQuote({ requestId, suppliers }: { requestId: string; suppliers: SupplierOption[] }) {
+export function AddQuote({ requestId, suppliers, aiReader = false }: { requestId: string; suppliers: SupplierOption[]; aiReader?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
@@ -361,7 +458,7 @@ export function AddQuote({ requestId, suppliers }: { requestId: string; supplier
       </button>
     );
   }
-  return <Card className="sm:col-span-2 lg:col-span-3"><p className="mb-3 font-semibold">Novo orçamento</p><QuoteForm requestId={requestId} suppliers={suppliers} onDone={() => setOpen(false)} /></Card>;
+  return <Card className="sm:col-span-2 lg:col-span-3"><p className="mb-3 font-semibold">Novo orçamento</p><QuoteForm requestId={requestId} suppliers={suppliers} aiReader={aiReader} onDone={() => setOpen(false)} /></Card>;
 }
 
 /** Editar ou remover um orçamento registrado. */

@@ -4,17 +4,18 @@ import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
 import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
+import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
 import type { Tx } from "../../server/db/with-user";
 import { getStorage } from "../../server/storage/storage";
 import { normalizeCnpj } from "../../lib/cnpj";
 import { parseDecimal } from "../../lib/money";
-import { normalizePhone } from "../../lib/phone";
+import { formatPhone, normalizePhone } from "../../lib/phone";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
 import { resolveSupplier, supplierOptions } from "../suppliers/suppliers.service";
 import { sniffImage } from "../attachments/image";
+import { AI_READABLE, AiUnavailableError, QUOTE_READER_MODEL, anthropicQuoteReader, quoteReaderEnabled, type AiReadableMime, type QuoteReader } from "./quote-reader";
 
 /**
  * Pré-produção: cotação. O responsável escreve o descritivo (o "briefing" que
@@ -191,6 +192,7 @@ export async function getQuote(actor: Actor, id: string, now = new Date()) {
       quotes: list,
       comparison: compareQuotes(list),
       suppliers,
+      aiReader: editable && quoteReaderEnabled(),
       people,
       costItems: items.map((i) => ({ id: i.id, label: `${i.section.name} › ${i.name}` })),
       can: {
@@ -363,6 +365,90 @@ function checkFile(file: QuoteFile) {
   if (!kind) throw new ValidationError("Envie o orçamento em PDF, foto, Excel (.xlsx) ou Word (.docx)");
   const name = file.name.replace(/[\\/\r\n"]/g, "_").trim().slice(0, 160) || `orcamento.${kind.ext}`;
   return { ...kind, name };
+}
+
+/** Leituras pela IA por pessoa, por hora (cada uma custa). */
+export const MAX_AI_READS_PER_HOUR = 20;
+
+const clip = (v: string | null, max: number) => (v ? v.replace(/\s+/g, " ").trim().slice(0, max) || null : null);
+const clipLines = (v: string | null, max: number) => (v ? v.trim().slice(0, max) || null : null);
+
+/**
+ * A IA lê o arquivo do orçamento (PDF ou foto) e devolve os campos para o
+ * formulário. NADA é salvo aqui: quem anexou confere e clica em "Confirmar e
+ * adicionar", que é o addSupplierQuote normal, com as mesmas validações. Só
+ * fica o registro da leitura no histórico (quem, quando, arquivo, custo).
+ */
+export async function readQuoteWithAi(actor: Actor, requestId: string, file: QuoteFile | null, reader: QuoteReader = anthropicQuoteReader) {
+  if (!file) throw new ValidationError("Anexe o arquivo do orçamento");
+  const kind = checkFile(file);
+  if (!(AI_READABLE as readonly string[]).includes(kind.mime)) {
+    throw new ValidationError(kind.mime === "image/heic"
+      ? "Foto em HEIC: a IA não lê esse formato. Envie em JPG ou PNG, ou preencha à mão."
+      : "A IA lê PDF e foto. Excel e Word você preenche à mão.");
+  }
+  if (kind.mime.startsWith("image/") && file.bytes.length > 5 * 1024 * 1024) throw new ValidationError("Foto maior que 5 MB: a IA não lê. Envie uma foto menor ou preencha à mão.");
+  const ctx = await actor.run(async (tx) => {
+    const r = await load(actor, tx, requestId);
+    requireEditable(r);
+    if (await tx.supplierQuote.count({ where: { requestId: r.id } }) >= MAX_QUOTES) {
+      throw new ValidationError(`A cotação já tem ${MAX_QUOTES} orçamentos. Edite ou remova um deles.`);
+    }
+    const reads = await tx.auditLog.count({
+      where: { actorUserId: actor.userId, entity: "quote_reading", occurredAt: { gte: new Date(Date.now() - 3_600_000) } },
+    });
+    if (reads >= MAX_AI_READS_PER_HOUR) throw new AppError("Limite de leituras pela IA nesta hora. Preencha à mão ou tente mais tarde.", 429, "AI_LIMIT");
+    const event = await tx.event.findUniqueOrThrow({ where: { id: r.eventId }, select: { name: true, agencyId: true } });
+    return { r, event };
+  });
+  if (reader === anthropicQuoteReader && !quoteReaderEnabled()) throw new AiUnavailableError();
+
+  const read = await reader({ bytes: file.bytes, mime: kind.mime as AiReadableMime }, { eventName: ctx.event.name, itemTitle: ctx.r.title });
+
+  const warnings: string[] = [];
+  if (!read.isQuote) warnings.push("O arquivo não parece um orçamento. Confira cada campo com cuidado.");
+  const rawCnpj = (read.cnpj ?? "").replace(/\D/g, "").slice(0, 14);
+  const cnpj = normalizeCnpj(rawCnpj);
+  if (!rawCnpj) warnings.push("Não encontrei o CNPJ do fornecedor.");
+  else if (!cnpj) warnings.push("O CNPJ lido não confere. Confira no arquivo.");
+  const phone = read.phone ? normalizePhone(read.phone) : null;
+  if (!read.phone) warnings.push("Não encontrei o telefone.");
+  else if (!phone) warnings.push("O telefone lido não parece válido. Confira o DDD.");
+  const email = clip(read.email, 160);
+  if (!email) warnings.push("Não encontrei o e-mail.");
+  else if (!z.email().safeParse(email).success) warnings.push("O e-mail lido não parece válido.");
+  if (!read.contactName) warnings.push("Não encontrei o nome do responsável.");
+  const totalValue = read.totalValue !== null && read.totalValue >= 0 && read.totalValue < 1e12 ? Math.round(read.totalValue * 100) / 100 : null;
+  if (totalValue === null) warnings.push("Não encontrei o valor total. Confira no arquivo.");
+
+  // Fornecedor já no cadastro da agência: o formulário usa o do cadastro.
+  const supplier = cnpj
+    ? await actor.run((tx) => tx.supplier.findUnique({
+      where: { agencyId_cnpj: { agencyId: ctx.event.agencyId, cnpj } }, select: { id: true, companyName: true, archivedAt: true },
+    }))
+    : null;
+  if (supplier?.archivedAt) warnings.push(`${supplier.companyName} está arquivado no cadastro. Peça ao diretor para reativar antes de adicionar.`);
+
+  await actor.run((tx) => audit(tx, actor, {
+    eventId: ctx.r.eventId, entity: "quote_reading", entityId: ctx.r.id, action: "CREATE",
+    after: { fileName: kind.name, mime: kind.mime, size: file.bytes.length, model: QUOTE_READER_MODEL, inputTokens: read.usage.input, outputTokens: read.usage.output, isQuote: read.isQuote },
+  }));
+
+  return {
+    fields: {
+      cnpj: cnpj ?? rawCnpj,
+      companyName: clip(read.companyName, 160),
+      tradeName: clip(read.tradeName, 160),
+      contactName: clip(read.contactName, 120),
+      phone: phone ? formatPhone(phone) : clip(read.phone, 30),
+      email,
+      totalValue,
+      paymentTerms: clip(read.paymentTerms, 300),
+      notes: clipLines(read.notes, 2000),
+    },
+    supplierId: supplier && !supplier.archivedAt ? supplier.id : null,
+    warnings,
+  };
 }
 
 /** Grava o arquivo antes do registro (fora do banco) ou na mesma transação (no banco). */
