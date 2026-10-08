@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { isAgencyAdmin, isAgencyFullAdmin } from "@/server/authz/actor";
@@ -8,7 +9,10 @@ import { AgencyAdmins, AgencySettings } from "../forms";
 
 export const metadata = { title: "Agência" };
 
-/** A agência, os Admins e o Suporte dela: para a plataforma e para a própria agência. */
+/**
+ * A agência, os diretores de produção e o Suporte dela: para a plataforma e
+ * para a própria agência. A agência cuida dos diretores em /diretores.
+ */
 export default async function AgencyPage({ params }: PageProps<"/agencias/[agencyId]">) {
   const { agencyId } = await params;
   const actor = await requireUser(`/agencias/${agencyId}`);
@@ -30,23 +34,36 @@ export default async function AgencyPage({ params }: PageProps<"/agencias/[agenc
       />
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-4 lg:py-6">
         {actor.isPlatformAdmin && <AgencySettings agency={agency} />}
-        <SectionTitle>Admins da agência</SectionTitle>
+        <SectionTitle>Diretores de produção</SectionTitle>
         <p className="text-sm text-muted">
-          Os Admins criam clientes e eventos, cadastram os diretores e entram em todos os eventos da agência.
+          Cada diretor de produção tem o próprio login, cria clientes e eventos e entra como Gerente em todos os eventos da
+          agência.
         </p>
-        <AgencyAdmins agencyId={agency.id} admins={admins} me={actor.email} canManage={fullAdmin || actor.isPlatformAdmin} />
+        {actor.isPlatformAdmin ? (
+          <AgencyAdmins agencyId={agency.id} admins={admins} me={actor.email} canManage />
+        ) : (
+          <Link href="/diretores" className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4">
+            <span className="min-w-0">
+              <span className="block font-semibold">
+                {admins.filter((a) => a.active).length} {admins.filter((a) => a.active).length === 1 ? "diretor ativo" : "diretores ativos"}
+              </span>
+              <span className="block text-sm text-muted">{fullAdmin ? "Cadastrar, convidar e desativar" : "Ver quem são"}</span>
+            </span>
+            <span className="text-2xl text-primary">›</span>
+          </Link>
+        )}
 
         <SectionTitle>Suporte CORE 360</SectionTitle>
         <p className="text-sm text-muted">
           Quem a agência autoriza da equipe CORE 360 para entrar e ajudar quando algo dá errado. O Suporte vê e mexe em
-          tudo o que o Admin mexe, menos Admins e Suporte. Tudo o que ele faz fica registrado, e o acesso pode ser
+          tudo o que o diretor mexe, menos diretores e Suporte. Tudo o que ele faz fica registrado, e o acesso pode ser
           desligado a qualquer momento.
         </p>
         {!supportOn && (
           <p className="rounded-2xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
             {fullAdmin
               ? "Nenhum Suporte autorizado. Cadastre o e-mail que a CORE 360 passou para que a gente consiga ajudar."
-              : "Esta agência ainda não autorizou o Suporte. Só um Admin dela pode autorizar."}
+              : "Esta agência ainda não autorizou o Suporte. Só um diretor de produção dela pode autorizar."}
           </p>
         )}
         <AgencyAdmins agencyId={agency.id} admins={support} me={actor.email} role="SUPORTE" canManage={fullAdmin} />

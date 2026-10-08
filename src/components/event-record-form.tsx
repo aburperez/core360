@@ -180,7 +180,7 @@ export function EventRecordForm({ eventId, initial, leaders, finances }: {
       </Section>
 
       {finances && (
-        <Section title="Valores" hint="Só a pré-produção e o Admin veem. O campo nunca vê valores.">
+        <Section title="Valores" hint="Só a pré-produção e os diretores veem. O campo nunca vê valores.">
           <label className="block">
             <Label hint="(R$)">Orçamento aprovado</Label>
             <Input name="approvedBudget" inputMode="decimal" defaultValue={finances.approvedBudget} placeholder="Ex.: 480.000,00" />

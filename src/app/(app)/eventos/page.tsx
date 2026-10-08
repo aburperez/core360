@@ -17,7 +17,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   const events = await listEvents(actor);
   const { todos } = await searchParams;
   const admin = isAgencyAdmin(actor);
-  // Quem só participa de um evento vai direto para ele (os Admins veem a lista e o painel da agência).
+  // Quem só participa de um evento vai direto para ele (os diretores de produção veem a lista e o painel da agência).
   if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
   const many = actor.adminAgencies.length > 1;
   const noSupport = await agenciesWithoutSupport(actor);
@@ -30,7 +30,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
           <Link href="/agencias" className="flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
             <span className="min-w-0">
               <span className="block font-semibold">Agências</span>
-              <span className="block text-sm text-muted">Criar, convidar o Admin, suspender e reativar</span>
+              <span className="block text-sm text-muted">Criar, convidar o diretor de produção, suspender e reativar</span>
             </span>
             <span className="text-2xl text-primary">›</span>
           </Link>
@@ -44,7 +44,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
           const q = many ? `?agencia=${a.id}` : "";
           return (
             <div key={a.id} className="rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{a.role === "SUPORTE" ? "Agência · você é Suporte" : "Agência"}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{a.role === "SUPORTE" ? "Agência · você é Suporte" : "Agência · diretor de produção"}</p>
               <p className="text-lg font-semibold">{a.name}</p>
               {noSupport.has(a.id) && (
                 <Link href={`/agencias/${a.id}`} className="mt-1 block text-sm text-amber-200 underline">
@@ -56,8 +56,8 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
                   + Novo evento
                 </Link>
                 <AdminLink href={`/clientes${q}`}>Clientes</AdminLink>
-                <AdminLink href={`/diretores${q}`}>Diretores</AdminLink>
-                <AdminLink href={`/agencias/${a.id}`}>Admins e Suporte</AdminLink>
+                <AdminLink href={`/diretores${q}`}>Diretores de produção</AdminLink>
+                <AdminLink href={`/agencias/${a.id}`}>Suporte CORE 360</AdminLink>
               </div>
             </div>
           );
@@ -97,7 +97,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
 
 function AdminLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-surface px-4 font-semibold">
+    <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-surface px-3 py-2 text-center leading-tight font-semibold">
       {children}
     </Link>
   );

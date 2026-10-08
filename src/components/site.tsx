@@ -202,7 +202,7 @@ const SECURITY = [
   { title: "Dados separados", text: "Uma agência nunca vê eventos, pessoas ou custos de outra. A regra está no banco de dados, não só na tela." },
   { title: "Acesso por evento", text: "Cada pessoa entra por convite e vê só a sua parte. Saiu do evento, o acesso sai na hora." },
   { title: "Tudo registrado", text: "Quem abriu, mudou ou concluiu cada coisa fica no histórico, com data e hora." },
-  { title: "Suporte com permissão", text: "A equipe CORE 360 só entra numa agência se o Admin da agência autorizar." },
+  { title: "Suporte com permissão", text: "A equipe CORE 360 só entra numa agência se o diretor de produção autorizar." },
 ];
 
 export function Landing({ contactUrl }: { contactUrl?: string | null }) {
@@ -320,8 +320,8 @@ export function Landing({ contactUrl }: { contactUrl?: string | null }) {
               <p className="mt-3 text-lg text-muted">Sem instalar nada: funciona no navegador do computador e do celular.</p>
               <ol className="mt-8 space-y-4">
                 {[
-                  "Criamos o espaço da agência e convidamos o Admin dela.",
-                  "O Admin cadastra os diretores e os clientes.",
+                  "Criamos o espaço da agência e convidamos o diretor de produção.",
+                  "O diretor cadastra os clientes, os eventos e os outros diretores.",
                   "Montamos juntos a pré-produção do primeiro evento.",
                   "A equipe recebe o convite e usa no celular no dia.",
                 ].map((p, i) => (

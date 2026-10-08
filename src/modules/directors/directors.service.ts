@@ -1,29 +1,36 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { isAgencyAdmin } from "../../server/authz/actor";
+import { isAgencyAdmin, isAgencyFullAdmin } from "../../server/authz/actor";
 import { audit, diff } from "../../server/audit/audit";
-import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
-import { createInvitation } from "../participants/participants.service";
 import { resolveAgency } from "../clients/clients.service";
+import { createAgencyAdminInvitation } from "../agencies/agencies.service";
 
 /**
- * Diretores de produção: o Admin da agência cadastra uma vez e o banco põe a
- * pessoa como Gerente em todos os eventos abertos DA AGÊNCIA, inclusive os
- * criados depois (gatilhos das migrations 20261006120000_diretores e
- * 20261007120000_agencias). Um convite só liga a conta em todos os eventos.
- * Só o Admin da agência vê esta parte; para os outros ela não existe.
+ * Diretores de produção: são o painel administrativo da agência. Cada um tem
+ * login próprio, abre clientes e eventos e entra como Gerente em todos os
+ * eventos abertos da agência, inclusive os criados depois (gatilhos das
+ * migrations 20261006120000_diretores, 20261007120000_agencias e
+ * 20261008200000_diretor_admin, que liga cada diretor ao acesso de Admin).
+ * Um convite só liga a conta na agência e em todos os eventos.
+ * O Suporte CORE 360 vê a lista, mas só um diretor cadastra ou muda diretores.
  */
 
 function requireAdmin(actor: Actor) {
   if (!isAgencyAdmin(actor)) throw new NotFoundError("Página");
 }
 
+function requireManager(actor: Actor, agencyId: string) {
+  if (!isAgencyFullAdmin(actor, agencyId)) throw new ForbiddenError("Só um diretor de produção da agência cadastra ou muda diretores");
+}
+
 const OPEN_EVENT = { deletedAt: null, status: { notIn: ["CONCLUIDO" as const, "CANCELADO" as const] } };
 
 const select = {
   id: true, name: true, email: true, phone: true, jobTitle: true, active: true, userId: true, createdAt: true,
+  agencyAdmin: { select: { _count: { select: { invitations: true } } } },
   participants: {
     where: { deletedAt: null, event: OPEN_EVENT },
     select: { active: true, invitedAt: true, event: { select: { id: true, name: true } } },
@@ -34,15 +41,17 @@ const select = {
 type Row = {
   id: string; name: string; email: string; phone: string | null; jobTitle: string | null; active: boolean;
   userId: string | null; createdAt: Date;
+  agencyAdmin: { _count: { invitations: number } } | null;
   participants: { active: boolean; invitedAt: Date | null; event: { id: string; name: string } }[];
 };
 
-function view(d: Row) {
-  const { userId, participants, ...rest } = d;
+function view(d: Row, me?: string) {
+  const { userId, participants, agencyAdmin, ...rest } = d;
   return {
     ...rest,
+    me: !!userId && userId === me,
     linked: !!userId,
-    invited: participants.some((p) => p.invitedAt),
+    invited: !!agencyAdmin?._count.invitations || participants.some((p) => p.invitedAt),
     events: participants.filter((p) => p.active).map((p) => p.event),
   };
 }
@@ -53,7 +62,7 @@ export async function listDirectors(actor: Actor, agencyId?: string | null) {
   const rows = await actor.run((tx) =>
     tx.director.findMany({ where: { agencyId: agency.id }, orderBy: [{ active: "desc" }, { name: "asc" }], select }),
   );
-  return rows.map(view);
+  return rows.map((d) => view(d, actor.userId));
 }
 
 const createSchema = z.object({
@@ -69,6 +78,7 @@ export async function createDirector(actor: Actor, input: unknown) {
   requireAdmin(actor);
   const { agencyId, ...data } = parse(createSchema, input);
   const agency = resolveAgency(actor, agencyId);
+  requireManager(actor, agency.id);
   try {
     return await actor.run(async (tx) => {
       const d = await tx.director.create({ data: { ...data, agencyId: agency.id, createdById: actor.userId }, select });
@@ -76,7 +86,7 @@ export async function createDirector(actor: Actor, input: unknown) {
       return view(d);
     });
   } catch (e) {
-    if (isUniqueViolation(e)) throw new ConflictError("Já existe um diretor com este e-mail");
+    if (isUniqueViolation(e)) throw new ConflictError("Esta pessoa já está na agência (como diretor ou Suporte)");
     throw e;
   }
 }
@@ -94,42 +104,38 @@ export async function updateDirector(actor: Actor, directorId: string, input: un
   if (!uuid.safeParse(directorId).success) throw new NotFoundError("Diretor");
   const data = parse(updateSchema, input);
   return actor.run(async (tx) => {
-    const before = await tx.director.findUnique({ where: { id: directorId }, select: { name: true, phone: true, jobTitle: true, active: true } });
-    if (!before) throw new NotFoundError("Diretor");
+    const found = await tx.director.findUnique({
+      where: { id: directorId },
+      select: { agencyId: true, userId: true, name: true, phone: true, jobTitle: true, active: true },
+    });
+    if (!found) throw new NotFoundError("Diretor");
+    const { agencyId, userId, ...before } = found;
+    requireManager(actor, agencyId);
+    if (data.active === false && userId === actor.userId) throw new ValidationError("Você não pode desativar o seu próprio acesso");
     const changes = diff(before, data);
     const d = await tx.director.update({ where: { id: directorId }, data, select });
     if (Object.keys(changes.after).length) {
       const action = "active" in changes.after ? (data.active ? "ACTIVATE" : "DEACTIVATE") : "UPDATE";
       await audit(tx, actor, { entity: "director", entityId: d.id, action, ...changes });
     }
-    return view(d);
+    return view(d, actor.userId);
   });
 }
 
 /**
- * Convite do diretor: um link só. Ele é gerado para uma das participações
- * dele; ao aceitar, o banco liga a conta em todos os eventos.
+ * Convite do diretor: um link só, de acesso à agência (vale mesmo sem evento
+ * aberto). Ao aceitar, o banco liga a conta na agência e em todos os eventos.
  */
 export async function createDirectorInvitation(actor: Actor, directorId: string) {
   requireAdmin(actor);
   if (!uuid.safeParse(directorId).success) throw new NotFoundError("Diretor");
   const d = await actor.run((tx) =>
-    tx.director.findUnique({
-      where: { id: directorId },
-      select: {
-        active: true, userId: true,
-        participants: {
-          where: { active: true, deletedAt: null, userId: null, event: OPEN_EVENT },
-          select: { id: true },
-          orderBy: { event: { startsAt: "asc" } },
-          take: 1,
-        },
-      },
-    }),
+    tx.director.findUnique({ where: { id: directorId }, select: { agencyId: true, active: true, userId: true, agencyAdmin: { select: { id: true } } } }),
   );
   if (!d) throw new NotFoundError("Diretor");
+  requireManager(actor, d.agencyId);
   if (!d.active) throw new ValidationError("Diretor desativado");
-  if (d.userId) throw new ValidationError("Este diretor já entrou no app. Ele usa a senha de sempre em todos os eventos.");
-  if (!d.participants[0]) throw new ValidationError("Ainda não há evento aberto. O convite fica disponível quando houver um evento.");
-  return createInvitation(actor, d.participants[0].id);
+  if (d.userId) throw new ValidationError("Este diretor já entrou no app. Ele usa a senha de sempre.");
+  if (!d.agencyAdmin) throw new NotFoundError("Diretor");
+  return createAgencyAdminInvitation(actor, d.agencyAdmin.id);
 }

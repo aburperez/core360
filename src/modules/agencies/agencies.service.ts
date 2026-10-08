@@ -10,8 +10,10 @@ import { INVITE_TTL_DAYS } from "../participants/participants.service";
 
 /**
  * Agências que alugam o CORE 360. O Admin da plataforma cria a agência e o
- * primeiro Admin dela, suspende e reativa. O Admin da agência cadastra outros
- * Admins e o Suporte (equipe CORE 360 que ela autoriza a entrar para ajudar).
+ * primeiro diretor de produção dela, suspende e reativa. Na agência, Admin e
+ * diretor de produção são a mesma pessoa (o banco liga agency_admins e
+ * directors, migration 20261008200000_diretor_admin): o diretor cadastra
+ * outros diretores e o Suporte (equipe CORE 360 que ela autoriza a entrar).
  * O Suporte vê a agência, mas não mexe em Admins nem em Suporte. A RLS
  * (migrations 20261007120000_agencias e 20261007140000_suporte_agencia)
  * garante o mesmo no banco.
@@ -39,7 +41,7 @@ function requireTeamManager(actor: Actor, agencyId: string, role: AgencyAdminRol
   if (isAgencyFullAdmin(actor, agencyId)) return;
   if (role === "ADMIN" && actor.isPlatformAdmin) return;
   throw new ForbiddenError(
-    role === "SUPORTE" ? "Só um Admin da agência autoriza ou desliga o Suporte" : "Só um Admin da agência cuida dos Admins",
+    role === "SUPORTE" ? "Só um diretor de produção da agência autoriza ou desliga o Suporte" : "Só um diretor de produção da agência cuida dos diretores",
   );
 }
 
@@ -135,7 +137,7 @@ export async function addAgencyAdmin(actor: Actor, agencyId: string, input: unkn
       return adminView(a);
     });
   } catch (e) {
-    if (isUniqueViolation(e)) throw new ConflictError("Esta pessoa já está cadastrada nesta agência (como Admin ou Suporte)");
+    if (isUniqueViolation(e)) throw new ConflictError("Esta pessoa já está cadastrada nesta agência (como diretor ou Suporte)");
     throw e;
   }
 }
@@ -149,7 +151,7 @@ export async function updateAgencyAdmin(actor: Actor, adminId: string, input: un
     const before = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, role: true, name: true, active: true, userId: true } });
     if (!before) throw new NotFoundError("Admin");
     requireTeamManager(actor, before.agencyId, before.role);
-    if (data.active === false && before.userId === actor.userId) throw new ValidationError("Você não pode tirar o seu próprio acesso de Admin");
+    if (data.active === false && before.userId === actor.userId) throw new ValidationError("Você não pode desativar o seu próprio acesso");
     const changes = diff({ name: before.name, active: before.active }, data);
     if (!Object.keys(changes.after).length) return { id: adminId };
     await tx.agencyAdmin.update({ where: { id: adminId }, data });

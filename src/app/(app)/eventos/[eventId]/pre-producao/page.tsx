@@ -53,7 +53,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const briefed = fn.people.filter((p) => p.briefingState !== "SEM");
   const read = briefed.filter((p) => p.briefingState === "LIDO").length;
   const priced = sheet.itemCount - sheet.totals.undefinedCount;
-  const role = isEventSupport(actor, eventId) ? "Suporte" : isEventAdmin(actor, eventId) ? "Admin" : ROLE_LABEL[membershipFor(actor, eventId)!.role];
+  const role = isEventSupport(actor, eventId) ? "Suporte" : isEventAdmin(actor, eventId) ? ROLE_LABEL.ADMIN : ROLE_LABEL[membershipFor(actor, eventId)!.role];
 
   const tiles: TileData[] = [
     {

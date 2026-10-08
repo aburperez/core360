@@ -26,7 +26,7 @@ function useGuard() {
 }
 
 /** Abre o compartilhar do celular (ou copia) e devolve o link completo. */
-async function shareInvite(path: string, name: string, as = "Admin") {
+async function shareInvite(path: string, name: string, as = "diretor de produção") {
   const url = `${location.origin}${path}`;
   if (navigator.share) {
     await navigator.share({ title: "Acesso CORE 360", text: `${name}, este é seu acesso de ${as} ao CORE 360:`, url }).catch(() => {});
@@ -44,7 +44,7 @@ function InviteLink({ url }: { url: string }) {
   );
 }
 
-/** Nova agência com o primeiro Admin. Mostra o link do convite uma vez. */
+/** Nova agência com o primeiro diretor de produção. Mostra o link do convite uma vez. */
 export function NewAgencyForm() {
   const { error, guard } = useGuard();
   const [open, setOpen] = useState(false);
@@ -79,7 +79,7 @@ export function NewAgencyForm() {
         }}
       >
         <label className="block"><Label>Nome da agência</Label><Input name="name" required maxLength={120} autoFocus /></label>
-        <p className="pt-1 text-sm font-semibold">Primeiro Admin da agência</p>
+        <p className="pt-1 text-sm font-semibold">Primeiro diretor de produção da agência</p>
         <label className="block"><Label>Nome</Label><Input name="adminName" required maxLength={120} /></label>
         <label className="block"><Label>E-mail</Label><Input name="adminEmail" type="email" inputMode="email" required /></label>
         <FormError message={error} />
@@ -111,7 +111,7 @@ export function AgencySettings({ agency }: { agency: { id: string; name: string;
       </form>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">
-          {suspended ? "Suspensa: ninguém da agência entra até você reativar." : "Ativa: os Admins e as equipes dos eventos entram normalmente."}
+          {suspended ? "Suspensa: ninguém da agência entra até você reativar." : "Ativa: os diretores e as equipes dos eventos entram normalmente."}
         </p>
         <Button
           variant={suspended ? "success" : "secondary"}
@@ -132,7 +132,7 @@ export function AgencySettings({ agency }: { agency: { id: string; name: string;
 type Admin = { id: string; name: string; email: string; role: "ADMIN" | "SUPORTE"; active: boolean; linked: boolean };
 
 /**
- * Admins ou Suporte da agência: convite, desativar, cadastrar outro. Sem
+ * Diretores de produção ou Suporte da agência: convite, desativar, cadastrar outro. Sem
  * canManage a lista é só para ver (o servidor recusa do mesmo jeito).
  */
 export function AgencyAdmins({
@@ -140,7 +140,7 @@ export function AgencyAdmins({
 }: { agencyId: string; admins: Admin[]; me: string; role?: "ADMIN" | "SUPORTE"; canManage: boolean }) {
   const { error, guard } = useGuard();
   const [open, setOpen] = useState(false);
-  const label = role === "SUPORTE" ? "Suporte" : "Admin";
+  const label = role === "SUPORTE" ? "Suporte" : "diretor de produção";
   return (
     <div className="space-y-3">
       {admins.length > 0 && (
@@ -170,7 +170,7 @@ export function AgencyAdmins({
         </Card>
       ) : (
         <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setOpen(true)}>
-          {role === "SUPORTE" ? "+ Autorizar Suporte" : "+ Outro Admin"}
+          {role === "SUPORTE" ? "+ Autorizar Suporte" : "+ Outro diretor de produção"}
         </Button>
       )}
     </div>

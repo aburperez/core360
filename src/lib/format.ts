@@ -33,7 +33,7 @@ export const PRIORITY_STYLE: Record<Priority, string> = {
 };
 
 export const ROLE_LABEL: Record<ParticipantRole | "ADMIN", string> = {
-  ADMIN: "Admin",
+  ADMIN: "Diretor de produção",
   GERENTE: "Gerente",
   HEAD: "Head",
   OPERACIONAL: "Operacional",

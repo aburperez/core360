@@ -58,6 +58,7 @@ afterAll(async () => {
   await owner.agency.update({ where: { id: beta.id }, data: { status: "ACTIVE" } });
   const parts = await owner.participant.findMany({ where: { director: { agencyId: beta.id } }, select: { id: true } });
   await owner.participant.deleteMany({ where: { id: { in: parts.map((p) => p.id) } } });
+  await owner.agencyAdmin.updateMany({ where: { agencyId: beta.id }, data: { directorId: null } });
   await owner.director.deleteMany({ where: { agencyId: beta.id } });
   await Promise.all([app.$disconnect(), auth$.$disconnect(), owner.$disconnect()]);
 });
@@ -144,6 +145,7 @@ describe("agências separadas", () => {
       const p = await owner.participant.findMany({ where: { directorId: x.id }, select: { eventId: true } });
       expect(p.map((r) => r.eventId)).not.toContain(beta.eventId);
       await owner.participant.deleteMany({ where: { directorId: x.id } });
+      await owner.agencyAdmin.deleteMany({ where: { directorId: x.id } });
       await owner.director.delete({ where: { id: x.id } });
     });
   });
@@ -154,7 +156,8 @@ describe("agências separadas", () => {
     await expectStatus(createAgency(betaAdmin, { name: "Nova", adminName: "X", adminEmail: "x@x.dev" }), 404);
     await expectStatus(updateAgency(betaAdmin, beta.id, { status: "SUSPENDED" }), 404);
     await expectStatus(getAgency(betaAdmin, d.agency.id), 404);
-    expect((await getAgency(betaAdmin, beta.id)).admins.length).toBe(1);
+    // O primeiro diretor e a Dora (todo diretor de produção tem o acesso de Admin).
+    expect((await getAgency(betaAdmin, beta.id)).admins.map((a) => a.role)).toEqual(["ADMIN", "ADMIN"]);
     // Pelo banco: não enxerga outra agência e não muda a própria.
     expect(await as(beta.adminUserId, (tx) => tx.agency.findMany({ where: { id: d.agency.id } }))).toEqual([]);
     expect(await as(beta.adminUserId, (tx) => tx.agency.updateMany({ where: { id: beta.id }, data: { status: "SUSPENDED" } }))).toEqual({ count: 0 });

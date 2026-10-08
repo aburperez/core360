@@ -20,8 +20,8 @@ export default async function AgenciesPage() {
       <TopBar title="Agências" subtitle={`${active} ativas de ${agencies.length}`} back="/eventos?todos=1" narrow />
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-4 lg:py-6">
         <p className="text-sm text-muted">
-          Cada agência é um espaço fechado: os Admins dela criam clientes, eventos e diretores, e nenhuma vê a outra.
-          Crie a agência com o primeiro Admin e mande o link de convite para ele.
+          Cada agência é um espaço fechado: os diretores de produção dela criam clientes e eventos, e nenhuma vê a outra.
+          Crie a agência com o primeiro diretor de produção e mande o link de convite para ele.
         </p>
         <NewAgencyForm />
         <SectionTitle>Agências ({agencies.length})</SectionTitle>
@@ -45,7 +45,7 @@ export default async function AgenciesPage() {
                     <span className="min-w-0">
                       <span className="block truncate font-semibold">{a.name}</span>
                       <span className="block truncate text-sm text-muted">
-                        {admins.length} {admins.length === 1 ? "Admin" : "Admins"} · {linked} com acesso
+                        {admins.length} {admins.length === 1 ? "diretor" : "diretores"} · {linked} com acesso
                       </span>
                       <span className={cx("block truncate text-sm", support ? "text-emerald-300" : "text-amber-300")}>
                         {support ? "Suporte autorizado" : "Sem Suporte autorizado"}

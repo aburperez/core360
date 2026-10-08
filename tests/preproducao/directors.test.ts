@@ -25,15 +25,18 @@ const rock = d.events.rock.id;
 const congresso = d.events.congresso.id;
 const uniq = () => Math.random().toString(36).slice(2, 8);
 const createdEvents: string[] = [];
+const since = new Date();
 
 afterAll(async () => {
-  // Os diretores entram em todos os eventos abertos; tira tudo para não mexer nos outros testes
-  // (só os da agência de demonstração: outros arquivos têm agências próprias).
-  const mine = { agencyId: d.agency.id };
+  // Os diretores entram em todos os eventos abertos; tira os criados aqui para não mexer nos
+  // outros testes (o Admin da demonstração também é diretor e fica).
+  const mine = { agencyId: d.agency.id, createdAt: { gte: since } };
   const parts = await owner.participant.findMany({ where: { director: mine }, select: { id: true } });
   const ids = parts.map((p) => p.id);
   await owner.invitation.deleteMany({ where: { participantId: { in: ids } } });
   await owner.participant.deleteMany({ where: { id: { in: ids } } });
+  await owner.agencyInvitation.deleteMany({ where: { admin: { director: mine } } });
+  await owner.agencyAdmin.deleteMany({ where: { director: mine } });
   await owner.director.deleteMany({ where: mine });
   await owner.event.updateMany({ where: { id: { in: createdEvents } }, data: { deletedAt: new Date() } });
   await Promise.all([app.$disconnect(), auth$.$disconnect(), owner.$disconnect()]);

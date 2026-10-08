@@ -73,7 +73,8 @@ describe("quem é avisado", () => {
     const o = await newOccurrence("carlos", { teamId: d.teams.eletrica.id, priority: "CRITICA" });
     await dispatch(deps);
     // Carlos abriu, então não é avisado. Inativo, Cliente, outra área e outro evento ficam de fora.
-    expect(await recipients(o.id, "URGENTE")).toEqual(["joao", "marina", "pedro", "rafael"]);
+    // O admin da demonstração é diretor de produção da agência, então é Gerente no evento.
+    expect(await recipients(o.id, "URGENTE")).toEqual(["admin", "joao", "marina", "pedro", "rafael"]);
 
     // Todo destinatário consegue abrir o chamado pelas regras normais do sistema.
     for (const userId of (await owner.notification.findMany({ where: { occurrenceId: o.id } })).map((n) => n.userId)) {
@@ -114,7 +115,7 @@ describe("quem é avisado", () => {
     const joao = await actorFor(app, "joao");
     await changeStatus(joao, o.id, { status: "BLOQUEIO" });
     await dispatch(deps);
-    expect(await recipients(o.id, "BLOQUEIO")).toEqual(["marina", "rafael"]);
+    expect(await recipients(o.id, "BLOQUEIO")).toEqual(["admin", "marina", "rafael"]);
 
     await concludeOccurrence(joao, o.id);
     await dispatch(deps);
@@ -141,7 +142,7 @@ describe("quem é avisado", () => {
     expect(await recipients(o.id, "SLA_PROXIMO")).toEqual(["joao", "rafael"]);
 
     await scanSla({ ...deps, now: () => new Date(due.getTime() + 60_000) });
-    expect(await recipients(o.id, "SLA_ESTOURADO")).toEqual(["joao", "marina", "rafael"]);
+    expect(await recipients(o.id, "SLA_ESTOURADO")).toEqual(["admin", "joao", "marina", "rafael"]);
   });
 
   it("chamado concluído não gera aviso de SLA", async () => {
@@ -180,7 +181,7 @@ describe("WhatsApp", () => {
     expect(msgs.map((m) => [m.to, m.template])).toEqual([[normalizePhone(phones.rafael)!, TEMPLATE_ALERT]]);
     expect(msgs[0].body).toEqual(["Chamado urgente", String(o.number), o.title, "Elétrica · Infraestrutura"]);
     expect(msgs[0].claimPayload).toBeUndefined();
-    expect(await recipients(o.id, "URGENTE")).toEqual(["joao", "marina", "pedro", "rafael"]);
+    expect(await recipients(o.id, "URGENTE")).toEqual(["admin", "joao", "marina", "pedro", "rafael"]);
     const deliveries = await owner.notificationDelivery.findMany({ where: { notification: { occurrenceId: o.id } } });
     expect(deliveries.map((x) => [x.toPhone, x.status])).toEqual([[normalizePhone(phones.rafael)!, "ENVIADO"]]);
   });
@@ -505,7 +506,7 @@ describe("aceite no convite e telefone", () => {
     await Promise.all([dispatch(deps), dispatch(deps), dispatch(deps)]);
     const msgs = wa.templates.slice(from).filter((m) => m.urlSuffix === o.id);
     expect(msgs.map((m) => m.to)).toEqual([normalizePhone(phones.rafael)!]);
-    expect(await owner.notification.count({ where: { occurrenceId: o.id, type: "URGENTE" } })).toBe(4);
+    expect(await owner.notification.count({ where: { occurrenceId: o.id, type: "URGENTE" } })).toBe(5);
   });
 });
 
