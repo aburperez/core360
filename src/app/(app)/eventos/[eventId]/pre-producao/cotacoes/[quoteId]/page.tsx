@@ -10,6 +10,7 @@ import { formatCnpj } from "@/lib/cnpj";
 import { formatPhone } from "@/lib/phone";
 import { brl } from "@/lib/money";
 import { AddQuote, ChooseForm, EditRequestForm, EmailActions, QuoteActions, SendForm, SlaForm, StateButton } from "../forms";
+import { RatingBadge } from "@/components/rating";
 import { supplierEmail } from "../email-text";
 import { STAGE } from "../stage";
 
@@ -140,6 +141,7 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted">Orçamento {x.position}</p>
                       <p className="truncate text-lg font-bold" title={x.companyName}>{x.companyName}</p>
                       <p className="text-sm text-muted tabular-nums">CNPJ {formatCnpj(x.cnpj)}</p>
+                      {x.rating !== null && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">Nota <RatingBadge value={x.rating} /></p>}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       <span className={cx("rounded-full px-2 py-0.5 text-xs font-bold", PROPOSAL[x.status].tone)}>{PROPOSAL[x.status].label}</span>

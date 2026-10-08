@@ -9,6 +9,7 @@ import { Button, Card, cx } from "@/components/ui";
 import { brl } from "@/lib/money";
 import { compressPhoto } from "@/components/photo";
 import { DurationInput } from "../sla-forms";
+import { ratingText } from "@/modules/suppliers/rating-meta";
 
 type Option = { id: string; label: string };
 type Person = { id: string; name: string; role: string };
@@ -226,7 +227,7 @@ const cnpjMask = (v: string) => {
 
 export type SupplierOption = {
   id: string; cnpj: string; companyName: string; tradeName: string | null; contactName: string | null;
-  phone: string | null; email: string | null; suggested: boolean;
+  phone: string | null; email: string | null; suggested: boolean; rating: number | null;
 };
 
 const NEW = "novo";
@@ -309,7 +310,8 @@ export function QuoteForm({ requestId, quote, suppliers = [], aiReader = false, 
   const known = !quote && pick === NEW ? suppliers.find((s) => s.cnpj === cnpj.replace(/\D/g, "")) ?? null : null;
   const suggested = suppliers.filter((s) => s.suggested);
   const others = suppliers.filter((s) => !s.suggested);
-  const label = (s: SupplierOption) => s.tradeName ? `${s.tradeName} (${s.companyName})` : s.companyName;
+  const label = (s: SupplierOption) =>
+    `${s.tradeName ? `${s.tradeName} (${s.companyName})` : s.companyName}${s.rating === null ? "" : ` · nota ${ratingText(s.rating)}`}`;
   // Campos de contato: do orçamento, do que a IA leu, do fornecedor escolhido ou em branco.
   const pre = (k: "contactName" | "phone" | "email") => quote?.[k] ?? read?.[k] ?? chosen?.[k] ?? "";
   const applyReading = (data: AiReading, file: File) => {

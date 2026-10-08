@@ -12,6 +12,8 @@ import { brl } from "@/lib/money";
 import { TopBar } from "@/components/top-bar";
 import { PageHeading, Panel } from "@/components/panel";
 import { PAGE, cx } from "@/components/ui";
+import { RatingBadge, RatingBars } from "@/components/rating";
+import { ratingText } from "@/modules/suppliers/rating-meta";
 import { ArchiveSupplier, BonusForm, EditSupplier } from "../supplier-forms";
 
 export const metadata = { title: "Fornecedor" };
@@ -76,6 +78,36 @@ export default async function SupplierPage({ params }: PageProps<"/eventos/[even
           </Panel>
 
           <div className="space-y-4">
+            <Panel title="Avaliação" action={data.rating && <RatingBadge value={data.rating.overall} count={data.rating.ratings} />}>
+              {data.rating ? (
+                <>
+                  <RatingBars scores={data.rating} />
+                  <p className="mt-3 text-xs text-muted">
+                    Média de {data.rating.ratings} {data.rating.ratings === 1 ? "evento" : "eventos"}, de 0 a 10. O diretor avalia no Fechamento de cada evento.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted">Ainda sem avaliação. O diretor avalia no Fechamento de cada evento em que o fornecedor teve contrato assinado.</p>
+              )}
+              {data.ratings.length > 0 && (
+                <ul className="mt-4 divide-y divide-border/60 border-t border-border pt-2">
+                  {data.ratings.map((r) => {
+                    const avg = (r.quality + r.deadline + r.service + r.cost + r.flexibility + r.problemSolving) / 6;
+                    return (
+                      <li key={r.eventId} className="py-2.5">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="min-w-0 font-semibold">{r.eventName}</p>
+                          <p className="shrink-0 font-bold tabular-nums">{ratingText(avg)}</p>
+                        </div>
+                        {r.comment && <p className="mt-1 whitespace-pre-wrap text-sm">{r.comment}</p>}
+                        <p className="text-xs text-muted">{r.ratedBy} · {date(new Date(r.updatedAt))}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {data.ratings.length > 0 && <p className="mt-2 text-xs text-muted">As notas de cada evento e os comentários só o diretor vê.</p>}
+            </Panel>
             {data.can.director && (
               <Panel title="Bonificação">
                 {data.bonus && (

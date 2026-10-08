@@ -7,7 +7,8 @@ import { listContracts } from "@/modules/contracts/contracts.service";
 import { brl } from "@/lib/money";
 import { TopBar } from "@/components/top-bar";
 import { PageHeading, Panel } from "@/components/panel";
-import { EmptyState, PAGE, cx } from "@/components/ui";
+import { EmptyState, LinkButton, PAGE, cx } from "@/components/ui";
+import { RATING_OPEN_STATUSES } from "@/modules/suppliers/rating-meta";
 import { CreateContract } from "./forms";
 import { CONTRACT, formatDay } from "./status";
 
@@ -34,6 +35,22 @@ export default async function ContractsPage({ params }: PageProps<"/eventos/[eve
           Um contrato por fornecedor, com as propostas aprovadas dele nas cotações. A Pré-produção monta, anexa o PDF e envia;
           {data.can.director ? " você" : " o diretor"} muda valores, marca como assinado e cancela. Assinado, o valor vira o Contratado do Orçamento.
         </p>
+
+        {data.can.director && signed.length > 0 && (
+          (RATING_OPEN_STATUSES as readonly string[]).includes(event.status) ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-cyan/40 bg-brand-cyan/10 p-4">
+              <p className="min-w-0">
+                <b>O evento está no Fechamento.</b>
+                <span className="block text-sm text-muted">Avalie de 0 a 10 os fornecedores com contrato assinado. A média ajuda nas próximas cotações.</span>
+              </p>
+              <LinkButton href={`/eventos/${eventId}/pre-producao/avaliacao`} className="min-h-10 px-3 text-sm">Avaliar fornecedores</LinkButton>
+            </div>
+          ) : (
+            <p className="text-sm text-muted">
+              Quando o evento chegar no Fechamento, você <Link href={`/eventos/${eventId}/pre-producao/avaliacao`} className="text-primary underline">avalia os fornecedores</Link> com contrato assinado.
+            </p>
+          )
+        )}
 
         {data.pending.length > 0 && (
           <Panel title="Fornecedores aprovados sem contrato">

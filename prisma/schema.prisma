@@ -194,6 +194,7 @@ model User {
   documentsUploaded        EventDocument[]      @relation("EventDocumentUploadedBy")
   contractsCreated         Contract[]           @relation("ContractCreatedBy")
   contractsSigned          Contract[]           @relation("ContractSignedBy")
+  supplierRatings          SupplierRating[]
   contractsCancelled       Contract[]           @relation("ContractCancelledBy")
   participantsCreated      Participant[]        @relation("ParticipantCreatedBy")
   invitationsCreated       Invitation[]
@@ -422,43 +423,44 @@ model Event {
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  agency         Agency                @relation(fields: [agencyId], references: [id], onDelete: Restrict)
-  client         Client                @relation(fields: [agencyId, clientId], references: [agencyId, id], onDelete: Restrict)
-  areas          Area[]
-  teams          Team[]
-  participants   Participant[]
-  occurrences    Occurrence[]
-  attachments    Attachment[]
-  slaPolicies    SlaPolicy[]
-  notifications  Notification[]
-  invitations    Invitation[]
-  serviceTypes   ServiceType[]
-  costSheet      CostSheet?
-  costSections   CostSection[]
-  costItems      CostItem[]
-  itemReceipts   ItemReceipt[]
-  receiptPhotos  ReceiptPhoto[]
-  briefings      Briefing[]
-  dailyNotes     DailyNote[]
-  functions      EventFunction[]
-  activities     Activity[]
-  clientViews    ClientView[]
-  profiles       ParticipantProfile[]
-  activityChecks ActivityCheck[]
-  quoteRequests  QuoteRequest[]
-  supplierQuotes SupplierQuote[]
-  contracts      Contract[]
-  floorPlans     FloorPlan[]
-  planPoints     PlanPoint[]
-  planPhotos     PlanPointPhoto[]
-  visits         TechnicalVisit[]
-  visitPhotos    TechnicalVisitPhoto[]
-  finances       EventFinances?
-  briefing       EventBriefing?
-  briefingFronts EventBriefingFront[]
-  documents      EventDocument[]
-  lead           Participant?          @relation("EventLead", fields: [id, leadId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_lead_fkey")
-  producer       Participant?          @relation("EventProducer", fields: [id, producerId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_producer_fkey")
+  agency          Agency                @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  client          Client                @relation(fields: [agencyId, clientId], references: [agencyId, id], onDelete: Restrict)
+  areas           Area[]
+  teams           Team[]
+  participants    Participant[]
+  occurrences     Occurrence[]
+  attachments     Attachment[]
+  slaPolicies     SlaPolicy[]
+  notifications   Notification[]
+  invitations     Invitation[]
+  serviceTypes    ServiceType[]
+  costSheet       CostSheet?
+  costSections    CostSection[]
+  costItems       CostItem[]
+  itemReceipts    ItemReceipt[]
+  receiptPhotos   ReceiptPhoto[]
+  briefings       Briefing[]
+  dailyNotes      DailyNote[]
+  functions       EventFunction[]
+  activities      Activity[]
+  clientViews     ClientView[]
+  profiles        ParticipantProfile[]
+  activityChecks  ActivityCheck[]
+  quoteRequests   QuoteRequest[]
+  supplierQuotes  SupplierQuote[]
+  contracts       Contract[]
+  supplierRatings SupplierRating[]
+  floorPlans      FloorPlan[]
+  planPoints      PlanPoint[]
+  planPhotos      PlanPointPhoto[]
+  visits          TechnicalVisit[]
+  visitPhotos     TechnicalVisitPhoto[]
+  finances        EventFinances?
+  briefing        EventBriefing?
+  briefingFronts  EventBriefingFront[]
+  documents       EventDocument[]
+  lead            Participant?          @relation("EventLead", fields: [id, leadId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_lead_fkey")
+  producer        Participant?          @relation("EventProducer", fields: [id, producerId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_producer_fkey")
 
   @@unique([agencyId, number])
   @@index([clientId])
@@ -1724,11 +1726,12 @@ model Supplier {
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  agency    Agency          @relation(fields: [agencyId], references: [id], onDelete: Restrict)
-  createdBy User            @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  agency    Agency           @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  createdBy User             @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   bonus     SupplierBonus?
   quotes    SupplierQuote[]
   contracts Contract[]
+  ratings   SupplierRating[]
 
   @@unique([agencyId, cnpj])
   @@index([agencyId, companyName])
@@ -1819,4 +1822,32 @@ model ContractItem {
   @@unique([contractId, quoteId])
   @@index([quoteId])
   @@map("contract_items")
+}
+
+/// Avaliação do fornecedor num evento (fase 3D): o diretor dá de 0 a 10 em 6
+/// critérios quando o evento chega no Fechamento, para quem teve contrato
+/// assinado. Uma por fornecedor por evento; o diretor pode corrigir. A
+/// Pré-produção só vê as médias (app.supplier_rating_summary).
+model SupplierRating {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  eventId        String   @map("event_id") @db.Uuid
+  supplierId     String   @map("supplier_id") @db.Uuid
+  quality        Int      @db.SmallInt
+  deadline       Int      @db.SmallInt
+  service        Int      @db.SmallInt
+  cost           Int      @db.SmallInt
+  flexibility    Int      @db.SmallInt
+  problemSolving Int      @map("problem_solving") @db.SmallInt
+  comment        String?
+  ratedById      String   @map("rated_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  ratedBy  User     @relation(fields: [ratedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, supplierId])
+  @@index([supplierId])
+  @@map("supplier_ratings")
 }

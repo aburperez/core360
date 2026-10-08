@@ -13,6 +13,7 @@ import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
 import { ITEM_CATEGORIES, itemCode, type ItemCategory } from "../items/item-meta";
 import { canSeeContractedSuppliers, isSupplierDirector } from "./supplier-meta";
+import { ratingSummaries } from "./ratings.service";
 
 /**
  * Cadastro de fornecedores da agência (fase 3A). Um fornecedor por CNPJ em cada
@@ -130,7 +131,7 @@ export async function listSuppliers(actor: Actor, eventId: string, filters: { q?
       }),
       tx.supplier.count({ where: { agencyId, archivedAt: { not: null } } }),
     ]);
-    const chosen = await chosenCounts(tx, rows.map((r) => r.id));
+    const [chosen, ratings] = await Promise.all([chosenCounts(tx, rows.map((r) => r.id)), ratingSummaries(tx, agencyId)]);
     return {
       items: rows.map(({ _count, ...r }) => ({
         ...r,
@@ -138,6 +139,7 @@ export async function listSuppliers(actor: Actor, eventId: string, filters: { q?
         bonus: "bonus" in r ? toBonus((r.bonus as BonusRow | null) ?? null) : null,
         quotes: _count.quotes,
         won: chosen.get(r.id) ?? 0,
+        rating: ratings.get(r.id) ?? null,
       })),
       archivedCount: archived,
       filters: { q, category, archived: !!filters.archived },
@@ -164,7 +166,7 @@ export async function getSupplier(actor: Actor, eventId: string, supplierId: str
   return actor.run(async (tx) => {
     const { agencyId } = await agencyOf(tx, eventId);
     await loadSupplier(tx, agencyId, supplierId);
-    const [s, bonus, quotes] = await Promise.all([
+    const [s, bonus, quotes, ratings, events] = await Promise.all([
       tx.supplier.findUniqueOrThrow({ where: { id: supplierId }, select: fullSelect }),
       can.director ? tx.supplierBonus.findUnique({ where: { supplierId }, select: bonusSelect }) : null,
       // Só os orçamentos de eventos em que a pessoa entra na Pré-produção (a RLS filtra).
@@ -178,10 +180,24 @@ export async function getSupplier(actor: Actor, eventId: string, supplierId: str
           request: { select: { id: true, title: true, status: true, chosenQuoteId: true } },
         },
       }),
+      ratingSummaries(tx, agencyId),
+      // As notas de cada evento e o comentário: só o diretor (a RLS também filtra).
+      can.director
+        ? tx.supplierRating.findMany({
+          where: { supplierId, event: { deletedAt: null } },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            quality: true, deadline: true, service: true, cost: true, flexibility: true, problemSolving: true, comment: true, updatedAt: true,
+            event: { select: { id: true, name: true } }, ratedBy: { select: { name: true } },
+          },
+        })
+        : [],
     ]);
     return {
       supplier: { ...s, categories: s.categories ?? [], createdBy: s.createdBy.name },
       bonus: toBonus(bonus),
+      rating: ratings.get(supplierId) ?? null,
+      ratings: events.map(({ event, ratedBy, ...r }) => ({ ...r, eventId: event.id, eventName: event.name, ratedBy: ratedBy.name })),
       history: quotes.map((q) => ({
         id: q.id, eventId: q.event.id, eventName: q.event.name, requestId: q.request.id, title: q.request.title,
         value: q.negotiatedValue !== null ? Number(q.negotiatedValue) : q.totalValue !== null ? Number(q.totalValue) : null, date: q.createdAt,
@@ -301,7 +317,11 @@ export async function supplierOptions(tx: Tx, eventId: string, category: ItemCat
     take: 1000,
     select: { id: true, cnpj: true, companyName: true, tradeName: true, contactName: true, phone: true, email: true, categories: true },
   });
-  const list = rows.map((r) => ({ ...r, categories: r.categories ?? [], suggested: !!category && (r.categories ?? []).includes(category) }));
+  const ratings = await ratingSummaries(tx, agencyId);
+  const list = rows.map((r) => ({
+    ...r, categories: r.categories ?? [], suggested: !!category && (r.categories ?? []).includes(category),
+    rating: ratings.get(r.id)?.overall ?? null,
+  }));
   return [...list.filter((r) => r.suggested), ...list.filter((r) => !r.suggested)];
 }
 

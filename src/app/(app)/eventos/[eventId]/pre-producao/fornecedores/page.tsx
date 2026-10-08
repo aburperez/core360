@@ -11,6 +11,7 @@ import { formatPhone } from "@/lib/phone";
 import { TopBar } from "@/components/top-bar";
 import { PageHeading, Panel } from "@/components/panel";
 import { EmptyState, PAGE, cx } from "@/components/ui";
+import { RatingBadge } from "@/components/rating";
 import { NewSupplier, SupplierFilters } from "./supplier-forms";
 
 export const metadata = { title: "Fornecedores" };
@@ -42,6 +43,7 @@ export default async function SuppliersPage({ params, searchParams }: PageProps<
         </PageHeading>
         <p className="text-sm text-muted">
           O cadastro é da agência: vale para todos os eventos. Também dá para cadastrar um fornecedor novo direto no orçamento da cotação.
+          {" A nota é a média das avaliações do diretor no Fechamento de cada evento."}
           {data.can.director && " A bonificação só aparece para o diretor e para o Head da área em que o fornecedor foi contratado."}
         </p>
 
@@ -63,6 +65,7 @@ export default async function SuppliersPage({ params, searchParams }: PageProps<
                     <th className="py-2 pr-3 font-semibold">Contato</th>
                     <th className="py-2 pr-3 font-semibold">Cidade</th>
                     <th className="py-2 pr-3 font-semibold">Categorias</th>
+                    <th className="py-2 pr-3 font-semibold">Nota</th>
                     <th className="py-2 pr-3 text-right font-semibold">Orçamentos</th>
                     {data.can.director && <th className="py-2 font-semibold">Bonificação</th>}
                   </tr>
@@ -80,6 +83,7 @@ export default async function SuppliersPage({ params, searchParams }: PageProps<
                       </td>
                       <td className="py-2.5 pr-3">{[s.city, s.state].filter(Boolean).join("/") || "—"}</td>
                       <td className="py-2.5 pr-3 text-muted">{s.categories.map((c) => CATEGORY[c].label).join(", ") || "—"}</td>
+                      <td className="py-2.5 pr-3">{s.rating ? <RatingBadge value={s.rating.overall} count={s.rating.ratings} /> : <span className="text-muted">—</span>}</td>
                       <td className="py-2.5 pr-3 text-right tabular-nums">
                         {s.quotes}
                         {s.won > 0 && <p className="text-xs text-emerald-300">{s.won} {s.won === 1 ? "escolhido" : "escolhidos"}</p>}
@@ -94,7 +98,10 @@ export default async function SuppliersPage({ params, searchParams }: PageProps<
               {data.items.map((s) => (
                 <li key={s.id}>
                   <Link href={`${base}/${s.id}`} className="block rounded-xl border border-border p-3 transition hover:border-primary/60">
-                    <p className="font-semibold">{s.tradeName || s.companyName}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 font-semibold">{s.tradeName || s.companyName}</p>
+                      {s.rating && <RatingBadge value={s.rating.overall} count={s.rating.ratings} />}
+                    </div>
                     <p className="text-xs text-muted">{formatCnpj(s.cnpj)}{s.city ? ` · ${[s.city, s.state].filter(Boolean).join("/")}` : ""}</p>
                     {s.categories.length > 0 && <p className="mt-1 text-sm text-muted">{s.categories.map((c) => CATEGORY[c].label).join(", ")}</p>}
                     <p className="mt-1 text-sm">

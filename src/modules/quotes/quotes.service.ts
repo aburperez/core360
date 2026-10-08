@@ -14,6 +14,7 @@ import { formatPhone, normalizePhone } from "../../lib/phone";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
 import { resolveSupplier, supplierOptions } from "../suppliers/suppliers.service";
+import { ratingSummaries } from "../suppliers/ratings.service";
 import { sniffImage } from "../attachments/image";
 import { AI_READABLE, AiUnavailableError, QUOTE_READER_MODEL, anthropicQuoteReader, quoteReaderEnabled, type AiReadableMime, type QuoteReader } from "./quote-reader";
 
@@ -189,8 +190,10 @@ export async function getQuote(actor: Actor, id: string, now = new Date()) {
         select: { id: true, name: true, section: { select: { name: true } } },
       }),
     ]);
-    const event = await tx.event.findUniqueOrThrow({ where: { id: base.eventId }, select: { name: true } });
-    const list = quotes.map(toQuote);
+    const event = await tx.event.findUniqueOrThrow({ where: { id: base.eventId }, select: { name: true, agencyId: true } });
+    // A média das avaliações do fornecedor em outros eventos, ao lado de cada orçamento.
+    const ratings = await ratingSummaries(tx, event.agencyId);
+    const list = quotes.map((q) => ({ ...toQuote(q), rating: ratings.get(q.supplierId)?.overall ?? null }));
     const editable = r.status === "ABERTA" || r.status === "ENVIADA";
     // O formulário do orçamento escolhe do cadastro (os da categoria do item primeiro).
     const suppliers = editable ? await supplierOptions(tx, base.eventId, r.costItem?.category ?? null) : [];
