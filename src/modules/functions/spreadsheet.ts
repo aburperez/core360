@@ -52,6 +52,8 @@ export interface SheetPerson {
   team: string | null;
   role: SheetRole;
   functionName: string | null;
+  company: string | null;
+  directManager: string | null;
   /** Só para o Cliente, quando quem baixa pode liberar a visão dele. */
   view: SheetView | null;
 }
@@ -65,6 +67,9 @@ export interface ParsedPerson {
   role: SheetRole | null | undefined;
   /** null = em branco (não muda); NO_FUNCTION tira a função. */
   functionName: string | null;
+  /** undefined = a coluna não veio (não muda); null = em branco (apaga). */
+  company: string | null | undefined;
+  directManager: string | null | undefined;
   view: SheetView | null | undefined;
 }
 
@@ -134,6 +139,7 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
     ["", "text"],
     ["Pessoas", "head"],
     ["Quem já está no evento, uma linha por pessoa. A pessoa é encontrada pelo e-mail: não mude o e-mail.", "text"],
+    ["Empresa e Responsável direto: de quem a pessoa é e a quem ela responde. Em branco apaga.", "text"],
     ["Função: escolha na lista (ela vem da aba Funções). Para tirar a função de alguém, escreva \"Sem função\". Só pessoas do campo (Gerente, Head e Operacional) têm função.", "text"],
     [
       s.canEditPeople
@@ -191,11 +197,13 @@ export async function writeFunctionsSheet(s: FunctionsSheet): Promise<Uint8Array
   const people = wb.addWorksheet(TAB.people);
   const peopleCols: [string, number][] = [["Nome", 30], ["E-mail", 32], ["Telefone", 18], ["Área", 22], ["Equipe", 22], ["Perfil", 15], ["Função", 28]];
   if (s.canGrantClientView) peopleCols.push(["Visão do cliente", 28]);
+  peopleCols.push(["Empresa", 24], ["Responsável direto", 26]);
   header(people, peopleCols);
   for (const p of s.people) {
     const row = people.addRow([
       p.name, p.email, p.phone ?? "", p.area ?? "", p.team ?? "", ROLE_NAMES[p.role], p.functionName ?? "",
       ...(s.canGrantClientView ? [p.role === "CLIENTE" && p.view ? viewText(p.view) : ""] : []),
+      p.company ?? "", p.directManager ?? "",
     ]);
     if (!s.canEditPeople) [4, 5, 6].forEach((c) => (row.getCell(c).font = { color: { argb: "FF777777" } }));
   }
@@ -436,6 +444,7 @@ export async function readFunctionsSheet(bytes: Uint8Array): Promise<ParsedFunct
     const c = findCols(wsPeople, [
       ["name", /^nome/], ["email", /^e-?mail/], ["area", /^area/], ["team", /^equipe/],
       ["role", /^perfil|^papel/], ["fn", /^func/], ["view", /^visao/],
+      ["company", /^empresa/], ["manager", /^responsavel/],
     ]);
     if (c.email === undefined) throw new ValidationError(`Não achei a coluna E-mail na aba ${wsPeople.name}`);
     const byEmail = new Map<string, ParsedPerson>();
@@ -450,6 +459,8 @@ export async function readFunctionsSheet(bytes: Uint8Array): Promise<ParsedFunct
         team: text(wsPeople, r, c.team, 80),
         role: roleText === null ? null : readRole(roleText),
         functionName: text(wsPeople, r, c.fn, 80),
+        company: c.company === undefined ? undefined : text(wsPeople, r, c.company, 120),
+        directManager: c.manager === undefined ? undefined : text(wsPeople, r, c.manager, 120),
         view: viewText === null ? null : readView(viewText),
       };
       if (!email) {

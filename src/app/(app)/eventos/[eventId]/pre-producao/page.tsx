@@ -53,6 +53,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const briefed = fn.people.filter((p) => p.briefingState !== "SEM");
   const read = briefed.filter((p) => p.briefingState === "LIDO").length;
   const priced = sheet.itemCount - sheet.totals.undefinedCount;
+  const allItems = sheet.sections.flatMap((s) => s.items);
+  const toDefine = allItems.filter((i) => i.status === "A_DEFINIR").length;
+  const noOwner = allItems.filter((i) => !i.responsibleId).length;
   const role = isEventSupport(actor, eventId) ? "Suporte" : isEventAdmin(actor, eventId) ? ROLE_LABEL.ADMIN : ROLE_LABEL[membershipFor(actor, eventId)!.role];
 
   const tiles: TileData[] = [
@@ -61,6 +64,10 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       line: brief.updatedAt ? `${brief.progress.answered} de 13 frentes · ${brief.progress.needed} precisam` : "Ainda não preenchido",
     },
     { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
+    {
+      href: `${base}/itens`, icon: "items", title: "Mapa de itens",
+      line: sheet.itemCount ? `${sheet.itemCount} itens · ${toDefine} a definir · ${noOwner} sem responsável` : "Nenhum item ainda",
+    },
     { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
     { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
     {

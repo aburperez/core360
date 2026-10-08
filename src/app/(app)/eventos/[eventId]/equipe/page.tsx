@@ -55,6 +55,7 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
             teams={teams.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId }))}
             people={people.map((p) => ({
               id: p.id, name: p.name, email: p.email, phone: p.phone, jobTitle: p.jobTitle, role: p.role,
+              company: p.company, directManager: p.directManager,
               areaId: p.areaId, teamId: p.teamId, active: p.active, joined: !!p.userId, invited: !!p.invitedAt,
               mine: p.userId === actor.userId,
               canGiveFunction: canGiveFunction(actor, eventId, p),

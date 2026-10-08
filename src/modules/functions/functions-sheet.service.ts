@@ -53,7 +53,7 @@ export async function exportFunctionsSheet(actor: Actor, eventId: string) {
         where: { eventId, active: true, deletedAt: null },
         orderBy: [{ role: "asc" }, { name: "asc" }],
         select: {
-          name: true, email: true, phone: true, role: true,
+          name: true, email: true, phone: true, role: true, company: true, directManager: true,
           area: { select: { name: true } }, team: { select: { name: true } },
           profile: { select: { function: { select: { name: true } } } },
           clientView: { select: { costs: true, team: true, progress: true } },
@@ -82,6 +82,7 @@ export async function exportFunctionsSheet(actor: Actor, eventId: string) {
     people: data.people.map((p) => ({
       name: p.name, email: p.email, phone: p.phone, area: p.area?.name ?? null, team: p.team?.name ?? null, role: p.role,
       functionName: p.profile?.function?.name ?? null,
+      company: p.company, directManager: p.directManager,
       view: p.role === "CLIENTE" ? (p.clientView ?? NO_VIEW) : null,
     })),
     canEditPeople: canEditPeople(actor, eventId),
@@ -107,6 +108,7 @@ type PersonPlan = {
   /** Nome da função (pode ser criada nesta mesma planilha). */
   functionName?: string | null;
   view?: SheetView;
+  work?: { company?: string | null; directManager?: string | null };
   changes: string[];
 };
 
@@ -238,6 +240,7 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
           where: { eventId, active: true, deletedAt: null },
           select: {
             id: true, name: true, email: true, role: true, areaId: true, teamId: true, userId: true, directorId: true,
+            company: true, directManager: true,
             profile: { select: { functionId: true } },
             clientView: { select: { costs: true, team: true, progress: true } },
           },
@@ -261,6 +264,7 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
         let notFound = 0;
         let ignoredPlacement = 0;
         let ignoredView = 0;
+        let ignoredWork = 0;
 
         for (const row of sheet.people) {
           const cur = byEmail.get(row.email);
@@ -322,6 +326,20 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
             }
           }
 
+          // Empresa e responsável direto: quem pode mexer na pessoa (como em Montar equipe).
+          const work: { company?: string | null; directManager?: string | null } = {};
+          if (row.company !== undefined && row.company !== cur.company) work.company = row.company;
+          if (row.directManager !== undefined && row.directManager !== cur.directManager) work.directManager = row.directManager;
+          if (Object.keys(work).length) {
+            const canEdit = canAssignRole(actor, { eventId, areaId: cur.areaId, role: cur.role }) && (cur.userId !== actor.userId || admin);
+            if (!canEdit) ignoredWork++;
+            else {
+              plan.work = work;
+              if ("company" in work) plan.changes.push(work.company ? `empresa ${work.company}` : "sem empresa");
+              if ("directManager" in work) plan.changes.push(work.directManager ? `responde a ${work.directManager}` : "sem responsável direto");
+            }
+          }
+
           // Visão do cliente.
           if (row.view) {
             if (!grantView) ignoredView++;
@@ -335,6 +353,7 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
         }
         if (notFound > 5) warnings.push(`Pessoas: mais ${notFound - 5} e-mails não estão neste evento.`);
         if (ignoredPlacement) warnings.unshift(`Pessoas: perfil, área e equipe foram ignorados em ${ignoredPlacement} ${ignoredPlacement === 1 ? "linha" : "linhas"}: só o Gerente do evento muda.`);
+        if (ignoredWork) warnings.push(`Pessoas: empresa e responsável direto foram ignorados em ${ignoredWork} ${ignoredWork === 1 ? "linha" : "linhas"}: você não muda essas pessoas.`);
         if (ignoredView) warnings.push(`Pessoas: a visão do cliente foi ignorada: só o Gerente do evento libera.`);
       }
 
@@ -410,6 +429,11 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
           await audit(tx, actor, {
             eventId, entity: "participant_profile", entityId: p.id, action: "ROLE_CHANGE", before: { functionId: before }, after: { functionId: id },
           });
+        }
+        for (const p of peoplePlan) {
+          if (!p.work) continue;
+          await tx.participant.update({ where: { id: p.id }, data: p.work });
+          await audit(tx, actor, { eventId, entity: "participant", entityId: p.id, action: "UPDATE", after: p.work });
         }
         for (const p of peoplePlan) {
           if (!p.view) continue;

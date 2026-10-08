@@ -101,7 +101,7 @@ export async function sendToField(actor: Actor, eventId: string) {
   return actor.run(async (tx) => {
     const items = await tx.costItem.findMany({
       where: { eventId },
-      select: { id: true, name: true, description: true, quantity: true, receiverId: true, section: { select: { name: true } } },
+      select: { id: true, name: true, description: true, quantity: true, unit: true, location: true, receiverId: true, section: { select: { name: true } } },
       orderBy: [{ section: { position: "asc" } }, { position: "asc" }],
     });
     const receipts = await tx.itemReceipt.findMany({ where: { eventId } });
@@ -116,6 +116,8 @@ export async function sendToField(actor: Actor, eventId: string) {
         name: fieldText(it.name),
         description: fieldText(it.description),
         quantity: it.quantity,
+        unit: it.unit,
+        location: it.location,
       };
       const r = byItem.get(it.id);
       if (!r) {
@@ -124,6 +126,7 @@ export async function sendToField(actor: Actor, eventId: string) {
       } else if (
         r.receiverId !== snap.receiverId || r.sectionName !== snap.sectionName || r.name !== snap.name
         || r.description !== snap.description || Number(r.quantity) !== Number(snap.quantity)
+        || r.unit !== snap.unit || r.location !== snap.location
       ) {
         await tx.itemReceipt.update({
           where: { id: r.id },
@@ -150,7 +153,7 @@ export async function sendToField(actor: Actor, eventId: string) {
 
 const receiptSelect = {
   id: true, eventId: true, costItemId: true, receiverId: true, sectionName: true, name: true, description: true, quantity: true,
-  status: true, receivedQuantity: true, receivedDescription: true, note: true, receivedAt: true, sentAt: true,
+  unit: true, location: true, status: true, receivedQuantity: true, receivedDescription: true, note: true, receivedAt: true, sentAt: true,
   receiver: { select: { name: true } },
   photos: { select: { id: true }, orderBy: { createdAt: "asc" as const } },
 } as const;

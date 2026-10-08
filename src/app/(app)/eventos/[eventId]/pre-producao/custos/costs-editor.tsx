@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { getCostSheet, importCostSheet } from "@/modules/costs/costs.service";
 import type { listReceiverOptions } from "@/modules/receipts/receipts.service";
@@ -9,6 +10,7 @@ import { brl, decimal, parseDecimal } from "@/lib/money";
 import { Button, Card, buttonClass, cx } from "@/components/ui";
 import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { api } from "@/components/api-client";
+import { ITEM_STATUS_LABEL } from "@/modules/items/item-meta";
 
 type Sheet = Awaited<ReturnType<typeof getCostSheet>>;
 type Section = Sheet["sections"][number];
@@ -17,7 +19,7 @@ type Preview = Awaited<ReturnType<typeof importCostSheet>>;
 type Receiver = Awaited<ReturnType<typeof listReceiverOptions>>[number];
 
 /** Quem recebe no campo: a lista de pessoas e se quem está vendo pode escolher (gerente). */
-const Field = createContext<{ canSend: boolean; receivers: Receiver[] }>({ canSend: false, receivers: [] });
+const Field = createContext<{ canSend: boolean; receivers: Receiver[]; eventId: string }>({ canSend: false, receivers: [], eventId: "" });
 
 const money = (n: number | null) => (n === null ? "A definir" : brl(n));
 
@@ -63,7 +65,7 @@ export function CostsEditor({ eventId, sheet, receivers }: { eventId: string; sh
   );
 
   return (
-    <Field.Provider value={{ canSend: sheet.can.sendToField, receivers }}>
+    <Field.Provider value={{ canSend: sheet.can.sendToField, receivers, eventId }}>
     <div className="space-y-4">
       {!empty && actions}
       {importing && <ImportPanel eventId={eventId} current={sheet.itemCount} onClose={() => setImporting(false)} />}
@@ -639,6 +641,7 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
                       {it.optional && <OptionalBadge />}
                     </p>
                     {it.description && <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs text-muted">{it.description}</p>}
+                    <CodeLine item={it} />
                     <FieldLine item={it} />
                   </td>
                   <td className="px-3 py-2.5 text-muted">{it.paymentTerms ?? "—"}</td>
@@ -678,6 +681,7 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
                   {money(it.unitValue)} × {decimal(it.quantity)}{it.frequency !== null ? ` × ${decimal(it.frequency)}` : ""}
                   {" · "}{BILLING_LABEL[it.billing]}{it.paymentTerms ? ` · ${it.paymentTerms}` : ""}
                 </p>
+                <CodeLine item={it} />
                 <FieldLine item={it} />
               </button>
             )}
@@ -693,6 +697,15 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
         )}
       </div>
     </section>
+  );
+}
+
+/** Código e status do item (área, responsável e status ficam no Mapa de itens). */
+function CodeLine({ item }: { item: Item }) {
+  return (
+    <p className="mt-0.5 text-xs text-muted">
+      <span className="font-mono">{item.code}</span> · {ITEM_STATUS_LABEL[item.status]}
+    </p>
   );
 }
 
@@ -719,7 +732,7 @@ function MenuButton({ children, onClick, danger }: { children: ReactNode; onClic
 
 function ItemForm({ section, sections, item, onDone }: { section: Section; sections: Section[]; item?: Item; onDone: () => void }) {
   const { busy, error, setError, run } = useAction();
-  const { canSend } = useContext(Field);
+  const { canSend, eventId } = useContext(Field);
   const [unit, setUnit] = useState(item?.unitValue != null ? decimal(item.unitValue) : "");
   const [qty, setQty] = useState(item ? decimal(item.quantity) : "1");
   const [freq, setFreq] = useState(item?.frequency != null ? decimal(item.frequency) : "1");
@@ -828,6 +841,9 @@ function ItemForm({ section, sections, item, onDone }: { section: Section; secti
           <>
             <Button type="button" variant="secondary" className="min-h-11 px-3 text-sm" disabled={busy} aria-label="Subir" onClick={() => run(() => api(`/api/cost-items/${item.id}`, { method: "PATCH", body: { move: "up" } }))}>↑</Button>
             <Button type="button" variant="secondary" className="min-h-11 px-3 text-sm" disabled={busy} aria-label="Descer" onClick={() => run(() => api(`/api/cost-items/${item.id}`, { method: "PATCH", body: { move: "down" } }))}>↓</Button>
+            <Link href={`/eventos/${eventId}/pre-producao/itens/${item.id}`} className={buttonClass("secondary", "min-h-11 text-sm")}>
+              Área, responsável e status
+            </Link>
             <Button
               type="button"
               variant="ghost"

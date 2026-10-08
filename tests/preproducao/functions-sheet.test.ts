@@ -279,7 +279,7 @@ describe("aba Pessoas", () => {
     const marina = await as("gerente");
     const wb = await load((await exportFunctionsSheet(marina, ev)).bytes);
     const ws = wb.getWorksheet("Pessoas")!;
-    expect(ws.getRow(1).values).toEqual([undefined, "Nome", "E-mail", "Telefone", "Área", "Equipe", "Perfil", "Função", "Visão do cliente"]);
+    expect(ws.getRow(1).values).toEqual([undefined, "Nome", "E-mail", "Telefone", "Área", "Equipe", "Perfil", "Função", "Visão do cliente", "Empresa", "Responsável direto"]);
     expect(personRow(wb, emails.rita).getCell(8).text).toBe("Nada");
     expect(personRow(wb, emails.joao).getCell(7).text).toBe("Roadie");
     expect(personRow(wb, emails.joao).getCell(6).text).toBe("Operacional");
@@ -324,10 +324,33 @@ describe("aba Pessoas", () => {
     expect(await importFunctionsSheet(marina, ev, (await exportFunctionsSheet(marina, ev)).bytes, { confirm: false })).toMatchObject({ nothing: true, warnings: [] });
   });
 
+  it("empresa e responsável direto: o Gerente muda; para a Pré-produtora vira aviso", async () => {
+    const marina = await as("gerente");
+    const wb = await load((await exportFunctionsSheet(marina, ev)).bytes);
+    personRow(wb, emails.carla).getCell(9).value = "Locadora Luz";
+    personRow(wb, emails.carla).getCell(10).value = "Joana";
+    const r = await importFunctionsSheet(marina, ev, await save(wb), { confirm: true });
+    expect(r.people!.updateNames).toEqual(["Carla (empresa Locadora Luz; responde a Joana)"]);
+    expect(await owner.participant.findUniqueOrThrow({ where: { id: carlaHere } })).toMatchObject({ company: "Locadora Luz", directManager: "Joana" });
+    // Baixar de novo traz os dois; em branco apaga.
+    const again = await load((await exportFunctionsSheet(marina, ev)).bytes);
+    expect(personRow(again, emails.carla).getCell(9).text).toBe("Locadora Luz");
+    personRow(again, emails.carla).getCell(10).value = "";
+    await importFunctionsSheet(marina, ev, await save(again), { confirm: true });
+    expect((await owner.participant.findUniqueOrThrow({ where: { id: carlaHere } })).directManager).toBeNull();
+
+    const sofia = await as("pre");
+    const wbPre = await load((await exportFunctionsSheet(sofia, ev)).bytes);
+    personRow(wbPre, emails.carla).getCell(8).value = "Outra";
+    const p = await importFunctionsSheet(sofia, ev, await save(wbPre), { confirm: true });
+    expect(p.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/empresa e responsável direto foram ignorados em 1 linha/)]));
+    expect((await owner.participant.findUniqueOrThrow({ where: { id: carlaHere } })).company).toBe("Locadora Luz");
+  });
+
   it("para a Pré-produtora só a função muda; sem coluna de visão", async () => {
     const sofia = await as("pre");
     const wb = await load((await exportFunctionsSheet(sofia, ev)).bytes);
-    expect(wb.getWorksheet("Pessoas")!.getRow(1).values).toEqual([undefined, "Nome", "E-mail", "Telefone", "Área", "Equipe", "Perfil", "Função"]);
+    expect(wb.getWorksheet("Pessoas")!.getRow(1).values).toEqual([undefined, "Nome", "E-mail", "Telefone", "Área", "Equipe", "Perfil", "Função", "Empresa", "Responsável direto"]);
     expect(values(wb.getWorksheet("Como preencher")!).flat().join(" ")).toMatch(/só o Gerente do evento muda/);
     personRow(wb, emails.carla).getCell(6).value = "Head";
     personRow(wb, emails.carla).getCell(7).value = "Sem função";

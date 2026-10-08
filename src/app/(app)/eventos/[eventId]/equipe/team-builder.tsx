@@ -14,6 +14,7 @@ type ClientView = { costs: boolean; team: boolean; progress: boolean };
 type Team = { id: string; name: string; areaId: string };
 type Person = {
   id: string; name: string; email: string; phone: string | null; jobTitle: string | null; role: Role;
+  company: string | null; directManager: string | null;
   areaId: string | null; teamId: string | null; active: boolean; joined: boolean; invited: boolean; mine: boolean;
   /** Quem vê a tela pode dar função a esta pessoa? */
   canGiveFunction: boolean;
@@ -178,6 +179,7 @@ function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
   fn?: FunctionPick;
 }) {
   const [link, setLink] = useState<string | null>(null);
+  const [editWork, setEditWork] = useState(false);
   const state = !p.active ? "Inativo" : p.joined ? "Com acesso" : p.invited ? "Convidado" : "Sem acesso";
 
   async function invite() {
@@ -201,6 +203,11 @@ function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
           <p className="truncate text-sm text-muted">
             {[p.jobTitle, p.role !== "OPERACIONAL" ? ROLE_LABEL[p.role] + (areaName ? ` · ${areaName}` : "") : null].filter(Boolean).join(" · ") || p.email}
           </p>
+          {(p.company || p.directManager) && (
+            <p className="truncate text-sm text-muted">
+              {[p.company, p.directManager && `responde a ${p.directManager}`].filter(Boolean).join(" · ")}
+            </p>
+          )}
         </div>
         <span className={cx("shrink-0 rounded-full px-2 py-0.5 text-xs",
           state === "Com acesso" ? "bg-emerald-500/20 text-emerald-200" : "bg-border text-muted")}>
@@ -223,7 +230,34 @@ function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
             {p.active ? "Desativar" : "Reativar"}
           </button>
         )}
+        {canManage && !editWork && (
+          <button type="button" className="rounded-lg border border-border px-3 py-1.5 text-sm" onClick={() => setEditWork(true)}>
+            Empresa e responsável
+          </button>
+        )}
       </div>
+      {editWork && (
+        <form
+          className="mt-2 space-y-2 rounded-xl bg-background p-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            const ok = await guard(() => api(`/api/participants/${p.id}`, {
+              method: "PATCH", body: { company: f.get("company") || null, directManager: f.get("directManager") || null },
+            }));
+            if (ok) setEditWork(false);
+          }}
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block"><Label hint="(opcional)">Empresa</Label><Input name="company" defaultValue={p.company ?? ""} maxLength={120} autoFocus /></label>
+            <label className="block"><Label hint="(opcional)">Responsável direto</Label><Input name="directManager" defaultValue={p.directManager ?? ""} maxLength={120} /></label>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="secondary" onClick={() => setEditWork(false)}>Cancelar</Button>
+            <Button type="submit">Salvar</Button>
+          </div>
+        </form>
+      )}
       {fn && <FunctionSelect participantId={p.id} name={p.name} pick={fn} guard={guard} />}
       {clientView && p.active && <ClientViewSwitches participantId={p.id} view={clientView} guard={guard} />}
       {link && (
@@ -331,6 +365,7 @@ function AddPerson({ eventId, roles, teamId, areaId, label, guard }: {
             body: {
               name: f.get("name"), email: f.get("email"), phone: f.get("phone") || null,
               jobTitle: f.get("jobTitle") || null, role: f.get("role"), teamId: teamId ?? null, areaId: areaId ?? null,
+              company: f.get("company") || null, directManager: f.get("directManager") || null,
             },
           }),
         );
@@ -342,6 +377,10 @@ function AddPerson({ eventId, roles, teamId, areaId, label, guard }: {
       <div className="grid grid-cols-2 gap-2">
         <label className="block"><Label hint="(opcional)">Telefone</Label><Input name="phone" type="tel" inputMode="tel" /></label>
         <label className="block"><Label hint="(opcional)">Função</Label><Input name="jobTitle" placeholder="Eletricista" /></label>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block"><Label hint="(opcional)">Empresa</Label><Input name="company" maxLength={120} /></label>
+        <label className="block"><Label hint="(opcional)">Responsável direto</Label><Input name="directManager" maxLength={120} /></label>
       </div>
       {roles.length > 1 ? (
         <label className="block">

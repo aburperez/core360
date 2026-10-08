@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canSendToField, canUsePreProduction, clientCan } from "../../server/authz/policy";
+import { canReviewSla, canSendToField, canUsePreProduction, clientCan } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
-import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { parseDecimal } from "../../lib/money";
@@ -10,6 +10,7 @@ import { requireEventAccess } from "../events/events.service";
 import { readMatrix, writeMatrix, type Matrix, type MatrixHeader } from "./matrix";
 import { costTotals, DEFAULT_RATES, lineSubtotal, type CostBilling, type CostRates } from "./totals";
 import { fieldText } from "../receipts/field-text";
+import { canSetItemStatus, COST_CENTERS, ITEM_CATEGORIES, ITEM_STATUS_LABEL, ITEM_STATUSES, itemCode, type ItemCategory, type ItemStatus } from "../items/item-meta";
 
 /**
  * Pré-produção: planilha de custos (orçamento) do evento, no formato da
@@ -48,11 +49,13 @@ function ratesOf(sheet: { feePct: unknown; invoiceTaxPct: unknown; nfTaxPct: unk
 const itemSelect = {
   id: true, sectionId: true, position: true, name: true, description: true, paymentTerms: true,
   unitValue: true, quantity: true, frequency: true, optional: true, billing: true, receiverId: true,
+  number: true, category: true, status: true, unit: true, location: true, responsibleId: true,
 } as const;
 
 type ItemRow = {
   id: string; sectionId: string; position: number; name: string; description: string | null; paymentTerms: string | null;
   unitValue: unknown; quantity: unknown; frequency: unknown; optional: boolean; billing: CostBilling; receiverId: string | null;
+  number: number; category: ItemCategory | null; status: ItemStatus; unit: string | null; location: string | null; responsibleId: string | null;
 };
 
 const toItem = (i: ItemRow) => {
@@ -68,6 +71,7 @@ const toItem = (i: ItemRow) => {
 async function loadSheet(tx: Tx, eventId: string) {
   // Em sequência: a transação usa uma conexão só.
   const sheet = await tx.costSheet.findUnique({ where: { eventId } });
+  const { number: eventNumber } = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { number: true } });
   const sections = await tx.costSection.findMany({ where: { eventId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, position: true } });
   const items = await tx.costItem.findMany({ where: { eventId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: itemSelect });
   // Campo: quem recebe e a conferência de cada item (a cópia enviada não tem valores).
@@ -78,7 +82,7 @@ async function loadSheet(tx: Tx, eventId: string) {
   const receipts = await tx.itemReceipt.findMany({
     where: { eventId },
     select: {
-      costItemId: true, receiverId: true, sectionName: true, name: true, description: true, quantity: true,
+      costItemId: true, receiverId: true, sectionName: true, name: true, description: true, quantity: true, unit: true, location: true,
       status: true, receivedQuantity: true, receivedDescription: true, note: true, receivedAt: true, sentAt: true,
       photos: { select: { id: true } },
     },
@@ -92,6 +96,7 @@ async function loadSheet(tx: Tx, eventId: string) {
     const r = receiptOf.get(i.id);
     return {
       ...i,
+      code: itemCode(eventNumber, i.category, i.number),
       receiverName: i.receiverId ? (nameOf.get(i.receiverId) ?? null) : null,
       receipt: r
         ? {
@@ -104,7 +109,8 @@ async function loadSheet(tx: Tx, eventId: string) {
             photoIds: r.photos.map((p) => p.id),
             /** O item mudou depois de enviado: falta "Enviar para o campo" de novo. */
             stale: r.receiverId !== i.receiverId || r.name !== fieldText(i.name) || r.description !== fieldText(i.description)
-              || Number(r.quantity) !== i.quantity || r.sectionName !== sectionName.get(i.sectionId),
+              || Number(r.quantity) !== i.quantity || r.sectionName !== sectionName.get(i.sectionId)
+              || r.unit !== i.unit || r.location !== i.location,
           }
         : null,
     };
@@ -299,10 +305,45 @@ const itemFields = {
   billing: z.enum(["FATURA", "NOTA_FISCAL", "DIRETO"]).optional(),
 };
 const itemCreateSchema = z.object(itemFields);
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida").refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "Data inválida");
 const itemUpdateSchema = itemCreateSchema.partial().extend({
   sectionId: uuid.optional(),
   move: z.enum(["up", "down"]).optional(),
+  // Item do evento (fase 2).
+  areaId: uuid.nullable().optional(),
+  category: z.enum(ITEM_CATEGORIES).nullable().optional(),
+  /** Só o diretor; vazio = o da categoria. */
+  costCenter: z.enum(COST_CENTERS).nullable().optional(),
+  unit: optionalText(20),
+  responsibleId: uuid.nullable().optional(),
+  neededOn: day.nullable().optional(),
+  location: optionalText(200),
+  status: z.enum(ITEM_STATUSES).optional(),
+  notes: optionalText(2000),
 });
+
+/**
+ * Confere os campos do Item: área e responsável do mesmo evento, centro de
+ * custo só pelo diretor e o status dentro do que a pessoa pode mudar.
+ */
+async function checkItemFields(actor: Actor, tx: Tx, i: { eventId: string; status: ItemStatus; costCenter: string | null }, patch: Record<string, unknown>) {
+  const director = canReviewSla(actor, i.eventId);
+  if ("costCenter" in patch && patch.costCenter !== i.costCenter && !director) {
+    throw new ForbiddenError("Só o diretor de produção muda o centro de custo");
+  }
+  if (patch.status !== undefined && !canSetItemStatus(i.status, patch.status as ItemStatus, director)) {
+    throw new ForbiddenError(`Só o diretor de produção muda o item de ${ITEM_STATUS_LABEL[i.status]} para ${ITEM_STATUS_LABEL[patch.status as ItemStatus]}`);
+  }
+  if (patch.areaId) {
+    const a = await tx.area.findFirst({ where: { id: patch.areaId as string, eventId: i.eventId, deletedAt: null }, select: { id: true } });
+    if (!a) throw new ValidationError("Área não encontrada neste evento", { areaId: ["Escolha uma área do evento"] });
+  }
+  if (patch.responsibleId) {
+    const p = await tx.participant.findFirst({ where: { id: patch.responsibleId as string, eventId: i.eventId, active: true, deletedAt: null }, select: { id: true } });
+    if (!p) throw new ValidationError("Responsável não encontrado neste evento", { responsibleId: ["Escolha alguém do evento"] });
+  }
+  if (typeof patch.neededOn === "string") patch.neededOn = new Date(`${patch.neededOn}T00:00:00.000Z`);
+}
 
 const auditItem = (i: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(i).map(([k, v]) => [k, v !== null && typeof v === "object" && !(v instanceof Date) ? Number(v) : v]));
@@ -340,6 +381,7 @@ export async function updateCostItem(actor: Actor, id: string, input: unknown) {
   const patch: Record<string, unknown> = Object.fromEntries(Object.entries(data).filter(([k]) => k in sent));
   return actor.run(async (tx) => {
     const i = await loadItem(actor, tx, id);
+    await checkItemFields(actor, tx, i, patch);
     if (sectionId && sectionId !== i.sectionId) {
       // Outra seção, do MESMO evento (a FK composta também garante).
       const target = await loadSection(actor, tx, sectionId);

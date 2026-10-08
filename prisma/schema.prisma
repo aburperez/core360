@@ -282,6 +282,8 @@ model Agency {
   id          String       @id @default(uuid(7)) @db.Uuid
   name        String
   status      AgencyStatus @default(ACTIVE)
+  /// Contador do número do evento na agência (EVT001). Mantido por trigger.
+  eventSeq    Int          @default(0) @map("event_seq")
   createdById String?      @map("created_by") @db.Uuid
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -405,6 +407,10 @@ model Event {
   notes            String?
   /// Contador do número curto das ocorrências (#142). Mantido por trigger.
   occurrenceSeq    Int         @default(0) @map("occurrence_seq")
+  /// Número do evento na agência (EVT001), dado pelo banco na criação.
+  number           Int         @default(0)
+  /// Contador do número dos itens (EVT001-CEN-023). Mantido por trigger.
+  itemSeq          Int         @default(0) @map("item_seq")
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
@@ -446,6 +452,7 @@ model Event {
   lead           Participant?          @relation("EventLead", fields: [id, leadId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_lead_fkey")
   producer       Participant?          @relation("EventProducer", fields: [id, producerId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_producer_fkey")
 
+  @@unique([agencyId, number])
   @@index([clientId])
   @@index([agencyId])
   @@index([status])
@@ -467,6 +474,7 @@ model Area {
   participants Participant[]
   occurrences  Occurrence[]
   planPoints   PlanPoint[]
+  costItems    CostItem[]
 
   /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
   @@unique([eventId, id])
@@ -502,26 +510,30 @@ model Team {
 
 /// A pessoa dentro de um evento. É daqui que vem o escopo de acesso.
 model Participant {
-  id          String          @id @default(uuid(7)) @db.Uuid
-  eventId     String          @map("event_id") @db.Uuid
+  id            String          @id @default(uuid(7)) @db.Uuid
+  eventId       String          @map("event_id") @db.Uuid
   /// Preenchido quando a pessoa aceita o convite / faz login com este e-mail.
-  userId      String?         @map("user_id") @db.Uuid
-  name        String
-  email       String          @db.Citext
-  phone       String?
-  jobTitle    String?         @map("job_title")
-  role        ParticipantRole
-  areaId      String?         @map("area_id") @db.Uuid
-  teamId      String?         @map("team_id") @db.Uuid
-  active      Boolean         @default(true)
-  invitedAt   DateTime?       @map("invited_at") @db.Timestamptz(3)
-  joinedAt    DateTime?       @map("joined_at") @db.Timestamptz(3)
-  createdById String?         @map("created_by") @db.Uuid
+  userId        String?         @map("user_id") @db.Uuid
+  name          String
+  email         String          @db.Citext
+  phone         String?
+  jobTitle      String?         @map("job_title")
+  /// Empresa da pessoa (agência, fornecedor, freelancer...).
+  company       String?
+  /// Responsável direto: a quem a pessoa responde (texto livre).
+  directManager String?         @map("direct_manager")
+  role          ParticipantRole
+  areaId        String?         @map("area_id") @db.Uuid
+  teamId        String?         @map("team_id") @db.Uuid
+  active        Boolean         @default(true)
+  invitedAt     DateTime?       @map("invited_at") @db.Timestamptz(3)
+  joinedAt      DateTime?       @map("joined_at") @db.Timestamptz(3)
+  createdById   String?         @map("created_by") @db.Uuid
   /// Diretor de produção: participação criada sozinha pelo banco (veja Director).
-  directorId  String?         @map("director_id") @db.Uuid
-  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  directorId    String?         @map("director_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?       @map("deleted_at") @db.Timestamptz(3)
 
   event     Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
   user      User?     @relation("ParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
@@ -535,6 +547,7 @@ model Participant {
   invitations            Invitation[]
   serviceTypes           ServiceTypePerson[]
   costItemsToReceive     CostItem[]          @relation("CostItemReceiver")
+  responsibleItems       CostItem[]          @relation("CostItemResponsible")
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
   briefing               Briefing?
   clientView             ClientView?
@@ -936,32 +949,105 @@ model CostSection {
 /// (sem frequência, conta 1). Opcional aparece mas fica fora dos totais.
 /// Sem valor unitário = "a definir": fica fora dos totais até ser preenchido.
 model CostItem {
-  id           String      @id @default(uuid(7)) @db.Uuid
-  eventId      String      @map("event_id") @db.Uuid
-  sectionId    String      @map("section_id") @db.Uuid
-  position     Int
-  name         String
-  description  String?
-  paymentTerms String?     @map("payment_terms")
-  unitValue    Decimal?    @map("unit_value") @db.Decimal(14, 2)
-  quantity     Decimal     @db.Decimal(12, 3)
-  frequency    Decimal?    @db.Decimal(12, 3)
-  optional     Boolean     @default(false)
-  billing      CostBilling @default(FATURA)
+  id            String        @id @default(uuid(7)) @db.Uuid
+  eventId       String        @map("event_id") @db.Uuid
+  sectionId     String        @map("section_id") @db.Uuid
+  position      Int
+  name          String
+  description   String?
+  paymentTerms  String?       @map("payment_terms")
+  unitValue     Decimal?      @map("unit_value") @db.Decimal(14, 2)
+  quantity      Decimal       @db.Decimal(12, 3)
+  frequency     Decimal?      @db.Decimal(12, 3)
+  optional      Boolean       @default(false)
+  billing       CostBilling   @default(FATURA)
   /// Quem recebe o item no campo (escolhido pelo Gerente).
-  receiverId   String?     @map("receiver_id") @db.Uuid
-  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  receiverId    String?       @map("receiver_id") @db.Uuid
+  /// Item do evento (fase 2): número no evento (código EVT001-CEN-023), dado pelo banco.
+  number        Int           @default(0)
+  areaId        String?       @map("area_id") @db.Uuid
+  category      ItemCategory?
+  /// Centro de custo escolhido pelo diretor. Vazio: vem da categoria.
+  costCenter    CostCenter?   @map("cost_center")
+  unit          String?
+  responsibleId String?       @map("responsible_id") @db.Uuid
+  neededOn      DateTime?     @map("needed_on") @db.Date
+  location      String?
+  status        ItemStatus    @default(A_DEFINIR)
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event    Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  section  CostSection    @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
-  receiver Participant?   @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
-  receipt  ItemReceipt?
-  quotes   QuoteRequest[]
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  section     CostSection    @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
+  receiver    Participant?   @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
+  responsible Participant?   @relation("CostItemResponsible", fields: [eventId, responsibleId], references: [eventId, id], onDelete: NoAction, map: "cost_items_responsible_fkey")
+  area        Area?          @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction, map: "cost_items_area_fkey")
+  receipt     ItemReceipt?
+  quotes      QuoteRequest[]
 
+  @@unique([eventId, number])
   @@unique([eventId, id])
   @@index([eventId, sectionId, position])
+  @@index([eventId, status])
   @@map("cost_items")
+}
+
+/// Status do Item do evento, na ordem do fluxo (o banco compara por esta ordem).
+enum ItemStatus {
+  A_DEFINIR
+  EM_COTACAO
+  COTACAO_RECEBIDA
+  EM_APROVACAO
+  APROVADO
+  CONTRATADO
+  EM_PRODUCAO
+  PRONTO
+  EM_TRANSPORTE
+  NO_LOCAL
+  MONTADO
+  CONFERIDO
+  FINALIZADO
+
+  @@map("item_status")
+}
+
+/// As 18 categorias do orçamento (roadmap do Abu).
+enum ItemCategory {
+  INFRAESTRUTURA
+  CENOGRAFIA
+  TECNICA
+  AUDIOVISUAL
+  ILUMINACAO
+  MOBILIARIO
+  COMUNICACAO_VISUAL
+  RECURSOS_HUMANOS
+  SEGURANCA
+  LIMPEZA
+  TRANSPORTE
+  HOSPEDAGEM
+  ALIMENTACAO
+  LOGISTICA
+  LOCACAO
+  TAXAS
+  PRODUCAO
+  CONTINGENCIA
+
+  @@map("item_category")
+}
+
+/// Os 8 centros de custo (01 INFRA ... 08 ADMINISTRATIVO).
+enum CostCenter {
+  INFRA
+  CENO
+  TECNICA
+  OPERACAO
+  LOGISTICA
+  STAFF
+  PRODUCAO
+  ADMINISTRATIVO
+
+  @@map("cost_center")
 }
 
 // ─────────────── Itens no campo: recebimento (sem valores) ───────────────
@@ -980,6 +1066,8 @@ model ItemReceipt {
   name                String
   description         String?
   quantity            Decimal       @db.Decimal(12, 3)
+  unit                String?
+  location            String?
   status              ReceiptStatus @default(PENDENTE)
   receivedQuantity    Decimal?      @map("received_quantity") @db.Decimal(12, 3)
   receivedDescription String?       @map("received_description")

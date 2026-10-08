@@ -17,7 +17,7 @@ export const INVITE_TTL_DAYS = 7;
 
 const publicFields = {
   id: true, eventId: true, userId: true, name: true, email: true, phone: true, jobTitle: true,
-  role: true, areaId: true, teamId: true, active: true, invitedAt: true, joinedAt: true,
+  company: true, directManager: true, role: true, areaId: true, teamId: true, active: true, invitedAt: true, joinedAt: true,
   area: { select: { id: true, name: true } },
   team: { select: { id: true, name: true } },
 } satisfies Prisma.ParticipantSelect;
@@ -119,6 +119,8 @@ const createSchema = z.object({
   email: z.email({ message: "E-mail inválido" }).trim().toLowerCase(),
   phone: optionalText(30),
   jobTitle: optionalText(80),
+  company: optionalText(120),
+  directManager: optionalText(120),
   role: z.enum(ROLES),
   areaId: uuid.optional().nullable(),
   teamId: uuid.optional().nullable(),
@@ -157,6 +159,8 @@ const updateSchema = z.object({
   name: text(120).optional(),
   phone: optionalText(30),
   jobTitle: optionalText(80),
+  company: optionalText(120),
+  directManager: optionalText(120),
   role: z.enum(ROLES).optional(),
   areaId: uuid.optional().nullable(),
   teamId: uuid.optional().nullable(),
@@ -164,7 +168,10 @@ const updateSchema = z.object({
 });
 
 export async function updateParticipant(actor: Actor, participantId: string, input: unknown) {
-  const patch = parse(updateSchema, input);
+  // Só os campos enviados: optionalText transforma ausente em null, e mudar
+  // só o "ativo" não pode apagar telefone, função, empresa...
+  const sent = (input ?? {}) as Record<string, unknown>;
+  const patch = Object.fromEntries(Object.entries(parse(updateSchema, input)).filter(([k]) => k in sent)) as z.output<typeof updateSchema>;
   const current = await loadParticipant(actor, participantId);
 
   if (current.userId === actor.userId && !isEventAdmin(actor, current.eventId)) {
@@ -194,6 +201,8 @@ export async function updateParticipant(actor: Actor, participantId: string, inp
     ...(patch.name !== undefined && { name: patch.name }),
     ...(patch.phone !== undefined && { phone: patch.phone }),
     ...(patch.jobTitle !== undefined && { jobTitle: patch.jobTitle }),
+    ...(patch.company !== undefined && { company: patch.company }),
+    ...(patch.directManager !== undefined && { directManager: patch.directManager }),
     ...(patch.active !== undefined && { active: patch.active }),
     role,
     ...placement,

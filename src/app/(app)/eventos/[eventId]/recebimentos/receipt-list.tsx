@@ -97,7 +97,8 @@ function ReceiptCard({ r, all }: { r: Row; all: boolean }) {
         <span className={cx("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", STATUS[r.status].tone)}>{STATUS[r.status].label}</span>
       </div>
       <p className="mt-1 text-sm">
-        Quantidade: <strong className="tabular-nums">{decimal(r.quantity)}</strong>
+        Quantidade: <strong className="tabular-nums">{decimal(r.quantity)}</strong>{r.unit && <> {r.unit}</>}
+        {r.location && <span className="text-muted"> · Local: {r.location}</span>}
         {all && <span className="text-muted"> · Recebe: {r.receiverName}</span>}
       </p>
       {r.description && (
