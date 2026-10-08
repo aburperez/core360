@@ -183,7 +183,7 @@ describe("planilha de funções e áreas", () => {
     expect(await owner.activityCheck.count({ where: { activityId: montar.id, participantId: joaoHere } })).toBe(1);
   });
 
-  it("para a Pré-produtora a aba de áreas e equipes é ignorada; funções e atividades entram", async () => {
+  it("para a Pré-produtora as áreas e as funções fora da lista padrão são ignoradas", async () => {
     const sofia = await as("pre");
     // Ela baixa com as áreas (para consultar), mas o texto avisa que não muda.
     const help = (await load((await exportFunctionsSheet(sofia, ev)).bytes)).getWorksheet("Como preencher")!;
@@ -191,16 +191,26 @@ describe("planilha de funções e áreas", () => {
 
     const file = await sheet({
       areas: [["Camarim", "Recepção", null], ["Infra", "", "Mudou"]],
-      functions: [["Camareira", null]],
-      activities: [["Camareira", "Arrumar camarim", null, null, null, null]],
+      functions: [["Brindes", null], ["Camareira", null]],
+      activities: [["Brindes", "Separar as sacolas", null, null, null, null], ["Camareira", "Arrumar camarim", null, null, null, null]],
     });
     const preview = await importFunctionsSheet(sofia, ev, file, { confirm: false });
-    expect(preview).toMatchObject({ ignoredAreas: true, areas: { create: 0, update: 0 }, teams: { create: 0 }, functions: { create: 1 } });
-    expect(preview.warnings[0]).toMatch(/Áreas e equipes foi ignorada/);
+    // "Brindes" já existe (é da lista padrão); "Camareira" é só do diretor de produção.
+    expect(preview).toMatchObject({ ignoredAreas: true, areas: { create: 0, update: 0 }, teams: { create: 0 }, functions: { create: 0 } });
+    expect(preview.warnings[0]).toMatch(/só o diretor de produção cria funções fora da lista/i);
+    expect(preview.warnings.some((w) => /Áreas e equipes foi ignorada/.test(w))).toBe(true);
     await importFunctionsSheet(sofia, ev, file, { confirm: true });
     expect(await owner.area.count({ where: { eventId: ev, name: "Camarim" } })).toBe(0);
     expect((await owner.area.findFirstOrThrow({ where: { eventId: ev, name: "Infra" } })).description).toBeNull();
-    expect(await owner.activity.count({ where: { eventId: ev, title: "Arrumar camarim" } })).toBe(1);
+    expect(await owner.eventFunction.count({ where: { eventId: ev, name: "Camareira" } })).toBe(0);
+    expect(await owner.activity.count({ where: { eventId: ev, title: "Separar as sacolas" } })).toBe(1);
+    expect(preview.functions.create).toBe(0);
+    expect(await owner.activity.count({ where: { eventId: ev, title: "Arrumar camarim" } })).toBe(0);
+
+    // O diretor de produção (Gerente) envia a mesma planilha e a função entra.
+    const marina = await as("gerente");
+    await importFunctionsSheet(marina, ev, file, { confirm: true });
+    expect(await owner.eventFunction.count({ where: { eventId: ev, name: "Camareira" } })).toBe(1);
   });
 
   it("linha com erro vira aviso e as outras entram", async () => {

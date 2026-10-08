@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
 import type { Tx } from "../../server/db/with-user";
-import { canGiveFunction, canGiveFunctions, canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canGiveFunction, canGiveFunctions, canReviewSla, canUseField, canUsePreProduction } from "../../server/authz/policy";
 import { membershipFor } from "../../server/authz/actor";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
@@ -24,6 +24,19 @@ export const DEFAULT_FUNCTIONS = [
   "Assistente Executivo", "Brindes", "Caex / Credenciamento / CAM", "Comunicação Visual", "Criativo",
   "Executivo", "Infra", "Logística", "Operação", "Runner", "Técnica", "Serviços",
 ] as const;
+
+const DEFAULT_SET = new Set<string>(DEFAULT_FUNCTIONS.map((n) => n.toLowerCase()));
+
+/** Função fora da lista padrão: só o diretor de produção cria ou renomeia (a RLS confere de novo). */
+export function isDefaultFunctionName(name: string) {
+  return DEFAULT_SET.has(name.trim().toLowerCase());
+}
+
+function requireCustomFunction(actor: Actor, eventId: string, name: string | undefined) {
+  if (name !== undefined && !isDefaultFunctionName(name) && !canReviewSla(actor, eventId)) {
+    throw new ForbiddenError("Só o diretor de produção cria funções fora da lista. Escolha uma da lista ou peça para ele.");
+  }
+}
 
 const FIELD_ROLES = ["GERENTE", "HEAD", "OPERACIONAL"] as const;
 const PROFILE_FIELDS = ["document", "uniformSize", "dietary", "emergencyName", "emergencyPhone"] as const;
@@ -160,6 +173,7 @@ function conflictOnName(e: unknown): never {
 export async function createFunction(actor: Actor, eventId: string, input: unknown) {
   requirePre(actor, eventId);
   const data = parse(functionSchema, input);
+  requireCustomFunction(actor, eventId, data.name);
   try {
     return await actor.run(async (tx) => {
       const f = await tx.eventFunction.create({ data: { ...data, eventId, createdById: actor.userId }, select: { id: true, name: true } });
@@ -171,13 +185,20 @@ export async function createFunction(actor: Actor, eventId: string, input: unkno
   }
 }
 
-/** Cria de uma vez as funções da lista padrão que o evento ainda não tem. */
-export async function createDefaultFunctions(actor: Actor, eventId: string) {
+const defaultsSchema = z.object({
+  /** Quais da lista padrão (click and build). Sem isso, todas as que faltam. */
+  names: z.array(text(80)).max(100).optional(),
+});
+
+/** Cria de uma vez as funções escolhidas da lista padrão que o evento ainda não tem. */
+export async function createDefaultFunctions(actor: Actor, eventId: string, input: unknown = {}) {
   requirePre(actor, eventId);
+  const picked = parse(defaultsSchema, input).names?.map((n) => n.trim().toLowerCase());
+  if (picked?.some((n) => !DEFAULT_SET.has(n))) throw new ValidationError("Escolha funções da lista padrão");
   return actor.run(async (tx) => {
     const existing = await tx.eventFunction.findMany({ where: { eventId }, select: { name: true } });
     const have = new Set(existing.map((f) => f.name.toLowerCase()));
-    const names = DEFAULT_FUNCTIONS.filter((n) => !have.has(n.toLowerCase()));
+    const names = DEFAULT_FUNCTIONS.filter((n) => !have.has(n.toLowerCase()) && (!picked || picked.includes(n.toLowerCase())));
     if (names.length) {
       await tx.eventFunction.createMany({ data: names.map((name) => ({ eventId, name, createdById: actor.userId })) });
       await audit(tx, actor, { eventId, entity: "event_function", action: "CREATE", after: { defaults: names } });
@@ -221,6 +242,7 @@ export async function getFunction(actor: Actor, functionId: string) {
 export async function updateFunction(actor: Actor, functionId: string, input: unknown) {
   const f = await loadFunction(actor, functionId);
   const data = parse(functionSchema.partial(), input);
+  if (data.name !== undefined && data.name !== f.name) requireCustomFunction(actor, f.eventId, data.name);
   try {
     return await actor.run(async (tx) => {
       const saved = await tx.eventFunction.update({ where: { id: f.id }, data, select: { id: true, name: true, description: true } });

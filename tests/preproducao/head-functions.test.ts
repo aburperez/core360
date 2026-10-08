@@ -27,9 +27,10 @@ beforeAll(async () => {
     where: { participantId: { in: [P.joao.id, P.carlos.id] } },
     select: { participantId: true, functionId: true },
   });
-  const sofia = await actorFor(db, "sofia");
-  fnA = (await createFunction(sofia, rock, { name: `Montagem ${uniq()}` })).id;
-  fnB = (await createFunction(sofia, rock, { name: `Runner ${uniq()}` })).id;
+  // Função fora da lista padrão é do diretor de produção (Gerente); a Pré-produtora só dá a função.
+  const marina = await actorFor(db, "marina");
+  fnA = (await createFunction(marina, rock, { name: `Montagem ${uniq()}` })).id;
+  fnB = (await createFunction(marina, rock, { name: `Runner ${uniq()}` })).id;
 });
 
 afterAll(async () => {

@@ -1,11 +1,11 @@
 import { isEventAdmin, type Actor } from "../../server/authz/actor";
-import { canAssignRole, canGrantClientView, canManageAreas, canUsePreProduction } from "../../server/authz/policy";
+import { canAssignRole, canGrantClientView, canManageAreas, canReviewSla, canUsePreProduction } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
 import { ConflictError, NotFoundError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
 import { norm } from "../../server/xlsx";
 import { requireEventAccess } from "../events/events.service";
-import { DEFAULT_FUNCTIONS, setFunction, sortActivities } from "./functions.service";
+import { DEFAULT_FUNCTIONS, isDefaultFunctionName, setFunction, sortActivities } from "./functions.service";
 import {
   NO_FUNCTION, ROLE_NAMES, readFunctionsSheet, viewText, writeFunctionsSheet,
   type SheetActivity, type SheetRole, type SheetView,
@@ -174,9 +174,17 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
       const fnByNorm = new Map(functions.map((f) => [norm(f.name), f]));
       const fnCreate: { name: string; description: string | null }[] = [];
       const fnUpdate: { id: string; description: string }[] = [];
+      // Função fora da lista padrão é só do diretor de produção: para os outros
+      // a planilha cria as da lista e avisa quais ficaram de fora.
+      const canCustom = canReviewSla(actor, eventId);
+      const ignoredFns: string[] = [];
       for (const f of sheet.functions ?? []) {
         const found = fnByNorm.get(norm(f.name));
         if (!found) {
+          if (!canCustom && !isDefaultFunctionName(f.name)) {
+            ignoredFns.push(f.name);
+            continue;
+          }
           fnChanges.create.push(f.name);
           fnCreate.push(f);
         } else if (f.description && f.description !== found.description) {
@@ -185,6 +193,11 @@ export async function importFunctionsSheet(actor: Actor, eventId: string, bytes:
         }
       }
       const willExist = new Set([...fnByNorm.keys(), ...fnCreate.map((f) => norm(f.name))]);
+      if (ignoredFns.length) {
+        warnings.unshift(
+          `Só o diretor de produção cria funções fora da lista padrão. ${ignoredFns.length === 1 ? "Ficou" : "Ficaram"} de fora: ${ignoredFns.join(", ")}.`,
+        );
+      }
 
       // ── Atividades (de cada função) ──
       const actCreate: SheetActivity[] = [];

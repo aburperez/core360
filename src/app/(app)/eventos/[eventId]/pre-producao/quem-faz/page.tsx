@@ -9,10 +9,11 @@ import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { Matrix } from "./matrix";
+import { ProducersTabs } from "../funcoes/tabs";
 
-export const metadata = { title: "Quem faz o quê" };
+export const metadata = { title: "Produtores e Funções" };
 
-/** Planilha pessoa × tipo de atendimento, por equipe. */
+/** Aba de Produtores e Funções: planilha produtor × tipo de chamado, por equipe. */
 export default async function WhoDoesWhatPage({ params, searchParams }: PageProps<"/eventos/[eventId]/pre-producao/quem-faz">) {
   const actor = await requireUser();
   const { eventId } = await params;
@@ -31,9 +32,10 @@ export default async function WhoDoesWhatPage({ params, searchParams }: PageProp
 
   return (
     <>
-      <TopBar title="Quem faz o quê" subtitle={team ? `${team.area.name} › ${team.name}` : undefined} />
+      <TopBar title="Produtores e Funções" subtitle={team ? `${team.area.name} › ${team.name}` : undefined} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
-      <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-10 bg-background">
+      <ProducersTabs eventId={eventId} active="quem-faz" />
+      <div className="z-10 bg-background">
         <div className={cx(PAGE, "flex gap-2 overflow-x-auto py-2")}>
           {teams.map((t) => (
             <Link

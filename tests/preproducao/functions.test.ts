@@ -19,6 +19,7 @@ import {
   setFunctionPeople,
   setPersonFunction,
   updateActivity,
+  updateFunction,
 } from "@/modules/functions/functions.service";
 
 /**
@@ -57,6 +58,35 @@ describe("funções do evento", () => {
     const paulo = await actorFor(db, "paulo");
     await expectStatus(getFunctionsPanel(paulo, rock), 404);
     expect(await as("paulo", (tx) => tx.eventFunction.count({ where: { eventId: rock } }))).toBe(0);
+  });
+
+  it("função fora da lista padrão é só do diretor de produção", async () => {
+    const sofia = await actorFor(db, "sofia");
+    const marina = await actorFor(db, "marina");
+    // A Pré-produtora escolhe da lista padrão (click and build), mas não inventa uma função.
+    await expectStatus(createFunction(sofia, rock, { name: `Camareira ${uniq()}` }), 403);
+    await expectPgError(
+      as("sofia", (tx) => tx.eventFunction.create({ data: { eventId: rock, name: `Camareira ${uniq()}`, createdById: d.users.sofia! } })),
+      "42501",
+    );
+    const f = (await createFunction(marina, rock, { name: `Camareira ${uniq()}` }))!;
+    // Nem renomeia uma existente para fora da lista.
+    await expectStatus(updateFunction(sofia, f.id, { name: `Outra ${uniq()}` }), 403);
+    // Mudar só a descrição continua valendo para ela.
+    expect(await updateFunction(sofia, f.id, { description: "Cuida dos camarins" })).toMatchObject({ description: "Cuida dos camarins" });
+    await deleteFunction(marina, f.id);
+  });
+
+  it("click and build: cria só as funções marcadas da lista padrão", async () => {
+    const paulo = await actorFor(db, "paulo");
+    const picked = [DEFAULT_FUNCTIONS[0], DEFAULT_FUNCTIONS[3]];
+    expect(await createDefaultFunctions(paulo, congresso, { names: picked })).toEqual({ count: 2 });
+    expect(await createDefaultFunctions(paulo, congresso, { names: picked })).toEqual({ count: 0 });
+    const panel = await getFunctionsPanel(paulo, congresso);
+    expect(panel.functions.map((f) => f.name).sort()).toEqual([...picked].sort());
+    expect(panel.defaults).toHaveLength(DEFAULT_FUNCTIONS.length - 2);
+    await expectStatus(createDefaultFunctions(paulo, congresso, { names: ["Camareira"] }), 422);
+    for (const f of panel.functions) await deleteFunction(paulo, f.id);
   });
 
   it("nome repetido no mesmo evento é recusado, mesmo com letras diferentes", async () => {

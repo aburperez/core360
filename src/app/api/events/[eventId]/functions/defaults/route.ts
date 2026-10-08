@@ -1,5 +1,7 @@
-import { authed } from "@/server/http/handler";
+import { authed, body } from "@/server/http/handler";
 import { createDefaultFunctions } from "@/modules/functions/functions.service";
 
-/** Cria as funções da lista padrão que o evento ainda não tem. */
-export const POST = authed<{ eventId: string }>(({ actor, params }) => createDefaultFunctions(actor, params.eventId));
+/** Cria as funções escolhidas da lista padrão (ou todas as que faltam). */
+export const POST = authed<{ eventId: string }>(async ({ req, actor, params }) =>
+  createDefaultFunctions(actor, params.eventId, await body(req)),
+);

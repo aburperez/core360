@@ -27,18 +27,59 @@ function useAction() {
   return { busy, error, run, router };
 }
 
-/** Cria de uma vez as funções da lista padrão que faltam. */
-export function DefaultsButton({ eventId, names, compact }: { eventId: string; names: string[]; compact?: boolean }) {
+/**
+ * Click and build: marque as funções da lista padrão que este evento vai ter
+ * e crie todas de uma vez. Começa com todas marcadas.
+ */
+export function DefaultsPicker({ eventId, names, compact }: { eventId: string; names: string[]; compact?: boolean }) {
   const { busy, error, run } = useAction();
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(compact ? [] : names));
+  const toggle = (n: string) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+  const all = picked.size === names.length;
+
   return (
-    <div className={compact ? "" : "mt-4"}>
+    <div className={compact ? "" : "mt-3"}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {compact ? `Faltam ${names.length} da lista padrão` : `${picked.size} de ${names.length} marcadas`}
+        </p>
+        <button type="button" className="shrink-0 text-sm font-semibold text-primary" onClick={() => setPicked(all ? new Set() : new Set(names))}>
+          {all ? "Desmarcar todas" : "Marcar todas"}
+        </button>
+      </div>
+      <ul className="flex flex-wrap gap-2">
+        {names.map((n) => {
+          const on = picked.has(n);
+          return (
+            <li key={n}>
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(n)}
+                className={cx(
+                  "min-h-10 rounded-full border px-3 text-sm transition",
+                  on ? "border-primary bg-primary/15 font-semibold text-primary" : "border-border bg-surface text-muted hover:border-primary/60",
+                )}
+              >
+                {on ? "✓ " : "+ "}{n}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
       <Button
+        className={cx("mt-3 w-full sm:w-auto", compact && "min-h-10 text-sm")}
         variant={compact ? "secondary" : "primary"}
-        className={compact ? "min-h-10 text-sm" : "w-full sm:w-auto"}
-        disabled={busy}
-        onClick={() => run(() => api(`/api/events/${eventId}/functions/defaults`, { body: {} }))}
+        disabled={busy || picked.size === 0}
+        onClick={() => run(() => api(`/api/events/${eventId}/functions/defaults`, { body: { names: [...picked] } }))}
       >
-        {busy ? "Criando…" : compact ? `+ Adicionar as ${names.length} que faltam da lista padrão` : `Usar estas ${names.length} funções`}
+        {busy ? "Criando…" : `Criar ${picked.size === 1 ? "a função marcada" : `as ${picked.size} funções marcadas`}`}
       </Button>
       <div className="mt-2"><FormError message={error} /></div>
     </div>
@@ -62,7 +103,7 @@ export function NewFunctionForm({ eventId }: { eventId: string }) {
           if (ok && id) router.push(`/eventos/${eventId}/pre-producao/funcoes/${id}`);
         }}
       >
-        <Input name="name" required maxLength={80} placeholder="Nova função, ex.: Eletricista de palco" aria-label="Nome da nova função" />
+        <Input name="name" required maxLength={80} placeholder="Função fora da lista, ex.: Eletricista de palco" aria-label="Nome da nova função" />
         <Button type="submit" disabled={busy} className="shrink-0">{busy ? "…" : "Criar"}</Button>
       </form>
       <div className="mt-2"><FormError message={error} /></div>

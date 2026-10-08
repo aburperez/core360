@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canManageAreas, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canManageAreas, canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
@@ -9,23 +9,27 @@ import { EventTabs } from "@/components/event-nav";
 import { BriefingPill } from "@/components/briefing-view";
 import { Card, EmptyState, PAGE, SectionTitle, cx } from "@/components/ui";
 import { ROLE_LABEL } from "@/lib/format";
-import { DefaultsButton, FunctionSelect, NewFunctionForm } from "./forms";
+import { DefaultsPicker, FunctionSelect, NewFunctionForm } from "./forms";
 import { SheetPanel } from "./sheet";
+import { ProducersTabs } from "./tabs";
 
-export const metadata = { title: "Funções e briefing" };
+export const metadata = { title: "Produtores e Funções" };
 
 type Panel = Awaited<ReturnType<typeof getFunctionsPanel>>;
 type Person = Panel["people"][number];
 
 /**
- * Painel de funções: as funções do evento e todas as pessoas do campo numa
- * tela, com função, agenda, ficha e briefing de cada uma.
+ * Produtores e Funções: as funções do evento e todos os produtores numa tela,
+ * com função, agenda, ficha e briefing de cada um. A lista de funções vem da
+ * planilha pronta ou da lista padrão (click and build); função fora da lista é
+ * só do diretor de produção.
  */
 export default async function FunctionsPanelPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/funcoes">) {
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
   const [event, panel] = await Promise.all([getEvent(actor, eventId), getFunctionsPanel(actor, eventId)]);
+  const director = canReviewSla(actor, eventId);
   const base = `/eventos/${eventId}/pre-producao`;
   const options = panel.functions.map((f) => ({ id: f.id, name: f.name }));
   const names = new Map(options.map((f) => [f.id, f.name]));
@@ -41,7 +45,7 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
   const ordered = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR")).map(([, g]) => g);
   const people = panel.people;
   const stats = [
-    { label: "pessoas no campo", value: people.length },
+    { label: "produtores", value: people.length },
     { label: "com função", value: people.filter((p) => p.functionId).length },
     { label: "com briefing", value: people.filter((p) => p.briefingState !== "SEM").length },
     { label: "já leram", value: people.filter((p) => p.briefingState === "LIDO").length, tone: "text-emerald-300" },
@@ -49,12 +53,14 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
 
   return (
     <>
-      <TopBar title="Funções e briefing" subtitle={event.name} />
+      <TopBar title="Produtores e Funções" subtitle={event.name} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
+      <ProducersTabs eventId={eventId} active="funcoes" />
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <p className="mb-4 px-1 text-sm text-muted">
-          Crie as funções uma vez, com as atividades de cada uma, e dê a função a cada pessoa. Ela vê a função,
-          a agenda e o briefing em &ldquo;Meu briefing&rdquo;, marca o que já fez e preenche a própria ficha.
+          Monte a lista de funções de duas formas: envie a planilha pronta ou escolha da lista padrão. Depois dê a
+          função a cada produtor. Mais de um produtor pode ter a mesma função. Cada um vê a função, a agenda e o
+          briefing em &ldquo;Meu briefing&rdquo;, marca o que já fez e preenche a própria ficha.
         </p>
 
         <div className="mb-4"><SheetPanel eventId={eventId} canEditAreas={canManageAreas(actor, eventId)} /></div>
@@ -71,14 +77,11 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
         <SectionTitle>Funções ({panel.functions.length})</SectionTitle>
         {panel.functions.length === 0 && panel.defaults.length > 0 ? (
           <Card>
-            <p className="font-semibold">Comece com as funções padrão</p>
-            <p className="mt-1 text-sm text-muted">Depois dá para mudar o nome, apagar ou criar outras.</p>
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {panel.defaults.map((n) => (
-                <li key={n} className="rounded-full border border-border px-3 py-1 text-sm">{n}</li>
-              ))}
-            </ul>
-            <DefaultsButton eventId={eventId} names={panel.defaults} />
+            <p className="font-semibold">Monte a lista com um clique</p>
+            <p className="mt-1 text-sm text-muted">
+              Marque as funções que este evento vai ter. Depois dá para mudar o nome, apagar ou acrescentar outras.
+            </p>
+            <DefaultsPicker eventId={eventId} names={panel.defaults} />
           </Card>
         ) : (
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -90,20 +93,28 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
               >
                 <p className="truncate font-semibold">{f.name}</p>
                 <p className="text-sm text-muted">
-                  {f.peopleCount} {f.peopleCount === 1 ? "pessoa" : "pessoas"} · {f.activityCount} {f.activityCount === 1 ? "atividade" : "atividades"}
+                  {f.peopleCount} {f.peopleCount === 1 ? "produtor" : "produtores"} · {f.activityCount} {f.activityCount === 1 ? "atividade" : "atividades"}
                 </p>
               </Link>
             ))}
           </div>
         )}
         <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="lg:w-96"><NewFunctionForm eventId={eventId} /></div>
-          {panel.functions.length > 0 && panel.defaults.length > 0 && <DefaultsButton eventId={eventId} names={panel.defaults} compact />}
+          <div className="lg:w-96">
+            {director ? (
+              <NewFunctionForm eventId={eventId} />
+            ) : (
+              <p className="text-sm text-muted">Função fora da lista padrão: só o diretor de produção cria.</p>
+            )}
+          </div>
+          {panel.functions.length > 0 && panel.defaults.length > 0 && (
+            <div className="lg:max-w-xl"><DefaultsPicker eventId={eventId} names={panel.defaults} compact /></div>
+          )}
         </div>
 
-        <SectionTitle>Pessoas</SectionTitle>
+        <SectionTitle>Produtores</SectionTitle>
         {people.length === 0 ? (
-          <EmptyState title="Ninguém do campo ainda">Monte as equipes primeiro em Montar equipe.</EmptyState>
+          <EmptyState title="Nenhum produtor ainda">Monte as equipes primeiro em Montar equipe.</EmptyState>
         ) : (
           <div className="space-y-4">
             {ordered.map((g) => (
@@ -121,7 +132,7 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
                 <table className="hidden w-full table-fixed text-left text-sm lg:table">
                   <thead className="text-xs uppercase tracking-wide text-muted">
                     <tr>
-                      <th className="px-4 py-2 font-semibold">Pessoa</th>
+                      <th className="px-4 py-2 font-semibold">Produtor</th>
                       <th className="w-72 px-4 py-2 font-semibold">Função</th>
                       <th className="w-40 px-4 py-2 font-semibold">Agenda</th>
                       <th className="w-36 px-4 py-2 font-semibold">Ficha</th>

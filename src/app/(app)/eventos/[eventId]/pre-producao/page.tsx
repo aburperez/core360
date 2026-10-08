@@ -61,7 +61,6 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       line: brief.updatedAt ? `${brief.progress.answered} de 13 frentes · ${brief.progress.needed} precisam` : "Ainda não preenchido",
     },
     { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
-    { href: `${base}/quem-faz`, icon: "matrix", title: "Quem faz o quê", line: `${withPeople} de ${types.length} tipos com pessoas` },
     { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
     { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
     {
@@ -72,7 +71,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       href: `${base}/documentos`, icon: "docs", title: "Documentos",
       line: docs.documents.length ? `${docs.documents.length} ${docs.documents.length === 1 ? "arquivo" : "arquivos"} · ${docs.documents.filter((d) => d.visibleToField).length} no campo` : "Nenhum enviado",
     },
-    { href: `${base}/funcoes`, icon: "functions", title: "Funções e briefing", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
+    { href: `${base}/funcoes`, icon: "functions", title: "Produtores e Funções", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
     { href: `${base}/relatorio`, icon: "report", title: "Relatório diário", line: "Chamados e recebimentos do dia" },
   ];
 
@@ -115,8 +114,8 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
             <Panel title="Andamento da preparação">
               <div className="space-y-1">
                 <ProgressRow label="SLA aprovado" done={approved} total={types.length} hint={`${approved} de ${types.length} tipos`} i={0} href={`${base}/tipos`} />
-                <ProgressRow label="Quem faz" done={withPeople} total={types.length} hint={`${withPeople} de ${types.length} tipos`} i={1} href={`${base}/quem-faz`} />
-                <ProgressRow label="Funções" done={withFunction} total={people} hint={`${withFunction} de ${people} pessoas`} i={2} href={`${base}/funcoes`} />
+                <ProgressRow label="Quem atende" done={withPeople} total={types.length} hint={`${withPeople} de ${types.length} tipos`} i={1} href={`${base}/quem-faz`} />
+                <ProgressRow label="Funções" done={withFunction} total={people} hint={`${withFunction} de ${people} produtores`} i={2} href={`${base}/funcoes`} />
                 <ProgressRow label="Fichas" done={fullProfile} total={people} hint={`${fullProfile} de ${people} completas`} i={3} href={`${base}/funcoes`} />
                 <ProgressRow label="Briefing lido" done={read} total={briefed.length} hint={`${read} de ${briefed.length} pessoas`} i={4} href={`${base}/funcoes`} />
                 {quotes.total > 0 && (
