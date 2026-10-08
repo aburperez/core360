@@ -68,7 +68,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       href: `${base}/itens`, icon: "items", title: "Mapa de itens",
       line: sheet.itemCount ? `${sheet.itemCount} itens · ${toDefine} a definir · ${noOwner} sem responsável` : "Nenhum item ainda",
     },
-    { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
+    { href: `${base}/orcamento`, icon: "costs", title: "Orçamento", line: sheet.itemCount ? `Planilha ${brl(sheet.totals.total)}` : "Planilha vazia" },
     { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
     {
       href: `${base}/visitas`, icon: "visit", title: "Visitas técnicas",
@@ -128,7 +128,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
                 {quotes.total > 0 && (
                   <ProgressRow label="Cotações" done={quotes.closed} total={quotes.total} hint={`${quotes.closed} de ${quotes.total} fechadas`} i={1} href={`${base}/cotacoes`} />
                 )}
-                <ProgressRow label="Custos" done={priced} total={sheet.itemCount} hint={`${priced} de ${sheet.itemCount} itens com valor`} i={5} href={`${base}/custos`} />
+                <ProgressRow label="Orçamento" done={priced} total={sheet.itemCount} hint={`${priced} de ${sheet.itemCount} itens com valor`} i={5} href={`${base}/orcamento`} />
                 {sheet.field.sent > 0 && (
                   <ProgressRow label="Conferidos" done={sheet.field.ok + sheet.field.different} total={sheet.field.sent} hint={`${sheet.field.ok + sheet.field.different} de ${sheet.field.sent} itens no campo`} i={0} href={`${base}/relatorio`} />
                 )}
@@ -138,7 +138,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
 
           <aside className="mt-4 space-y-4 lg:mt-0">
             <Panel className="hidden lg:block"><Profile name={actor.name} role={role} detail={event.name} /></Panel>
-            <Panel title="Custo do evento" action={<Link href={`${base}/custos`} className="text-sm font-semibold text-primary">Abrir ›</Link>}>
+            <Panel title="Custo do evento" action={<Link href={`${base}/orcamento`} className="text-sm font-semibold text-primary">Abrir ›</Link>}>
               <p className="text-3xl font-bold tabular-nums">{brl(sheet.totals.total)}</p>
               <dl className="mt-3 space-y-1.5 text-sm">
                 {finances?.approvedBudget != null && (

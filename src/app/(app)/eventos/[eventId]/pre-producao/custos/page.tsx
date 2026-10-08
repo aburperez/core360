@@ -7,11 +7,12 @@ import { listReceiverOptions } from "@/modules/receipts/receipts.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
+import { BudgetTabs } from "../orcamento/tabs";
 import { CostsEditor } from "./costs-editor";
 
-export const metadata = { title: "Custos" };
+export const metadata = { title: "Planilha Padrão CORE 360" };
 
-/** Planilha de custos do evento, no formato da matriz de orçamento. */
+/** Planilha de custos do evento, no formato Padrão CORE 360 (aba do Orçamento). */
 export default async function CostsPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/custos">) {
   const actor = await requireUser();
   const { eventId } = await params;
@@ -20,8 +21,9 @@ export default async function CostsPage({ params }: PageProps<"/eventos/[eventId
 
   return (
     <>
-      <TopBar title="Custos" subtitle={event.name} />
+      <TopBar title="Orçamento" subtitle={event.name} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
+      <BudgetTabs eventId={eventId} active="planilha" />
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <CostsEditor eventId={eventId} sheet={sheet} receivers={receivers} />
       </main>

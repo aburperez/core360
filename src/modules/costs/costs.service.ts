@@ -10,6 +10,7 @@ import { requireEventAccess } from "../events/events.service";
 import { readMatrix, writeMatrix, type Matrix, type MatrixHeader } from "./matrix";
 import { costTotals, DEFAULT_RATES, lineSubtotal, type CostBilling, type CostRates } from "./totals";
 import { fieldText } from "../receipts/field-text";
+import { norm } from "../../server/xlsx";
 import { canSetItemStatus, COST_CENTERS, ITEM_CATEGORIES, ITEM_STATUS_LABEL, ITEM_STATUSES, itemCode, type ItemCategory, type ItemStatus } from "../items/item-meta";
 
 /**
@@ -320,6 +321,10 @@ const itemUpdateSchema = itemCreateSchema.partial().extend({
   location: optionalText(200),
   status: z.enum(ITEM_STATUSES).optional(),
   notes: optionalText(2000),
+  // Os 4 valores (fase 2B): Cotado digitado vale só sem cotação; Contratado e Realizado, só o diretor.
+  quotedValue: money.nullable().optional(),
+  contractedValue: money.nullable().optional(),
+  actualValue: money.nullable().optional(),
 });
 
 /**
@@ -328,6 +333,9 @@ const itemUpdateSchema = itemCreateSchema.partial().extend({
  */
 async function checkItemFields(actor: Actor, tx: Tx, i: { eventId: string; status: ItemStatus; costCenter: string | null }, patch: Record<string, unknown>) {
   const director = canReviewSla(actor, i.eventId);
+  if (("contractedValue" in patch || "actualValue" in patch) && !director) {
+    throw new ForbiddenError("Só o diretor de produção preenche o Contratado e o Realizado");
+  }
   if ("costCenter" in patch && patch.costCenter !== i.costCenter && !director) {
     throw new ForbiddenError("Só o diretor de produção muda o centro de custo");
   }
@@ -415,7 +423,7 @@ export async function deleteCostItem(actor: Actor, id: string) {
  * Apagar itens que já foram para o campo apaga a conferência deles: só o
  * gestor (que é quem envia) pode. O banco também barra (FK RESTRICT + RLS).
  */
-async function dropReceipts(actor: Actor, tx: Tx, eventId: string, where: { costItemId?: string; costItem?: { sectionId: string } }) {
+async function dropReceipts(actor: Actor, tx: Tx, eventId: string, where: { costItemId?: string | { in: string[] }; costItem?: { sectionId: string } }) {
   const n = await tx.itemReceipt.count({ where: { eventId, ...where } });
   if (!n) return;
   if (!canSendToField(actor, eventId)) {
@@ -430,15 +438,19 @@ async function dropReceipts(actor: Actor, tx: Tx, eventId: string, where: { cost
 // ─────────────────────── Importar e baixar a matriz ───────────────────────
 
 /**
- * Lê a matriz (.xlsx). Sem `confirm`, só devolve a prévia (nada é gravado).
- * Com `confirm`, substitui a planilha do evento pelo conteúdo do arquivo.
+ * Lê a planilha Padrão CORE 360 (.xlsx). Sem `confirm`, só devolve a prévia
+ * (nada é gravado). Com `confirm`, atualiza a planilha do evento item por item:
+ * o item com o mesmo nome na mesma seção continua sendo o mesmo (código,
+ * área, responsável, status, cotações, contratado e conferência no campo
+ * ficam); o que é novo entra; o que saiu do arquivo sai do app, menos os que
+ * já têm cotação, contratado ou realizado, que ficam e viram aviso.
  */
 export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint8Array, opts: { confirm: boolean; fileName?: string | null }) {
   requirePreProduction(actor, eventId);
   const m = await readMatrix(bytes);
   const items = m.sections.flatMap((s) => s.items);
   const totals = costTotals(items, m.rates);
-  const preview = {
+  const base = {
     header: m.header,
     rates: m.rates,
     sections: m.sections.map((s) => ({
@@ -452,35 +464,81 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
     excelTotals: m.excelTotals,
     /** O total do app bate com o que o Excel tinha calculado (ao centavo)? */
     matchesExcel: m.excelTotals.total === null ? null : Math.abs(m.excelTotals.total - totals.total) < 0.005,
-    warnings: m.warnings.slice(0, 50),
-    moreWarnings: Math.max(0, m.warnings.length - 50),
   };
 
   return actor.run(async (tx) => {
-    const existing = await tx.costItem.count({ where: { eventId } });
-    const sentToField = await tx.itemReceipt.count({ where: { eventId } });
-    if (!opts.confirm) return { ...preview, replaces: existing, sentToField, canReplaceSent: canSendToField(actor, eventId), saved: false };
+    const sections = await tx.costSection.findMany({ where: { eventId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } });
+    const current = await tx.costItem.findMany({
+      where: { eventId },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true, sectionId: true, name: true, contractedValue: true, actualValue: true,
+        _count: { select: { quotes: true } }, receipt: { select: { id: true } },
+      },
+    });
 
-    await dropReceipts(actor, tx, eventId, {});
-    await tx.costItem.deleteMany({ where: { eventId } });
-    await tx.costSection.deleteMany({ where: { eventId } });
-    const sections = await tx.costSection.createManyAndReturn({
-      data: m.sections.map((s, i) => ({ eventId, name: s.name, position: i + 1 })),
-      select: { id: true, position: true },
+    // Seção pelo nome; item pelo nome dentro da seção (repetidos, na ordem).
+    const freeSections = [...sections];
+    const sectionFor = m.sections.map((s) => {
+      const k = freeSections.findIndex((x) => norm(x.name) === norm(s.name));
+      return k < 0 ? null : freeSections.splice(k, 1)[0];
     });
-    const idAt = new Map(sections.map((s) => [s.position, s.id]));
-    await tx.costItem.createMany({
-      data: m.sections.flatMap((s, si) =>
-        s.items.map((it, ii) => ({ ...it, eventId, sectionId: idAt.get(si + 1)!, position: ii + 1 })),
-      ),
-    });
+    const freeItems = [...current];
+    const matchFor = m.sections.map((s, si) =>
+      s.items.map((it) => {
+        const sec = sectionFor[si];
+        if (!sec) return null;
+        const k = freeItems.findIndex((x) => x.sectionId === sec.id && norm(x.name) === norm(it.name));
+        return k < 0 ? null : freeItems.splice(k, 1)[0];
+      }),
+    );
+    // O que saiu do arquivo: fica quem já tem cotação, contratado ou realizado.
+    const keep = freeItems.filter((x) => x._count.quotes > 0 || x.contractedValue !== null || x.actualValue !== null);
+    const remove = freeItems.filter((x) => !keep.includes(x));
+    const sentRemoved = remove.filter((x) => x.receipt).length;
+    const warnings = [...m.warnings];
+    if (keep.length) {
+      warnings.push(`${keep.length} ${keep.length === 1 ? "item que não está no arquivo continua" : "itens que não estão no arquivo continuam"} no app porque já ${keep.length === 1 ? "tem" : "têm"} cotação, contratado ou realizado: ${keep.slice(0, 5).map((x) => x.name).join(", ")}${keep.length > 5 ? "…" : ""}.`);
+    }
+    const update = matchFor.flat().filter(Boolean).length;
+    const preview = {
+      ...base,
+      warnings: warnings.slice(0, 50),
+      moreWarnings: Math.max(0, warnings.length - 50),
+      /** Itens que já estavam na planilha. */
+      replaces: current.length,
+      changes: { update, create: items.length - update, remove: remove.length, keep: keep.length },
+      /** Itens que saem e já tinham ido para o campo (a conferência deles sai junto). */
+      sentToField: sentRemoved,
+      canReplaceSent: canSendToField(actor, eventId),
+    };
+    if (!opts.confirm) return { ...preview, saved: false };
+
+    if (sentRemoved) await dropReceipts(actor, tx, eventId, { costItemId: { in: remove.filter((x) => x.receipt).map((x) => x.id) } });
+    if (remove.length) await tx.costItem.deleteMany({ where: { id: { in: remove.map((x) => x.id) } } });
+    for (const [si, s] of m.sections.entries()) {
+      const sec = sectionFor[si]
+        ? await tx.costSection.update({ where: { id: sectionFor[si]!.id }, data: { name: s.name, position: si + 1 }, select: { id: true } })
+        : await tx.costSection.create({ data: { eventId, name: s.name, position: si + 1 }, select: { id: true } });
+      for (const [ii, it] of s.items.entries()) {
+        const found = matchFor[si][ii];
+        if (found) await tx.costItem.update({ where: { id: found.id }, data: { ...it, sectionId: sec.id, position: ii + 1 } });
+        else await tx.costItem.create({ data: { ...it, eventId, sectionId: sec.id, position: ii + 1 } });
+      }
+    }
+    // Seções que não estão no arquivo: os itens que ficaram vão para o fim; vazias saem.
+    const last = m.sections.length;
+    for (const [k, sec] of freeSections.entries()) {
+      if (await tx.costItem.count({ where: { sectionId: sec.id } })) await tx.costSection.update({ where: { id: sec.id }, data: { position: last + k + 1 } });
+      else await tx.costSection.delete({ where: { id: sec.id } });
+    }
     const sheet = { ...m.header, ...m.rates };
     await tx.costSheet.upsert({ where: { eventId }, create: { eventId, ...sheet }, update: sheet });
     await audit(tx, actor, {
       eventId, entity: "cost_sheet", entityId: eventId, action: "UPDATE",
-      after: { imported: opts.fileName?.slice(0, 200) ?? "planilha", sections: m.sections.length, items: items.length, replaced: existing, total: Math.round(totals.total * 100) / 100 },
+      after: { imported: opts.fileName?.slice(0, 200) ?? "planilha", sections: m.sections.length, items: items.length, ...preview.changes, total: Math.round(totals.total * 100) / 100 },
     });
-    return { ...preview, replaces: existing, sentToField, canReplaceSent: canSendToField(actor, eventId), saved: true };
+    return { ...preview, saved: true };
   });
 }
 

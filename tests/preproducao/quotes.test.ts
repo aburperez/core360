@@ -175,7 +175,7 @@ describe("Cotação do começo ao fim", () => {
     expect((await quotesSummary(sofia, rock)).toDecide).toBeGreaterThanOrEqual(1);
   });
 
-  it("só a Gerente escolhe; fora do menor valor, pede o motivo; leva o valor para a planilha", async () => {
+  it("só a Gerente escolhe; fora do menor valor, pede o motivo; o valor vira o Contratado do item", async () => {
     const sofia = await actorFor(db, "sofia");
     const marina = await actorFor(db, "marina");
     await expectStatus(chooseQuote(sofia, id, { quoteId: quoteIds[1] }), 403);
@@ -183,9 +183,9 @@ describe("Cotação do começo ao fim", () => {
     await expectStatus(chooseQuote(marina, id, { quoteId: quoteIds[0] }), 422);
 
     const r = await chooseQuote(marina, id, { quoteId: quoteIds[0], reason: "Único com operador 24 h", applyToCost: true });
-    expect(r.applied).toEqual({ unitValue: 5000 });
+    expect(r.applied).toEqual({ contractedValue: 30000 });
     const item = await as("marina", (tx) => tx.costItem.findUniqueOrThrow({ where: { id: itemId } }));
-    expect(Number(item.unitValue)).toBe(5000);
+    expect([Number(item.contractedValue), item.status]).toEqual([30000, "CONTRATADO"]);
 
     const q = await getQuote(sofia, id);
     expect(q).toMatchObject({ status: "FECHADA", chosenQuoteId: quoteIds[0], chosenReason: "Único com operador 24 h", stage: "FECHADA" });

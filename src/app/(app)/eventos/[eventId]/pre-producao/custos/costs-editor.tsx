@@ -201,12 +201,12 @@ function EmptySheet({ eventId, onImport }: { eventId: string; onImport: () => vo
     <Card className="text-center">
       <p className="font-semibold">Nenhum custo ainda</p>
       <p className="mt-1 text-sm text-muted">
-        Importe a matriz de orçamento em Excel ou comece com as seções dela e preencha aqui.
+        Importe a planilha Padrão CORE 360 em Excel ou comece com as seções dela e preencha aqui.
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         <Button className="min-h-11 text-sm" onClick={onImport}>Importar planilha</Button>
         <Button variant="secondary" className="min-h-11 text-sm" disabled={busy} onClick={() => run(() => api(`/api/events/${eventId}/costs/template`, { body: {} }))}>
-          Começar com as seções da matriz
+          Começar com as seções do Padrão CORE 360
         </Button>
       </div>
       <div className="mt-3"><FormError message={error} /></div>
@@ -242,8 +242,8 @@ function ImportPanel({ eventId, current, onClose }: { eventId: string; current: 
     <Card className="border-primary/50">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold">Importar a matriz de orçamento</p>
-          <p className="mt-1 text-sm text-muted">Arquivo .xlsx no modelo da matriz. Primeiro você vê a prévia; nada muda até confirmar.</p>
+          <p className="font-semibold">Importar a planilha Padrão CORE 360</p>
+          <p className="mt-1 text-sm text-muted">Arquivo .xlsx no modelo Padrão CORE 360. Primeiro você vê a prévia; nada muda até confirmar.</p>
         </div>
         <button type="button" onClick={onClose} className="-mr-1 -mt-1 rounded-lg px-2 py-1 text-xl text-muted hover:text-foreground" aria-label="Fechar">×</button>
       </div>
@@ -303,12 +303,22 @@ function ImportPanel({ eventId, current, onClose }: { eventId: string; current: 
             </details>
           )}
           {current > 0 && (
-            <p className="rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
-              Isto substitui os {current} itens que já estão na planilha.
-              {preview.sentToField > 0 && (preview.canReplaceSent
-                ? ` ${preview.sentToField} deles já foram enviados para o campo; as conferências deles serão apagadas.`
-                : ` ${preview.sentToField} deles já foram enviados para o campo, então só o gerente pode importar por cima.`)}
-            </p>
+            <div className="rounded-xl bg-white/5 px-3 py-2 text-sm">
+              <p>
+                Na planilha do app: <strong>{preview.changes.update}</strong> {preview.changes.update === 1 ? "item continua e é atualizado" : "itens continuam e são atualizados"},{" "}
+                <strong>{preview.changes.create}</strong> {preview.changes.create === 1 ? "entra" : "entram"} e <strong>{preview.changes.remove}</strong> {preview.changes.remove === 1 ? "sai" : "saem"}.
+              </p>
+              <p className="mt-1 text-muted">
+                O item com o mesmo nome na mesma seção continua o mesmo: código, área, responsável, status, cotações e contratado ficam.
+              </p>
+              {preview.sentToField > 0 && (
+                <p className="mt-1 text-red-200">
+                  {preview.canReplaceSent
+                    ? `${preview.sentToField} dos que saem já foram para o campo; as conferências deles serão apagadas.`
+                    : `${preview.sentToField} dos que saem já foram para o campo, então só o gerente pode importar este arquivo.`}
+                </p>
+              )}
+            </div>
           )}
           <div className="flex flex-wrap gap-2">
             <Button
@@ -613,7 +623,7 @@ function SectionBlock({ section, index, count, sections, editing, setEditing }: 
       )}
       {error && <div className="border-x border-border px-4 py-2"><FormError message={error} /></div>}
 
-      {/* Tela larga: tabela no formato da matriz. */}
+      {/* Tela larga: tabela no formato Padrão CORE 360. */}
       <div className="hidden overflow-hidden border border-border bg-surface xl:block">
         <table className="w-full table-fixed text-left text-sm">
           <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">

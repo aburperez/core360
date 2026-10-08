@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectPgError, expectStatus, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person } from "../helpers";
 import { withUser, type Tx } from "@/server/db/with-user";
 import {
   createCostItem,
@@ -37,11 +37,18 @@ import { costTotals, DEFAULT_RATES } from "@/modules/costs/totals";
  */
 
 const db = appDb();
+const owner = ownerDb();
 const d = demo();
-afterAll(() => db.$disconnect());
-beforeAll(() => setStorageForTests(memoryStorage()));
-
 const rock = d.events.rock.id;
+afterAll(() => Promise.all([db.$disconnect(), owner.$disconnect()]));
+beforeAll(async () => {
+  setStorageForTests(memoryStorage());
+  // Importar por cima mantém os itens com cotação ou contratado (fase 2B). Aqui
+  // a planilha começa sem eles, seja qual for a ordem dos arquivos de teste.
+  await owner.quoteRequest.updateMany({ where: { eventId: rock }, data: { costItemId: null } });
+  await owner.costItem.updateMany({ where: { eventId: rock }, data: { contractedValue: null, actualValue: null } });
+});
+
 const congresso = d.events.congresso.id;
 const as = <T>(p: Person, fn: (tx: Tx) => Promise<T>) => withUser(db, d.users[p]!, fn);
 const close = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThan(0.005);
@@ -378,21 +385,32 @@ describe("itens da planilha no campo (sem valores)", () => {
     expect(mine).toMatchObject({ status: "PENDENTE", quantity: item.quantity + 1, note: null });
   });
 
-  it("item já no campo: só o Gerente apaga ou importa por cima", async () => {
+  it("item já no campo: importar o mesmo arquivo mantém a conferência; tirar o item só o Gerente", async () => {
     const marina = await actorFor(db, "marina");
     const sofia = await actorFor(db, "sofia");
     const item = (await getCostSheet(marina, rock)).sections[0].items[0];
     await expectStatus(deleteCostItem(sofia, item.id), 409);
     const { bytes } = await sampleMatrix();
-    const preview = await importCostSheet(sofia, rock, bytes, { confirm: false });
-    expect(preview).toMatchObject({ canReplaceSent: false });
-    expect(preview.sentToField).toBeGreaterThan(0);
-    await expectStatus(importCostSheet(sofia, rock, bytes, { confirm: true }), 409);
+    // O mesmo item continua: a conferência dele no campo fica.
+    const same = await importCostSheet(sofia, rock, bytes, { confirm: true });
+    expect(same.changes).toMatchObject({ remove: 0 });
+    expect((await listReceipts(await actorFor(db, "joao"), rock)).rows.map((r) => r.costItemId)).toEqual([item.id]);
+
+    // Um arquivo sem esse item tira ele do app: só o Gerente.
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(bytes as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0];
+    ws.eachRow((row) => { if (row.getCell(2).text === item.name) row.getCell(2).value = "Outro painel"; });
+    const without = new Uint8Array(await wb.xlsx.writeBuffer());
+    const preview = await importCostSheet(sofia, rock, without, { confirm: false });
+    expect(preview).toMatchObject({ canReplaceSent: false, sentToField: 1 });
+    await expectStatus(importCostSheet(sofia, rock, without, { confirm: true }), 409);
     await expectPgError(as("marina", (tx) => tx.costItem.delete({ where: { id: item.id } })), "23503");
 
-    await deleteCostItem(marina, item.id);
+    await importCostSheet(marina, rock, without, { confirm: true });
+    expect((await listReceipts(marina, rock)).rows.map((r) => r.costItemId)).not.toContain(item.id);
     expect((await listReceipts(await actorFor(db, "joao"), rock)).rows).toEqual([]);
     await importCostSheet(marina, rock, bytes, { confirm: true });
-    expect((await listReceipts(marina, rock)).rows).toEqual([]);
   });
+
 });

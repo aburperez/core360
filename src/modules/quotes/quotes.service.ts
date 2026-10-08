@@ -485,7 +485,7 @@ export async function quoteFile(actor: Actor, quoteId: string) {
 const chooseSchema = z.object({
   quoteId: uuid,
   reason: optionalText(1000),
-  /** Leva o valor escolhido para o item ligado da planilha de custos. */
+  /** Leva o valor escolhido para o Contratado do item ligado. */
   applyToCost: z.boolean().optional(),
 });
 
@@ -497,7 +497,7 @@ export function unitValueFor(total: number, quantity: number, frequency: number 
 
 /**
  * O gestor escolhe o orçamento. Escolher um que não é o mais barato pede o
- * motivo. Se a cotação está ligada a um item da planilha, pode levar o valor.
+ * motivo. Se a cotação está ligada a um item, o valor pode virar o Contratado.
  */
 export async function chooseQuote(actor: Actor, id: string, input: unknown) {
   const data = parse(chooseSchema, input);
@@ -526,17 +526,19 @@ export async function chooseQuote(actor: Actor, id: string, input: unknown) {
       before: { status: r.status }, after: { status: "FECHADA", chosenQuoteId: chosen.id, reason: data.reason },
     });
 
-    let applied: { unitValue: number } | null = null;
+    // O valor escolhido vira o Contratado do item (o Estimado fica guardado
+    // para comparar). Contratado preenchido põe o item em Contratado (banco).
+    let applied: { contractedValue: number } | null = null;
     if (data.applyToCost && r.costItemId) {
       const item = await tx.costItem.findFirst({ where: { id: r.costItemId, eventId: r.eventId } });
-      const unit = item && unitValueFor(Number(chosen.totalValue), Number(item.quantity), num(item.frequency));
-      if (!item || unit === null) throw new ValidationError("O item da planilha está com quantidade zero: ajuste a quantidade antes de levar o valor");
-      await tx.costItem.update({ where: { id: item.id }, data: { unitValue: unit } });
+      if (!item) throw new NotFoundError("Item");
+      const value = Number(chosen.totalValue);
+      await tx.costItem.update({ where: { id: item.id }, data: { contractedValue: value } });
       await audit(tx, actor, {
         eventId: r.eventId, entity: "cost_item", entityId: item.id, action: "UPDATE",
-        before: { unitValue: num(item.unitValue) }, after: { unitValue: unit, fromQuote: r.id },
+        before: { contractedValue: num(item.contractedValue) }, after: { contractedValue: value, fromQuote: r.id },
       });
-      applied = { unitValue: unit };
+      applied = { contractedValue: value };
     }
     await notify(tx, r.id, "FECHADA");
     return { id: r.id, applied };

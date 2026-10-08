@@ -57,7 +57,7 @@ export function EventNav(props: NavProps) {
     { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`) },
     { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true },
     { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`) },
-    { href: `${pre}/custos`, label: "Custos", icon: "costs", active: path.startsWith(`${pre}/custos`), bar: true },
+    { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`), bar: true },
     { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`) },
     { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`) },
     { href: `${pre}/documentos`, label: "Documentos", short: "Docs", icon: "docs", active: path.startsWith(`${pre}/documentos`) },

@@ -341,7 +341,6 @@ export function ChooseForm({ requestId, quote, lowest, costItem }: {
   const [open, setOpen] = useState(false);
   const [apply, setApply] = useState(!!costItem);
   const { busy, error, run } = useAction();
-  const units = costItem ? costItem.quantity * (costItem.frequency ?? 1) : 0;
   if (!open) {
     return <Button variant={lowest ? "primary" : "secondary"} className="min-h-10 w-full px-3 text-sm" onClick={() => setOpen(true)}>Escolher este</Button>;
   }
@@ -360,10 +359,10 @@ export function ChooseForm({ requestId, quote, lowest, costItem }: {
       </label>
       {costItem && (
         <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--primary)]" checked={apply} onChange={(e) => setApply(e.target.checked)} disabled={units <= 0} />
+          <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--primary)]" checked={apply} onChange={(e) => setApply(e.target.checked)} />
           <span>
-            Levar o valor para a planilha ({costItem.label})
-            {units > 0 && <span className="block text-muted">Valor unitário {brl(Math.round((quote.totalValue / units) * 100) / 100)} × {units} = {brl(quote.totalValue)}</span>}
+            {brl(quote.totalValue)} vira o Contratado do item ({costItem.label})
+            <span className="block text-muted">O Estimado da planilha fica como está, para comparar. O item passa para Contratado.</span>
           </span>
         </label>
       )}

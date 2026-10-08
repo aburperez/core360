@@ -39,17 +39,17 @@ export default async function ItemMapPage({ params, searchParams }: PageProps<"/
       <TopBar title="Mapa de itens" subtitle={event.name} back={`/eventos/${eventId}/pre-producao`} />
       <main className={cx(PAGE, "space-y-4 py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Mapa de itens">
-          <LinkButton href={costs} variant="secondary">Novo item na planilha de custos</LinkButton>
+          <LinkButton href={costs} variant="secondary">Novo item na planilha</LinkButton>
         </PageHeading>
         <p className="text-sm text-muted">
-          Cada item da planilha de custos, com quem cuida, quando precisa, onde fica e em que pé está. Aqui não aparecem valores.
+          Cada item da planilha Padrão CORE 360, com quem cuida, quando precisa, onde fica e em que pé está. Aqui não aparecem valores (eles ficam no Orçamento).
           Toque num item para mudar a área, a categoria, o responsável, a data, o local ou o status.
         </p>
 
         {data.total === 0 ? (
           <EmptyState title="Nenhum item ainda">
-            Os itens nascem na planilha de custos. Monte ou importe a planilha e eles aparecem aqui com o código de cada um.
-            <div className="mt-3"><LinkButton href={costs}>Abrir a planilha de custos</LinkButton></div>
+            Os itens nascem na planilha Padrão CORE 360. Monte ou importe a planilha e eles aparecem aqui com o código de cada um.
+            <div className="mt-3"><LinkButton href={costs}>Abrir a planilha</LinkButton></div>
           </EmptyState>
         ) : (
           <>

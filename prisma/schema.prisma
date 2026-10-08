@@ -949,34 +949,40 @@ model CostSection {
 /// (sem frequência, conta 1). Opcional aparece mas fica fora dos totais.
 /// Sem valor unitário = "a definir": fica fora dos totais até ser preenchido.
 model CostItem {
-  id            String        @id @default(uuid(7)) @db.Uuid
-  eventId       String        @map("event_id") @db.Uuid
-  sectionId     String        @map("section_id") @db.Uuid
-  position      Int
-  name          String
-  description   String?
-  paymentTerms  String?       @map("payment_terms")
-  unitValue     Decimal?      @map("unit_value") @db.Decimal(14, 2)
-  quantity      Decimal       @db.Decimal(12, 3)
-  frequency     Decimal?      @db.Decimal(12, 3)
-  optional      Boolean       @default(false)
-  billing       CostBilling   @default(FATURA)
+  id              String        @id @default(uuid(7)) @db.Uuid
+  eventId         String        @map("event_id") @db.Uuid
+  sectionId       String        @map("section_id") @db.Uuid
+  position        Int
+  name            String
+  description     String?
+  paymentTerms    String?       @map("payment_terms")
+  unitValue       Decimal?      @map("unit_value") @db.Decimal(14, 2)
+  quantity        Decimal       @db.Decimal(12, 3)
+  frequency       Decimal?      @db.Decimal(12, 3)
+  optional        Boolean       @default(false)
+  billing         CostBilling   @default(FATURA)
   /// Quem recebe o item no campo (escolhido pelo Gerente).
-  receiverId    String?       @map("receiver_id") @db.Uuid
+  receiverId      String?       @map("receiver_id") @db.Uuid
   /// Item do evento (fase 2): número no evento (código EVT001-CEN-023), dado pelo banco.
-  number        Int           @default(0)
-  areaId        String?       @map("area_id") @db.Uuid
-  category      ItemCategory?
+  number          Int           @default(0)
+  areaId          String?       @map("area_id") @db.Uuid
+  category        ItemCategory?
   /// Centro de custo escolhido pelo diretor. Vazio: vem da categoria.
-  costCenter    CostCenter?   @map("cost_center")
-  unit          String?
-  responsibleId String?       @map("responsible_id") @db.Uuid
-  neededOn      DateTime?     @map("needed_on") @db.Date
-  location      String?
-  status        ItemStatus    @default(A_DEFINIR)
-  notes         String?
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  costCenter      CostCenter?   @map("cost_center")
+  unit            String?
+  responsibleId   String?       @map("responsible_id") @db.Uuid
+  neededOn        DateTime?     @map("needed_on") @db.Date
+  location        String?
+  status          ItemStatus    @default(A_DEFINIR)
+  notes           String?
+  /// Os 4 valores (fase 2B). Estimado = unitValue × quantidade × frequência.
+  /// Cotado digitado (vale só quando o item não tem orçamento na cotação).
+  quotedValue     Decimal?      @map("quoted_value") @db.Decimal(14, 2)
+  /// Contratado e Realizado (totais do item): só o diretor de produção.
+  contractedValue Decimal?      @map("contracted_value") @db.Decimal(14, 2)
+  actualValue     Decimal?      @map("actual_value") @db.Decimal(14, 2)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   event       Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
   section     CostSection    @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
