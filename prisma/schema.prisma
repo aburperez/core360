@@ -192,6 +192,9 @@ model User {
   accounts                 Account[]
   participations           Participant[]        @relation("ParticipantUser")
   documentsUploaded        EventDocument[]      @relation("EventDocumentUploadedBy")
+  contractsCreated         Contract[]           @relation("ContractCreatedBy")
+  contractsSigned          Contract[]           @relation("ContractSignedBy")
+  contractsCancelled       Contract[]           @relation("ContractCancelledBy")
   participantsCreated      Participant[]        @relation("ParticipantCreatedBy")
   invitationsCreated       Invitation[]
   occurrencesCreated       Occurrence[]         @relation("OccurrenceCreatedBy")
@@ -444,6 +447,7 @@ model Event {
   activityChecks ActivityCheck[]
   quoteRequests  QuoteRequest[]
   supplierQuotes SupplierQuote[]
+  contracts      Contract[]
   floorPlans     FloorPlan[]
   planPoints     PlanPoint[]
   planPhotos     PlanPointPhoto[]
@@ -1363,12 +1367,13 @@ model SupplierQuote {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event        Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  request      QuoteRequest   @relation("QuoteQuotes", fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
-  supplier     Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  createdBy    User           @relation("SupplierQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  negotiatedBy User?          @relation("SupplierQuoteNegotiatedBy", fields: [negotiatedById], references: [id], onDelete: Restrict)
-  chosenBy     QuoteRequest[] @relation("QuoteChosen")
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  request       QuoteRequest   @relation("QuoteQuotes", fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy     User           @relation("SupplierQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  negotiatedBy  User?          @relation("SupplierQuoteNegotiatedBy", fields: [negotiatedById], references: [id], onDelete: Restrict)
+  chosenBy      QuoteRequest[] @relation("QuoteChosen")
+  contractItems ContractItem[]
 
   @@unique([requestId, position])
   @@unique([requestId, id])
@@ -1674,8 +1679,9 @@ model EventDocument {
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event      Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  uploadedBy User  @relation("EventDocumentUploadedBy", fields: [uploadedById], references: [id])
+  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploadedBy User      @relation("EventDocumentUploadedBy", fields: [uploadedById], references: [id])
+  contract   Contract?
 
   @@unique([eventId, sha256])
   @@index([eventId, category])
@@ -1722,6 +1728,7 @@ model Supplier {
   createdBy User            @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   bonus     SupplierBonus?
   quotes    SupplierQuote[]
+  contracts Contract[]
 
   @@unique([agencyId, cnpj])
   @@index([agencyId, companyName])
@@ -1743,4 +1750,73 @@ model SupplierBonus {
   updatedBy User     @relation("SupplierBonusUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
   @@map("supplier_bonuses")
+}
+
+// ─────────────────────── Contratos (Pré-produção, fase 3C) ───────────────────────
+// Um contrato por fornecedor por evento, com as propostas aprovadas dele como
+// itens. O pré-produtor monta o rascunho e anexa o PDF (que também fica em
+// Documentos como CONTRATO, sem ir para o campo). Só o diretor (gestor do
+// evento) muda valor, assina ou cancela. O campo e o cliente não veem.
+
+enum ContractStatus {
+  RASCUNHO
+  ENVIADO
+  ASSINADO
+  CANCELADO
+
+  @@map("contract_status")
+}
+
+model Contract {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  eventId       String         @map("event_id") @db.Uuid
+  supplierId    String         @map("supplier_id") @db.Uuid
+  /// Número do contrato no evento (1, 2, 3...).
+  number        Int
+  status        ContractStatus @default(RASCUNHO)
+  paymentTerms  String?        @map("payment_terms")
+  /// Datas de entrega, montagem e retirada, em texto.
+  deliveryNotes String?        @map("delivery_notes")
+  notes         String?
+  /// O PDF do contrato, guardado em Documentos (categoria CONTRATO).
+  documentId    String?        @unique @map("document_id") @db.Uuid
+  sentAt        DateTime?      @map("sent_at") @db.Timestamptz(3)
+  signedOn      DateTime?      @map("signed_on") @db.Date
+  signedById    String?        @map("signed_by") @db.Uuid
+  cancelledAt   DateTime?      @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason  String?        @map("cancel_reason")
+  cancelledById String?        @map("cancelled_by") @db.Uuid
+  createdById   String         @map("created_by") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  supplier    Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  document    EventDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdBy   User           @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  signedBy    User?          @relation("ContractSignedBy", fields: [signedById], references: [id], onDelete: Restrict)
+  cancelledBy User?          @relation("ContractCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  items       ContractItem[]
+
+  @@unique([eventId, number])
+  @@index([supplierId])
+  @@map("contracts")
+}
+
+model ContractItem {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  contractId String   @map("contract_id") @db.Uuid
+  /// A proposta aprovada que este item contrata.
+  quoteId    String   @map("quote_id") @db.Uuid
+  /// Começa com o valor da proposta (o negociado, se houver); só o diretor muda.
+  value      Decimal  @db.Decimal(14, 2)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  contract Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  quote    SupplierQuote @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
+  @@unique([contractId, quoteId])
+  @@index([quoteId])
+  @@map("contract_items")
 }

@@ -152,6 +152,7 @@ export async function updateDocument(actor: Actor, docId: string, input: unknown
     if (data.visibleToField !== undefined && data.visibleToField !== d.visibleToField && !canReviewSla(actor, d.eventId)) {
       throw new ForbiddenError("Só o gestor libera documentos para o campo");
     }
+    if (data.visibleToField && await tx.contract.count({ where: { documentId: d.id } })) throw new ValidationError("O PDF de contrato não é liberado para o campo");
     const changes = diff(d as unknown as Record<string, unknown>, data);
     if (!Object.keys(changes.after).length) return { id: d.id };
     await tx.eventDocument.update({ where: { id: d.id }, data });
@@ -165,6 +166,9 @@ export async function deleteDocument(actor: Actor, docId: string) {
   return actor.run(async (tx) => {
     const d = await loadDocument(actor, tx, docId);
     if (!canUsePreProduction(actor, d.eventId) || !canDelete(actor, d)) throw new ForbiddenError("Só quem enviou ou o gestor apaga o documento");
+    if (await tx.contract.count({ where: { documentId: d.id, status: { in: ["ENVIADO", "ASSINADO"] } } })) {
+      throw new ConflictError("Este é o PDF de um contrato enviado ou assinado e não pode ser apagado");
+    }
     await tx.eventDocument.delete({ where: { id: d.id } });
     await audit(tx, actor, { eventId: d.eventId, entity: "event_document", entityId: d.id, action: "DELETE", before: { title: d.title, fileName: d.fileName } });
     return { ok: true };

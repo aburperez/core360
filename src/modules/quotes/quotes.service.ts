@@ -739,6 +739,9 @@ export async function setQuoteState(actor: Actor, id: string, input: unknown) {
     requireManager(actor, r.eventId, action === "CANCELAR" ? "cancela a cotação" : "reabre a cotação");
     if (action === "CANCELAR") requireEditable(r);
     else if (r.status !== "FECHADA" && r.status !== "CANCELADA") throw new ConflictError("Esta cotação já está aberta");
+    if (action === "REABRIR" && await tx.contractItem.count({ where: { quote: { requestId: r.id }, contract: { status: { not: "CANCELADO" } } } })) {
+      throw new ConflictError("A proposta escolhida está num contrato. O diretor precisa cancelar o contrato antes de reabrir a cotação.");
+    }
     const status = action === "CANCELAR" ? "CANCELADA" : r.sentAt ? "ENVIADA" : "ABERTA";
     await tx.quoteRequest.update({
       where: { id: r.id },
