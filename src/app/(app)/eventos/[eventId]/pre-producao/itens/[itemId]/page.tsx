@@ -41,7 +41,7 @@ export default async function ItemPage({ params }: PageProps<"/eventos/[eventId]
 
         <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_320px]">
           <Panel title="Dados do item">
-            <ItemForm item={item} areas={data.areas} people={data.people} can={data.can} />
+            <ItemForm item={item} areas={data.areas} people={data.people} others={data.others} can={data.can} />
           </Panel>
           <aside className="mt-4 space-y-4 lg:mt-0">
             <Panel title="Resumo">

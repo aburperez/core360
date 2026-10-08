@@ -15,8 +15,8 @@ import {
 type Option = { id: string; name: string };
 
 /** Edita os dados de produção do item. Centro de custo e alguns status só o diretor. */
-export function ItemForm({ item, areas, people, can }: {
-  item: MapItem; areas: Option[]; people: Option[];
+export function ItemForm({ item, areas, people, others, can }: {
+  item: MapItem; areas: Option[]; people: Option[]; others: Option[];
   can: { director: boolean; costCenter: boolean; statuses: ItemStatus[] };
 }) {
   const router = useRouter();
@@ -35,7 +35,7 @@ export function ItemForm({ item, areas, people, can }: {
     };
     const body: Record<string, unknown> = {
       areaId: get("areaId"), category: get("category"), quantity: get("quantity") ?? "0", unit: get("unit"),
-      responsibleId: get("responsibleId"), neededOn: get("neededOn"), location: get("location"), notes: get("notes"),
+      responsibleId: get("responsibleId"), neededOn: get("neededOn"), dependsOnId: get("dependsOnId"), location: get("location"), notes: get("notes"),
       status: get("status"),
     };
     if (can.costCenter) body.costCenter = get("costCenter");
@@ -108,8 +108,15 @@ export function ItemForm({ item, areas, people, can }: {
           </Select>
         </label>
         <label className="block">
-          <Label hint="(opcional)">Data de necessidade</Label>
+          <Label hint="(data de necessidade, opcional)">Prazo</Label>
           <Input name="neededOn" type="date" defaultValue={item.neededOn ?? ""} />
+        </label>
+        <label className="block">
+          <Label hint="(opcional)">Depende de</Label>
+          <Select name="dependsOnId" defaultValue={item.dependsOnId ?? ""}>
+            <option value="">Não depende de outro item</option>
+            {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </Select>
         </label>
         <label className="block">
           <Label hint="(opcional)">Local</Label>

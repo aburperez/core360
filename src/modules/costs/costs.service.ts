@@ -318,6 +318,8 @@ const itemUpdateSchema = itemCreateSchema.partial().extend({
   unit: optionalText(20),
   responsibleId: uuid.nullable().optional(),
   neededOn: day.nullable().optional(),
+  /** Cronograma (fase 4A): o item que precisa ficar pronto antes deste. */
+  dependsOnId: uuid.nullable().optional(),
   location: optionalText(200),
   status: z.enum(ITEM_STATUSES).optional(),
   notes: optionalText(2000),
@@ -331,7 +333,7 @@ const itemUpdateSchema = itemCreateSchema.partial().extend({
  * Confere os campos do Item: área e responsável do mesmo evento, centro de
  * custo só pelo diretor e o status dentro do que a pessoa pode mudar.
  */
-async function checkItemFields(actor: Actor, tx: Tx, i: { eventId: string; status: ItemStatus; costCenter: string | null }, patch: Record<string, unknown>) {
+async function checkItemFields(actor: Actor, tx: Tx, i: { id?: string; eventId: string; status: ItemStatus; costCenter: string | null }, patch: Record<string, unknown>) {
   const director = canReviewSla(actor, i.eventId);
   if (("contractedValue" in patch || "actualValue" in patch) && !director) {
     throw new ForbiddenError("Só o diretor de produção preenche o Contratado e o Realizado");
@@ -350,7 +352,21 @@ async function checkItemFields(actor: Actor, tx: Tx, i: { eventId: string; statu
     const p = await tx.participant.findFirst({ where: { id: patch.responsibleId as string, eventId: i.eventId, active: true, deletedAt: null }, select: { id: true } });
     if (!p) throw new ValidationError("Responsável não encontrado neste evento", { responsibleId: ["Escolha alguém do evento"] });
   }
+  if (patch.dependsOnId) await checkDependency(tx, i, patch.dependsOnId as string);
   if (typeof patch.neededOn === "string") patch.neededOn = new Date(`${patch.neededOn}T00:00:00.000Z`);
+}
+
+/** "Depende de": outro item do mesmo evento, sem fazer círculo (o banco também confere). */
+async function checkDependency(tx: Tx, i: { id?: string; eventId: string }, dependsOnId: string) {
+  const err = (msg: string) => new ValidationError(msg, { dependsOnId: [msg] });
+  if (dependsOnId === i.id) throw err("O item não depende dele mesmo");
+  let cur: string | null = dependsOnId;
+  for (let hops = 0; cur && hops < 200; hops++) {
+    const row: { id: string; dependsOnId: string | null } | null = await tx.costItem.findFirst({ where: { id: cur, eventId: i.eventId }, select: { id: true, dependsOnId: true } });
+    if (!row) throw err("Escolha um item deste evento");
+    if (row.dependsOnId && row.dependsOnId === i.id) throw err("Este item já é necessário para o outro: a dependência faria um círculo");
+    cur = row.dependsOnId;
+  }
 }
 
 const auditItem = (i: Record<string, unknown>) =>

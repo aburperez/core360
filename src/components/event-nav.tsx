@@ -57,6 +57,7 @@ export function EventNav(props: NavProps) {
   const preItems: Item[] = [
     { href: pre, label: "Painel", icon: "overview", active: path === pre, bar: true },
     { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`) },
+    { href: `${pre}/cronograma`, label: "Cronograma", icon: "calendar", active: path.startsWith(`${pre}/cronograma`) },
     { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true },
     { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`) },
     { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`), bar: true },

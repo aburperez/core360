@@ -27,7 +27,7 @@ function requirePre(actor: Actor, eventId: string) {
 const itemSelect = {
   id: true, eventId: true, number: true, name: true, description: true, quantity: true, unit: true,
   category: true, costCenter: true, status: true, neededOn: true, location: true, notes: true,
-  areaId: true, responsibleId: true, updatedAt: true,
+  areaId: true, responsibleId: true, dependsOnId: true, updatedAt: true,
   section: { select: { name: true } },
   area: { select: { name: true } },
   responsible: { select: { name: true } },
@@ -69,6 +69,7 @@ function toItem(r: Row, eventNumber: number, supplier: { name: string | null; qu
     areaName: r.area?.name ?? null,
     responsibleId: r.responsibleId,
     responsibleName: r.responsible?.name ?? null,
+    dependsOnId: r.dependsOnId,
     supplier: supplier?.name ?? null,
     supplierQuoteId: supplier?.quoteId ?? null,
   };
@@ -141,6 +142,12 @@ export async function getItem(actor: Actor, itemId: string) {
     const supplier = (await suppliers(tx, r.eventId, [r.id])).get(r.id);
     const director = canReviewSla(actor, r.eventId);
     const item = toItem(r, number, supplier);
+    // Para o "Depende de": os outros itens do evento.
+    const others = await tx.costItem.findMany({
+      where: { eventId: r.eventId, id: { not: r.id } },
+      orderBy: { number: "asc" },
+      select: { id: true, name: true, number: true, category: true },
+    });
     const quotes = await tx.quoteRequest.findMany({
       where: { costItemId: r.id },
       orderBy: { createdAt: "desc" },
@@ -150,6 +157,7 @@ export async function getItem(actor: Actor, itemId: string) {
       eventId: r.eventId,
       item,
       quotes,
+      others: others.map((o) => ({ id: o.id, name: `${itemCode(number, o.category as ItemCategory | null, o.number)} ${o.name}` })),
       ...(await options(tx, r.eventId)),
       can: {
         director,
