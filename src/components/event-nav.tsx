@@ -109,7 +109,7 @@ export function EventNav(props: NavProps) {
 
   return (
     <>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 print:hidden border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)] lg:hidden">
         <ul className="mx-auto flex max-w-2xl">
           {bar.map((it) => (
             <li key={it.href} className="flex-1">
@@ -134,7 +134,7 @@ export function EventNav(props: NavProps) {
         </ul>
       </nav>
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-white/10 bg-brand-navy text-white lg:flex">{menu}</aside>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden print:hidden! w-60 flex-col border-r border-white/10 bg-brand-navy text-white lg:flex">{menu}</aside>
 
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu do evento">
@@ -242,7 +242,7 @@ export function EventTabs({ eventId, active }: { eventId: string; active: "campo
     { key: "pre", label: "Pré-produção", icon: "pre", href: `/eventos/${eventId}/pre-producao` },
   ] as const;
   return (
-    <nav aria-label="Abas do evento" className="bg-background px-4 pt-3 lg:hidden">
+    <nav aria-label="Abas do evento" className="print:hidden bg-background px-4 pt-3 lg:hidden">
       <ul className="mx-auto flex max-w-2xl rounded-full border border-border bg-surface p-1">
         {tabs.map((t) => (
           <li key={t.key} className="flex-1">

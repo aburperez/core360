@@ -12,7 +12,7 @@ import { PAGE, cx } from "./ui";
  */
 export function TopBar({ title, subtitle, back, brand, narrow }: { title: string; subtitle?: string; back?: string; brand?: boolean; narrow?: boolean }) {
   return (
-    <header className="sticky top-0 z-20 bg-brand-navy text-white pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-20 print:hidden bg-brand-navy text-white pt-[env(safe-area-inset-top)]">
       <ConnectionBanner />
       <div className={cx("flex items-center gap-2 py-3", narrow ? "mx-auto max-w-2xl px-4" : PAGE)}>
         <MenuButton />

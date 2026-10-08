@@ -34,7 +34,7 @@ function useAction() {
       setBusy(false);
     }
   };
-  return { busy, error, run };
+  return { busy, error, run, router };
 }
 
 function VisitFields({ people, initial }: { people: Person[]; initial: Partial<VisitInitial> }) {
@@ -128,17 +128,19 @@ export function NewVisitForm({ eventId, people, me, place }: { eventId: string; 
   );
 }
 
-/** Editar ou apagar a visita (gestor, quem marcou ou quem vai). */
-export function VisitActions({ id, people, initial }: { id: string; people: Person[]; initial: VisitInitial }) {
+/** Editar ou apagar a visita (gestor, quem marcou ou quem vai). Apagada, vai para `onDeleted`, se houver. */
+export function VisitActions({ id, people, initial, onDeleted }: { id: string; people: Person[]; initial: VisitInitial; onDeleted?: string }) {
   const [open, setOpen] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, router } = useAction();
   if (!open) {
     return (
       <div className="flex gap-1">
         <Button variant="ghost" className="min-h-9 px-2 text-sm" onClick={() => setOpen(true)}><Icon name="edit" className="h-4 w-4" /> Editar</Button>
         <Button
           variant="ghost" className="min-h-9 px-2 text-sm text-red-300" disabled={busy}
-          onClick={() => { if (confirm("Apagar esta visita técnica?")) run(() => api(`/api/visits/${id}`, { method: "DELETE" })); }}
+          onClick={async () => {
+            if (confirm("Apagar esta visita técnica e as fotos dela?") && (await run(() => api(`/api/visits/${id}`, { method: "DELETE" }))) && onDeleted) router.push(onDeleted);
+          }}
         >
           Apagar
         </Button>

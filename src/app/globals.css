@@ -55,6 +55,14 @@ body {
   }
 }
 
+/* Impressão (relatórios): papel branco, sem menus. */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
 /* Espaço para a barra inferior fixa + área segura do iPhone. */
 @utility pb-nav {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));

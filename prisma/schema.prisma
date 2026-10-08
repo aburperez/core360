@@ -385,8 +385,8 @@ model Event {
   updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  agency         Agency               @relation(fields: [agencyId], references: [id], onDelete: Restrict)
-  client         Client               @relation(fields: [agencyId, clientId], references: [agencyId, id], onDelete: Restrict)
+  agency         Agency                @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  client         Client                @relation(fields: [agencyId, clientId], references: [agencyId, id], onDelete: Restrict)
   areas          Area[]
   teams          Team[]
   participants   Participant[]
@@ -414,6 +414,7 @@ model Event {
   planPoints     PlanPoint[]
   planPhotos     PlanPointPhoto[]
   visits         TechnicalVisit[]
+  visitPhotos    TechnicalVisitPhoto[]
 
   @@index([clientId])
   @@index([agencyId])
@@ -1318,28 +1319,71 @@ model PlanPointPhoto {
 /// Visita técnica da Pré-produção ao local do evento: quem vai (Gerente ou
 /// Pré-produtor), data e horário, e os EPIs necessários. Só a Pré-produção vê.
 model TechnicalVisit {
-  id            String   @id @default(uuid(7)) @db.Uuid
-  eventId       String   @map("event_id") @db.Uuid
-  title         String
-  place         String?
-  scheduledAt   DateTime @map("scheduled_at") @db.Timestamptz(3)
-  responsibleId String   @map("responsible_id") @db.Uuid
+  id               String      @id @default(uuid(7)) @db.Uuid
+  eventId          String      @map("event_id") @db.Uuid
+  title            String
+  place            String?
+  scheduledAt      DateTime    @map("scheduled_at") @db.Timestamptz(3)
+  responsibleId    String      @map("responsible_id") @db.Uuid
   /// EPIs necessários, pelos nomes da lista do app (src/modules/visits/ppe.ts).
-  ppe           String[] @default([])
+  ppe              String[]    @default([])
   /// Outros EPIs ou cuidados, em texto livre.
-  ppeOther      String?  @map("ppe_other")
-  notes         String?
-  createdById   String   @map("created_by") @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ppeOther         String?     @map("ppe_other")
+  notes            String?
+  /// Relatório da visita: o briefing do lugar, preenchido no local.
+  address          String?
+  people           String?
+  accessText       String?     @map("access_text")
+  powerText        String?     @map("power_text")
+  internetText     String?     @map("internet_text")
+  facilitiesText   String?     @map("facilities_text")
+  restrictionsText String?     @map("restrictions_text")
+  contactsText     String?     @map("contacts_text")
+  observations     String?
+  /// Para concluir, pelo menos 10 fotos; concluída, fica travada até reabrir.
+  status           VisitStatus @default(ABERTA)
+  concludedAt      DateTime?   @map("concluded_at") @db.Timestamptz(3)
+  createdById      String      @map("created_by") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  responsible Participant @relation(fields: [eventId, responsibleId], references: [eventId, id], onDelete: Restrict)
-  createdBy   User        @relation("TechnicalVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  event       Event                 @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  responsible Participant           @relation(fields: [eventId, responsibleId], references: [eventId, id], onDelete: Restrict)
+  createdBy   User                  @relation("TechnicalVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  photos      TechnicalVisitPhoto[]
 
   @@unique([eventId, id])
   @@index([eventId, scheduledAt])
   @@map("technical_visits")
+}
+
+enum VisitStatus {
+  ABERTA
+  CONCLUIDA
+
+  @@map("visit_status")
+}
+
+/// Foto do relatório da visita técnica, com legenda (no máximo 40 por visita).
+model TechnicalVisitPhoto {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  eventId      String   @map("event_id") @db.Uuid
+  visitId      String   @map("visit_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  sha256       String
+  caption      String?
+  position     Int      @default(0)
+  uploadedById String   @map("uploaded_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  visit TechnicalVisit @relation(fields: [eventId, visitId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([visitId, sha256])
+  @@index([visitId, position])
+  @@map("technical_visit_photos")
 }
 
 /// O que o Cliente vê no evento. Ele só olha; quem libera cada parte é o

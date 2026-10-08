@@ -4,7 +4,7 @@ import type { Actor } from "../../server/authz/actor";
 import { membershipFor } from "../../server/authz/actor";
 import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
-import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { fromLocalInput } from "../../lib/tz";
@@ -26,17 +26,23 @@ function requirePre(actor: Actor, eventId: string) {
 const visitSelect = {
   id: true, eventId: true, title: true, place: true, scheduledAt: true, responsibleId: true,
   ppe: true, ppeOther: true, notes: true, createdById: true, createdAt: true, updatedAt: true,
+  status: true, concludedAt: true, _count: { select: { photos: true } },
   responsible: { select: { id: true, name: true, role: true, phone: true } },
   createdBy: { select: { name: true } },
 } satisfies Prisma.TechnicalVisitSelect;
 
 type VisitRow = Prisma.TechnicalVisitGetPayload<{ select: typeof visitSelect }>;
 
-/** Pode mudar ou apagar: o gestor, quem marcou ou quem vai. */
-function canEdit(actor: Actor, v: { eventId: string; createdById: string; responsibleId: string }) {
+/** Pode mudar ou apagar (e preencher o relatório): o gestor, quem marcou ou quem vai. */
+export function canEdit(actor: Actor, v: { eventId: string; createdById: string; responsibleId: string }) {
   return canReviewSla(actor, v.eventId)
     || v.createdById === actor.userId
     || membershipFor(actor, v.eventId)?.participantId === v.responsibleId;
+}
+
+/** Concluída, a visita fica travada até alguém reabrir. */
+export function requireOpen(v: { status: string }) {
+  if (v.status === "CONCLUIDA") throw new ConflictError("Visita concluída. Para mudar, reabra a visita.");
 }
 
 async function load(actor: Actor, tx: Tx, id: string) {
@@ -91,7 +97,7 @@ async function eventTimeZone(tx: Tx, eventId: string) {
   return e.timezone;
 }
 
-const toVisit = (actor: Actor, v: VisitRow) => ({ ...v, canEdit: canEdit(actor, v) });
+const toVisit = (actor: Actor, { _count, ...v }: VisitRow) => ({ ...v, photos: _count.photos, canEdit: canEdit(actor, v) });
 
 /** Visitas do evento (próximas primeiro, depois as que já passaram) e quem pode ir. */
 export async function listVisits(actor: Actor, eventId: string, now = new Date()) {
@@ -147,6 +153,7 @@ export async function updateVisit(actor: Actor, id: string, input: unknown) {
   return actor.run(async (tx) => {
     const v = await load(actor, tx, id);
     if (!canEdit(actor, v)) throw new ForbiddenError("Só o gestor, quem marcou ou quem vai muda a visita");
+    requireOpen(v);
     const data = parse(visitSchema(await eventTimeZone(tx, v.eventId)).partial(), input);
     const sent = (input ?? {}) as Record<string, unknown>;
     const patch = Object.fromEntries(Object.entries(data).filter(([k]) => k in sent)) as Partial<typeof data>;
@@ -164,6 +171,7 @@ export async function deleteVisit(actor: Actor, id: string) {
   return actor.run(async (tx) => {
     const v = await load(actor, tx, id);
     if (!canEdit(actor, v)) throw new ForbiddenError("Só o gestor, quem marcou ou quem vai apaga a visita");
+    requireOpen(v);
     await tx.technicalVisit.delete({ where: { id: v.id } });
     await audit(tx, actor, {
       eventId: v.eventId, entity: "technical_visit", entityId: v.id, action: "DELETE",
