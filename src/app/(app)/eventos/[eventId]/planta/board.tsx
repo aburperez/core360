@@ -13,6 +13,7 @@ import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { Icon } from "@/components/icons";
 import { PlanViewer, type Pin, type ViewerHandle } from "./viewer";
 import { isPdf, pdfPageCount, preparePlan } from "./prepare";
+import { SUGGESTION_COLOR, SuggestPanel, type Suggestions } from "./suggest";
 
 type Board = Awaited<ReturnType<typeof getPlanBoard>>;
 type Point = Board["points"][number];
@@ -38,7 +39,8 @@ type Mode =
   | { kind: "place" }
   | { kind: "new"; x: number; y: number }
   | { kind: "edit"; id: string; x: number; y: number; moving: boolean }
-  | { kind: "upload" };
+  | { kind: "upload" }
+  | { kind: "suggest" };
 
 /** Hora atual, que anda sozinha (para "atrasada" mudar sem recarregar). */
 function useNow() {
@@ -59,6 +61,9 @@ export function PlanBoard({ board, eventId }: { board: Board; eventId: string })
   const [kind, setKind] = useState<"ALL" | "MONTAGEM" | "FINALIZACAO">("ALL");
   const [area, setArea] = useState("ALL");
   const [team, setTeam] = useState("ALL");
+  // Sugestões do assistente, guardadas com a planta a que pertencem.
+  const [suggestedFor, setSuggestedFor] = useState<{ planId: string; result: Suggestions } | null>(null);
+  const suggested = suggestedFor && suggestedFor.planId === board.plan?.id ? suggestedFor.result : null;
 
   const numbered = useMemo(
     () => board.points.map((p, i) => ({ ...p, n: i + 1, situation: pointSituation(p, now) })),
@@ -82,9 +87,20 @@ export function PlanBoard({ board, eventId }: { board: Board; eventId: string })
 
   const pins: Pin[] = shown
     .filter((p) => !(mode.kind === "edit" && p.id === mode.id && draft))
-    .map((p) => ({ id: p.id, x: p.x, y: p.y, n: p.n, color: SITUATION[p.situation].color, square: p.kind === "FINALIZACAO", label: `${p.n}. ${p.name}` }));
+    .map((p) => ({ id: p.id, x: p.x, y: p.y, n: p.n, color: SITUATION[p.situation].color, square: p.kind === "FINALIZACAO", label: `${p.n}. ${p.name}` }))
+    // Sugestões do assistente ainda não aprovadas, numeradas como na lista delas.
+    .concat(
+      mode.kind === "suggest" && suggested
+        ? suggested.suggestions.map((s, i) => ({ id: `sugestao-${i}`, x: s.x, y: s.y, n: i + 1, color: SUGGESTION_COLOR, square: s.kind === "FINALIZACAO", label: `Sugestão ${i + 1}. ${s.name}` }))
+        : [],
+    );
 
   const select = (id: string) => {
+    if (mode.kind === "suggest" && id.startsWith("sugestao-")) {
+      const s = suggested?.suggestions[Number(id.slice("sugestao-".length))];
+      if (s) viewer.current?.focus(s.x, s.y);
+      return;
+    }
     const p = numbered.find((q) => q.id === id);
     if (!p) return;
     setMode({ kind: "view", id });
@@ -101,8 +117,21 @@ export function PlanBoard({ board, eventId }: { board: Board; eventId: string })
   };
 
   const plan = board.plan;
+  const imageSrc = plan ? `/api/floor-plans/${plan.id}/image?v=${plan.sha256.slice(0, 12)}` : "";
   const sheet = (() => {
     switch (mode.kind) {
+      case "suggest":
+        return plan ? (
+          <SuggestPanel
+            planId={plan.id}
+            imageSrc={imageSrc}
+            result={suggested}
+            onResult={(result) => setSuggestedFor(result ? { planId: plan.id, result } : null)}
+            onFocus={(s) => viewer.current?.focus(s.x, s.y)}
+            onAdded={() => router.refresh()}
+            onClose={() => setMode({ kind: "list" })}
+          />
+        ) : null;
       case "upload":
         return <UploadForm eventId={eventId} first={false} onClose={() => setMode({ kind: "list" })} />;
       case "new":
@@ -195,6 +224,11 @@ export function PlanBoard({ board, eventId }: { board: Board; eventId: string })
                 <Icon name="pin" className="h-5 w-5" /> Marcar etapa
               </Button>
             )}
+            {!placing && board.canManagePlans && (
+              <Button type="button" variant="secondary" onClick={() => setMode({ kind: "suggest" })} className="flex-1 lg:flex-none">
+                Sugerir etapas
+              </Button>
+            )}
             {placing && (
               <Button type="button" variant="secondary" onClick={() => setMode(mode.kind === "edit" ? { ...mode, moving: false } : { kind: "list" })}>
                 Cancelar
@@ -205,7 +239,7 @@ export function PlanBoard({ board, eventId }: { board: Board; eventId: string })
 
         <PlanViewer
           ref={viewer}
-          src={`/api/floor-plans/${plan.id}/image?v=${plan.sha256.slice(0, 12)}`}
+          src={imageSrc}
           pins={pins}
           selectedId={selectedId}
           draft={draft}

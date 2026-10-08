@@ -92,3 +92,30 @@ async function toJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   }
   throw new Error("A planta ficou grande demais. Tente um arquivo mais leve.");
 }
+
+/** Lado maior da imagem que vai para o assistente: legível para ele e abaixo do limite da API. */
+const ASSISTANT_SIDE = 2400;
+const ASSISTANT_BYTES = 3.5 * 1024 * 1024;
+
+/** A planta já enviada, reduzida para o assistente analisar (sempre JPG). */
+export async function planForAssistant(src: string): Promise<Blob> {
+  const res = await fetch(src, { credentials: "same-origin" }).catch(() => null);
+  if (!res?.ok) throw new Error("Não consegui abrir a planta. Tente de novo.");
+  const bmp = await createImageBitmap(await res.blob()).catch(() => {
+    throw new Error("Não consegui abrir a planta. Tente de novo.");
+  });
+  const k = Math.min(1, ASSISTANT_SIDE / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bmp.width * k));
+  canvas.height = Math.max(1, Math.round(bmp.height * k));
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close();
+  for (const q of [0.85, 0.75, 0.6]) {
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", q));
+    if (blob && blob.size <= ASSISTANT_BYTES) return blob;
+  }
+  throw new Error("A planta ficou grande demais para o assistente.");
+}
