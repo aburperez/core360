@@ -436,6 +436,8 @@ model Event {
   visits         TechnicalVisit[]
   visitPhotos    TechnicalVisitPhoto[]
   finances       EventFinances?
+  briefing       EventBriefing?
+  briefingFronts EventBriefingFront[]
   lead           Participant?          @relation("EventLead", fields: [id, leadId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_lead_fkey")
   producer       Participant?          @relation("EventProducer", fields: [id, producerId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "events_producer_fkey")
 
@@ -1445,4 +1447,58 @@ model EventFinances {
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("event_finances")
+}
+
+/// Briefing do evento (Pré-produção): o que o cliente pediu, em quatro blocos.
+/// Nome, tipo, público estimado, local e endereço vêm da ficha do evento.
+model EventBriefing {
+  eventId           String   @id @map("event_id") @db.Uuid
+  clientCompany     String?  @map("client_company")
+  clientAgency      String?  @map("client_agency")
+  clientContact     String?  @map("client_contact")
+  clientResponsible String?  @map("client_responsible")
+  objective         String?
+  concept           String?
+  audienceProfile   String?  @map("audience_profile")
+  venueContacts     String?  @map("venue_contacts")
+  allowedHours      String?  @map("allowed_hours")
+  venueRules        String?  @map("venue_rules")
+  updatedById       String   @map("updated_by") @db.Uuid
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("event_briefings")
+}
+
+/// As 13 frentes de estrutura do briefing.
+enum BriefingFront {
+  CENOGRAFIA
+  INFRAESTRUTURA
+  AUDIO
+  VIDEO
+  ILUMINACAO
+  MOBILIARIO
+  CREDENCIAMENTO
+  SEGURANCA
+  LIMPEZA
+  ALIMENTACAO
+  STAFF
+  TRANSPORTE
+  LOGISTICA
+
+  @@map("briefing_front")
+}
+
+/// Cada frente: precisa (sim, não; sem linha ou nulo = a definir) e observação.
+model EventBriefingFront {
+  eventId String        @map("event_id") @db.Uuid
+  front   BriefingFront
+  needed  Boolean?
+  notes   String?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, front])
+  @@map("event_briefing_fronts")
 }

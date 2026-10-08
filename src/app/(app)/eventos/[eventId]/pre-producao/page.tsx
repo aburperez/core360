@@ -4,6 +4,7 @@ import { requireUser } from "@/server/http/session";
 import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { getEvent, getEventFinances } from "@/modules/events/events.service";
+import { getEventBriefing } from "@/modules/events/briefing.service";
 import { EventStages } from "@/components/event-stages";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
 import { getCostSheet } from "@/modules/costs/costs.service";
@@ -14,7 +15,7 @@ import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
 import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, Tile, pct } from "@/components/panel";
-import { ROLE_LABEL, formatDateTime, formatDuration } from "@/lib/format";
+import { ROLE_LABEL, formatDateTime, formatDuration, formatPeriod } from "@/lib/format";
 import { brl } from "@/lib/money";
 
 export const metadata = { title: "Pré-produção" };
@@ -27,9 +28,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn, quotes, visits, finances] = await Promise.all([
+  const [event, types, sheet, fn, quotes, visits, finances, brief] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
-    quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId),
+    quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId), getEventBriefing(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
   const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
@@ -53,6 +54,10 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const role = isEventSupport(actor, eventId) ? "Suporte" : isEventAdmin(actor, eventId) ? "Admin" : ROLE_LABEL[membershipFor(actor, eventId)!.role];
 
   const tiles: TileData[] = [
+    {
+      href: `${base}/briefing-evento`, icon: "briefing", title: "Briefing do evento",
+      line: brief.updatedAt ? `${brief.progress.answered} de 13 frentes · ${brief.progress.needed} precisam` : "Ainda não preenchido",
+    },
     { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
     { href: `${base}/quem-faz`, icon: "matrix", title: "Quem faz o quê", line: `${withPeople} de ${types.length} tipos com pessoas` },
     { href: `${base}/custos`, icon: "costs", title: "Custos", line: sheet.itemCount ? brl(sheet.totals.total) : "Planilha vazia" },
@@ -145,9 +150,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
               action={canReviewSla(actor, eventId) ? <Link href={`/eventos/${eventId}/editar`} className="text-sm font-semibold text-primary">Editar ›</Link> : undefined}
             >
               <dl className="space-y-1.5 text-sm">
-                <Line label="Evento" value={period(event.startsAt, event.endsAt, event.timezone)} />
-                {event.setupStartsAt && <Line label="Montagem" value={period(event.setupStartsAt, event.setupEndsAt, event.timezone)} />}
-                {event.teardownStartsAt && <Line label="Desmontagem" value={period(event.teardownStartsAt, event.teardownEndsAt, event.timezone)} />}
+                <Line label="Evento" value={formatPeriod(event.startsAt, event.endsAt, event.timezone)} />
+                {event.setupStartsAt && <Line label="Montagem" value={formatPeriod(event.setupStartsAt, event.setupEndsAt, event.timezone)} />}
+                {event.teardownStartsAt && <Line label="Desmontagem" value={formatPeriod(event.teardownStartsAt, event.teardownEndsAt, event.timezone)} />}
                 {event.expectedAudience != null && <Line label="Público" value={`${event.expectedAudience.toLocaleString("pt-BR")} pessoas`} />}
                 <Line label="Responsável" value={event.lead?.name ?? "—"} />
                 <Line label="Produtor" value={event.producer?.name ?? "—"} />
@@ -183,9 +188,3 @@ function Line({ label, value, tone }: { label: string; value: string; tone?: str
 }
 
 /** "10/04 a 12/04" no fuso do evento (um dia só: "10/04"). */
-function period(from: Date, to: Date | null, tz: string) {
-  const day = (d: Date) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz }).format(d);
-  const a = day(from);
-  const b = to ? day(to) : null;
-  return b && b !== a ? `${a} a ${b}` : a;
-}

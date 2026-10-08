@@ -4,7 +4,7 @@ import { TopBar } from "@/components/top-bar";
 import { ROLE_LABEL, formatDateTime } from "@/lib/format";
 import { visitWhen } from "../../format";
 import { loadVisitData } from "../../load";
-import { PrintButton } from "./print-button";
+import { PrintButton } from "@/components/print-button";
 
 export const metadata = { title: "Relatório da visita técnica" };
 

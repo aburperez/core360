@@ -52,12 +52,13 @@ export function EventNav(props: NavProps) {
 
   const preItems: Item[] = [
     { href: pre, label: "Painel", icon: "overview", active: path === pre, bar: true },
+    { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`) },
     { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true },
     { href: `${pre}/quem-faz`, label: "Quem faz o quê", short: "Quem faz", icon: "matrix", active: path.startsWith(`${pre}/quem-faz`) },
     { href: `${pre}/custos`, label: "Custos", icon: "costs", active: path.startsWith(`${pre}/custos`), bar: true },
     { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`) },
     { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`) },
-    { href: `${pre}/funcoes`, label: "Funções e briefing", short: "Funções", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || path.startsWith(`${pre}/briefing`), bar: true },
+    { href: `${pre}/funcoes`, label: "Funções e briefing", short: "Funções", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || (path.startsWith(`${pre}/briefing`) && !path.startsWith(`${pre}/briefing-evento`)), bar: true },
     { href: `${pre}/relatorio`, label: "Relatório diário", short: "Relatório", icon: "report", active: path.startsWith(`${pre}/relatorio`) },
   ];
   const items: Item[] = [

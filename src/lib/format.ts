@@ -74,3 +74,12 @@ export function formatDate(d: Date | string): string {
 export function formatTime(d: Date | string): string {
   return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(d));
 }
+
+/** Período em dias ("10/04 a 12/04"), no fuso do evento; um dia só aparece uma vez. */
+export function formatPeriod(from: Date, to: Date | null, timeZone: string, withYear = false): string {
+  const day = (d: Date) =>
+    new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", ...(withYear ? { year: "numeric" } : {}), timeZone }).format(d);
+  const a = day(from);
+  const b = to ? day(to) : null;
+  return b && b !== a ? `${a} a ${b}` : a;
+}
