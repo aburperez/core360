@@ -56,6 +56,28 @@ export const TOOLS: Tool[] = [
     img: "/site/painel.webp", alt: "Painel do campo no computador",
   },
   {
+    id: "chegada", part: "campo", title: "Chegada, montagem e conferido",
+    serve: "Acompanhar cada fornecedor do portão até o item pronto, sem ligação e sem papel.",
+    quem: "Equipe do campo marca a chegada; o Head da área confirma",
+    passos: [
+      "Quando o fornecedor chega, toque em Chegou no celular.",
+      "O Head da área marca Montado e depois Conferido, com uma foto.",
+      "O status do item muda sozinho. Montagem atrasada fica vermelha no cronograma e nas pendências.",
+    ],
+    img: "/site/montagem-celular.webp", alt: "Itens para montar no celular do Head, com o botão Montado", phone: true,
+  },
+  {
+    id: "planta", part: "campo", title: "Planta do evento",
+    serve: "Ver no mapa do evento onde fica cada ponto de montagem e de finalização, e como está cada um.",
+    quem: "Todos no campo veem; o Gerente envia a planta e o Head marca os pontos da área",
+    passos: [
+      "O Gerente envia a planta do evento.",
+      "Os pontos de montagem e de finalização são marcados no lugar onde acontecem, por área.",
+      "A cor mostra a situação de cada ponto: não iniciada, em andamento, concluída ou atrasada.",
+    ],
+    img: "/site/planta.webp", alt: "Planta do evento no celular com pontos por área", phone: true,
+  },
+  {
     id: "equipe", part: "campo", title: "Equipe e convites",
     serve: "Montar quem trabalha no evento e definir o que cada pessoa pode ver.",
     quem: "Gerente",
@@ -65,6 +87,61 @@ export const TOOLS: Tool[] = [
       "Desativou a pessoa, o acesso sai na hora.",
     ],
     img: "/site/equipe.webp", alt: "Tela de equipe do evento no celular", phone: true,
+  },
+  {
+    id: "ficha", part: "pre", title: "Ficha, briefing e visita técnica",
+    serve: "Juntar num lugar só tudo o que se sabe do evento antes de começar a contratar.",
+    quem: "Diretor e Pré-produtor",
+    passos: [
+      "Preencha a ficha do evento e acompanhe as 11 etapas.",
+      "Responda o briefing do evento num formulário e registre a visita técnica com fotos (no mínimo 10) e relatório.",
+      "Guarde os documentos do evento no mesmo lugar, para todos acharem.",
+    ],
+    img: "/site/briefing-evento.webp", alt: "Briefing do evento no computador",
+  },
+  {
+    id: "itens", part: "pre", title: "Mapa de itens e orçamento",
+    serve: "Saber o que o evento precisa, quem cuida de cada item e quanto ele custa de verdade.",
+    quem: "Diretor e Pré-produtor (o campo nunca vê valores)",
+    passos: [
+      "Cada item tem código, área, categoria, responsável, prazo e status, de A definir até Finalizado.",
+      "O orçamento mostra 4 valores (estimado, cotado, contratado e realizado) e aponta a economia ou o estouro.",
+      "Só o Diretor vê o contratado e o realizado. O campo nunca vê valores.",
+    ],
+    img: "/site/orcamento.webp", alt: "Orçamento com os 4 valores no computador",
+  },
+  {
+    id: "fornecedores", part: "pre", title: "Fornecedores, cotações e contratos",
+    serve: "Cotar, escolher e contratar fornecedores com tudo registrado, do primeiro orçamento à avaliação final.",
+    quem: "Pré-produtor cota; o Diretor negocia, escolhe e avalia com o Head da área",
+    passos: [
+      "Use o cadastro de fornecedores da agência e peça 3 orçamentos. O app lê o arquivo do orçamento (PDF ou foto) e preenche os valores para você conferir.",
+      "O Diretor negocia e escolhe. O contrato é gerado e assinado no app.",
+      "Depois do evento, o Diretor e o Head da área avaliam cada fornecedor.",
+    ],
+    img: "/site/cotacoes.webp", alt: "Cotação com 3 orçamentos no computador",
+  },
+  {
+    id: "cronograma", part: "pre", title: "Cronograma e pendências",
+    serve: "Ver o que precisa ficar pronto até o dia do evento e o que está atrasado, por área e por pessoa.",
+    quem: "Diretor e Pré-produtor",
+    passos: [
+      "Siga os marcos de T-30 até T0, cada um com um responsável.",
+      "Cada item tem prazo e pode depender de outro.",
+      "Na central de pendências, veja o que está atrasado, vence hoje ou vence nos próximos 7 dias.",
+    ],
+    img: "/site/pendencias.webp", alt: "Central de pendências no computador",
+  },
+  {
+    id: "mapa-montagem", part: "pre", title: "Mapa de montagem",
+    serve: "Combinar a chegada de cada fornecedor na montagem, para não ter fila no portão nem caminhão perdido.",
+    quem: "Diretor e Pré-produtor (o campo vê no celular)",
+    passos: [
+      "As chegadas nascem dos contratos assinados.",
+      "Cada linha tem horário, fornecedor, itens, veículo e placa, motorista, doca, área, responsável e status.",
+      "Chegada atrasada aparece em vermelho.",
+    ],
+    img: "/site/mapa-montagem.webp", alt: "Mapa de montagem no computador",
   },
   {
     id: "tipos", part: "pre", title: "Tipos de atendimento e SLA",
@@ -78,26 +155,15 @@ export const TOOLS: Tool[] = [
     img: "/site/tipos.webp", alt: "Lista de tipos de atendimento com SLA no computador",
   },
   {
-    id: "quem-faz", part: "pre", title: "Quem faz o quê",
-    serve: "Deixar claro quem atende cada tipo de chamado em cada equipe.",
-    quem: "Gerente e Pré-produtor",
+    id: "produtores", part: "pre", title: "Produtores e Funções",
+    serve: "Montar numa página só quem faz o quê em cada equipe do evento.",
+    quem: "Diretor monta; o Pré-produtor ajuda",
     passos: [
-      "Escolha a equipe.",
-      "Marque as pessoas em cada tipo de atendimento.",
-      "A matriz fica pronta para todos consultarem.",
+      "Abra Produtores e Funções.",
+      "Monte por planilha ou clicando: escolha as pessoas e as funções de cada uma.",
+      "Pronto: todos consultam quem faz o quê.",
     ],
-    img: "/site/quemfaz.webp", alt: "Matriz quem faz o quê no computador",
-  },
-  {
-    id: "custos", part: "pre", title: "Custos",
-    serve: "Montar o orçamento do evento no modelo de matriz que a agência já usa, com honorários e impostos.",
-    quem: "Gerente e Pré-produtor (os valores só aparecem aqui)",
-    passos: [
-      "Importe a sua planilha em Excel ou crie as seções e os itens.",
-      "O sistema soma fornecedores, honorários e impostos.",
-      "Envie a lista de itens ao campo, sem os valores, para quem vai receber conferir.",
-    ],
-    img: "/site/custos.webp", alt: "Planilha de custos no computador",
+    img: "/site/produtores.webp", alt: "Página Produtores e Funções no computador",
   },
   {
     id: "funcoes", part: "pre", title: "Funções e briefing",
@@ -109,6 +175,17 @@ export const TOOLS: Tool[] = [
       "Ela lê no celular, em Meu briefing, e confirma Li e entendi.",
     ],
     img: "/site/funcoes.webp", alt: "Painel de funções e briefing no computador",
+  },
+  {
+    id: "custos", part: "pre", title: "Planilha Padrão CORE 360",
+    serve: "Trazer a planilha de custos do Excel para o app e levar de volta, no modelo Padrão CORE 360.",
+    quem: "Diretor e Pré-produtor (os valores só aparecem aqui)",
+    passos: [
+      "Importe a planilha Padrão CORE 360 em Excel. Você vê a prévia antes de confirmar.",
+      "O app soma fornecedores, honorários e impostos.",
+      "Baixe em Excel quando quiser. O campo recebe a lista de itens, sem os valores.",
+    ],
+    img: "/site/custos.webp", alt: "Planilha Padrão CORE 360 no computador",
   },
   {
     id: "relatorio", part: "pre", title: "Relatório diário",
@@ -192,9 +269,9 @@ function ToolBlock({ tool, n }: { tool: Tool; n: number }) {
 }
 
 const ROLES = [
-  { title: "Diretor de produção", text: "Vê todos os eventos da agência e acompanha a preparação, os prazos e os custos." },
+  { title: "Diretor de produção", text: "Vê todos os eventos da agência, escolhe os fornecedores e acompanha a preparação, os prazos e os custos." },
   { title: "Gerente do evento", text: "Coordena áreas, equipes e chamados e fecha o relatório do dia." },
-  { title: "Head de área", text: "Recebe os urgentes da área, distribui para a equipe e valida a entrega." },
+  { title: "Head de área", text: "Recebe os urgentes da área, confirma a montagem, valida a entrega e avalia os fornecedores." },
   { title: "Produtor operacional", text: "Lê o briefing e abre e resolve chamados com foto, pelo celular." },
 ];
 
