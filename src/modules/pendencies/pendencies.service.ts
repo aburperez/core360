@@ -12,6 +12,8 @@ import { daysBetween, todayIn } from "../schedule/schedule-meta";
 import { isSupplierDirector } from "../suppliers/supplier-meta";
 import { RATING_OPEN_STATUSES } from "../suppliers/rating-meta";
 import { pendencyGroup, type PendencyGroup, type PendencyKind } from "./pendency-meta";
+import { assemblyDeadlines } from "../arrivals/assembly";
+import { formatDateTime } from "../../lib/format";
 
 /**
  * Central de pendências (fase 4B): numa lista só, o que falta fazer no
@@ -65,11 +67,12 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
   const director = isSupplierDirector(actor, eventId);
   const base = `/eventos/${eventId}/pre-producao`;
   return actor.run(async (tx) => {
-    const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, number: true, timezone: true, status: true } });
+    const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, number: true, timezone: true, status: true, startsAt: true } });
+    const deadlines = await assemblyDeadlines(tx, eventId, event.startsAt);
     const today = todayIn(event.timezone, now);
     const weekEnd = addDays(today, 7);
     const ratingOpen = (RATING_OPEN_STATUSES as readonly string[]).includes(event.status);
-    const [milestones, items, quotes, contracts, tasks, areas, team, signed, rated] = await Promise.all([
+    const [milestones, items, quotes, contracts, tasks, areas, team, signed, rated, toAssemble] = await Promise.all([
       tx.eventMilestone.findMany({
         where: { eventId, doneAt: null },
         select: { id: true, title: true, dueOn: true, responsible: { select: { id: true, name: true } } },
@@ -109,6 +112,14 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
         ? tx.contract.findMany({ where: { eventId, status: "ASSINADO" }, select: { supplierId: true, supplier: { select: { companyName: true, tradeName: true } } } })
         : Promise.resolve([]),
       director && ratingOpen ? tx.supplierRating.findMany({ where: { eventId, ratedById: actor.userId }, select: { supplierId: true } }) : Promise.resolve([]),
+      // Fase 5B: itens do mapa de montagem ainda não montados.
+      tx.costItem.findMany({
+        where: { eventId, id: { in: [...deadlines.keys()] }, status: { notIn: ["MONTADO", "CONFERIDO", "FINALIZADO"] } },
+        select: {
+          id: true, name: true, number: true, category: true, status: true,
+          area: { select: { id: true, name: true } }, responsible: { select: { id: true, name: true } },
+        },
+      }),
     ]);
 
     const all: Pendency[] = [];
@@ -133,6 +144,19 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
         kind: "ITEM", id: i.id, title: `${i.name} pronto`, detail: `${code} · ${ITEM_STATUS_LABEL[i.status]}${waiting}`,
         dueOn: iso(i.neededOn!), area: i.area, responsible: i.responsible, href: `${base}/itens/${i.id}`, toggle: false,
       });
+    }
+    for (const i of toAssemble) {
+      const until = deadlines.get(i.id)!;
+      const code = itemCode(event.number, i.category as ItemCategory | null, i.number);
+      push(
+        {
+          kind: "MONTAGEM", id: i.id, title: `Montar ${i.name}`,
+          detail: `${code} · ${ITEM_STATUS_LABEL[i.status]} · montagem até ${formatDateTime(until)}`,
+          dueOn: todayIn(event.timezone, until), area: i.area, responsible: i.responsible, href: `${base}/montagem`, toggle: false,
+        },
+        // O prazo da montagem tem hora: passou da hora, já está atrasada.
+        until < now,
+      );
     }
     for (const q of quotes) {
       // Esperando os fornecedores: vale o prazo da cotação. Para enviar ou escolher: a data do item.
@@ -175,7 +199,7 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
     }
 
     // Mais atrasado primeiro; no mesmo dia, pela ordem dos tipos.
-    const order: PendencyKind[] = ["MARCO", "ITEM", "COTACAO", "CONTRATO", "AVALIACAO", "MANUAL"];
+    const order: PendencyKind[] = ["MARCO", "ITEM", "MONTAGEM", "COTACAO", "CONTRATO", "AVALIACAO", "MANUAL"];
     all.sort((a, b) => (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999") || order.indexOf(a.kind) - order.indexOf(b.kind) || a.title.localeCompare(b.title, "pt-BR"));
     const shown = all.filter((p) => (!f.areaId || p.area?.id === f.areaId) && (!f.responsibleId || p.responsible?.id === f.responsibleId));
     const count = (g: PendencyGroup, list = all) => list.filter((p) => p.group === g).length;

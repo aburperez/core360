@@ -8,6 +8,7 @@ import { parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
 import { ITEM_STATUSES, itemCode, type ItemCategory, type ItemStatus } from "../items/item-meta";
 import { dueState, todayIn, tLabel } from "./schedule-meta";
+import { assemblyDeadlines, itemAssembled } from "../arrivals/assembly";
 
 /**
  * Cronograma do evento (fase 4A): os marcos de T-30 a T0 (o banco cria os
@@ -42,6 +43,7 @@ export async function getSchedule(actor: Actor, eventId: string, now = new Date(
       where: { id: eventId },
       select: { name: true, number: true, startsAt: true, endsAt: true, timezone: true, status: true },
     });
+    const deadlines = await assemblyDeadlines(tx, eventId, event.startsAt);
     const [milestones, items, team] = await Promise.all([
       tx.eventMilestone.findMany({
         where: { eventId },
@@ -52,7 +54,7 @@ export async function getSchedule(actor: Actor, eventId: string, now = new Date(
         },
       }),
       tx.costItem.findMany({
-        where: { eventId, OR: [{ neededOn: { not: null } }, { dependsOnId: { not: null } }] },
+        where: { eventId, OR: [{ neededOn: { not: null } }, { dependsOnId: { not: null } }, { id: { in: [...deadlines.keys()] } }] },
         orderBy: [{ neededOn: "asc" }, { number: "asc" }],
         select: {
           id: true, name: true, number: true, category: true, status: true, neededOn: true,
@@ -72,6 +74,13 @@ export async function getSchedule(actor: Actor, eventId: string, now = new Date(
         responsibleId: m.responsibleId, responsible: m.responsible?.name ?? null, doneAt: m.doneAt, doneBy: m.doneBy?.name ?? null,
       };
     });
+    // Fase 5B: item do mapa de montagem que passou do prazo sem estar Montado.
+    const assembly = (id: string, status: ItemStatus) => {
+      const until = deadlines.get(id);
+      if (!until) return null;
+      const done = itemAssembled(status);
+      return { until: until.toISOString(), done, late: !done && until < now };
+    };
     const its = items.map((i) => {
       const due = i.neededOn ? iso(i.neededOn) : null;
       const ready = itemReady(i.status);
@@ -88,6 +97,7 @@ export async function getSchedule(actor: Actor, eventId: string, now = new Date(
         waiting: !!dep && !dep.ready && !ready,
         /** A dependência tem prazo depois do prazo deste item. */
         dependencyLate: !!dep && !!due && !!dep.neededOn && dep.neededOn > due,
+        assembly: assembly(i.id, i.status),
       };
     });
     const done = ms.filter((m) => m.state === "FEITO").length;
@@ -95,7 +105,8 @@ export async function getSchedule(actor: Actor, eventId: string, now = new Date(
       eventName: event.name, eventDay, today, todayT: tLabel(eventDay, today),
       milestones: ms, items: its,
       progress: { done, total: ms.length, pct: ms.length ? Math.round((done / ms.length) * 100) : 0 },
-      late: ms.filter((m) => m.state === "ATRASADO").length + its.filter((i) => i.state === "ATRASADO").length,
+      late: ms.filter((m) => m.state === "ATRASADO").length + its.filter((i) => i.state === "ATRASADO" || i.assembly?.late).length,
+      assemblyLate: its.filter((i) => i.assembly?.late).length,
       people: team,
     };
   });

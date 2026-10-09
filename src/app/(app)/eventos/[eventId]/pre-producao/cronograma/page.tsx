@@ -6,6 +6,7 @@ import { canUsePreProduction } from "@/server/authz/policy";
 import { getSchedule } from "@/modules/schedule/schedule.service";
 import { DUE_STATE, dayText, weekday } from "@/modules/schedule/schedule-meta";
 import { ITEM_STATUS_LABEL } from "@/modules/items/item-meta";
+import { formatDateTime } from "@/lib/format";
 import { TopBar } from "@/components/top-bar";
 import { PageHeading, Panel } from "@/components/panel";
 import { EmptyState, PAGE, cx } from "@/components/ui";
@@ -60,7 +61,7 @@ export default async function SchedulePage({ params }: PageProps<"/eventos/[even
             <div className={cx("rounded-2xl border p-4", s.late ? "border-red-500/40 bg-red-500/10" : "border-border bg-surface")}>
               <p className="text-sm font-semibold uppercase tracking-wide text-muted">Atrasados</p>
               <p className={cx("text-2xl font-bold tabular-nums", s.late ? "text-red-300" : "text-emerald-300")}>{s.late}</p>
-              <p className="text-sm text-muted">{s.late ? "marcos e itens com prazo vencido" : "Nada atrasado"}</p>
+              <p className="text-sm text-muted">{s.late ? `marcos e itens com prazo vencido${s.assemblyLate ? ` (${s.assemblyLate} com montagem atrasada)` : ""}` : "Nada atrasado"}</p>
             </div>
           </div>
         )}
@@ -121,7 +122,7 @@ export default async function SchedulePage({ params }: PageProps<"/eventos/[even
                 {s.items.map((it) => {
                   const st = it.state && (it.state === "FEITO" ? { label: "Pronto", tone: DUE_STATE.FEITO.tone } : DUE_STATE[it.state]);
                   return (
-                    <li key={it.id} className="flex items-start gap-3 py-2.5">
+                    <li key={it.id} className={cx("flex items-start gap-3 py-2.5", it.assembly?.late && "rounded-xl bg-red-500/5")}>
                       <div className="w-14 shrink-0 text-right sm:w-16">
                         <p className={cx("font-bold tabular-nums", it.state === "ATRASADO" ? "text-red-300" : "text-foreground")}>{it.t ?? "—"}</p>
                         {it.dueOn && <p className="text-xs text-muted tabular-nums">{weekday(it.dueOn)} {dayText(it.dueOn)}</p>}
@@ -141,17 +142,25 @@ export default async function SchedulePage({ params }: PageProps<"/eventos/[even
                             {it.dependsOn.ready && " (pronto)"}
                           </p>
                         )}
+                        {it.assembly && (
+                          <p className={cx("text-sm", it.assembly.late ? "font-semibold text-red-300" : "text-muted")}>
+                            {it.assembly.late ? "Montagem atrasada: " : it.assembly.done ? "Montado. Prazo da montagem: " : "Montar até "}
+                            {formatDateTime(it.assembly.until)}
+                          </p>
+                        )}
                         {it.dependencyLate && (
                           <p className="text-sm text-red-300">O prazo de {it.dependsOn!.code} ({dayText(it.dependsOn!.neededOn!)}) é depois do prazo deste item.</p>
                         )}
                       </div>
-                      {st && <span className={cx("mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold sm:mt-0 sm:shrink-0", st.tone)}>{st.label}</span>}
+                      {it.assembly?.late ? (
+                        <span className={cx("mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold sm:mt-0 sm:shrink-0", DUE_STATE.ATRASADO.tone)}>Montagem atrasada</span>
+                      ) : st && <span className={cx("mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-bold sm:mt-0 sm:shrink-0", st.tone)}>{st.label}</span>}
                       </div>
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-3 text-xs text-muted">O item conta como feito quando chega em Pronto. O prazo e o &quot;Depende de&quot; ficam na tela do item.</p>
+              <p className="mt-3 text-xs text-muted">O item conta como feito quando chega em Pronto. O prazo e o &quot;Depende de&quot; ficam na tela do item. Item do mapa de montagem precisa estar Montado até o fim da montagem da chegada (ou o início do evento).</p>
             </>
           )}
         </Panel>

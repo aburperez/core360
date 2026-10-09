@@ -1,11 +1,12 @@
 /** Central de pendências (fase 4B): grupos e rótulos. Sem nada do servidor. */
 
-export type PendencyKind = "MARCO" | "ITEM" | "COTACAO" | "CONTRATO" | "AVALIACAO" | "MANUAL";
+export type PendencyKind = "MARCO" | "ITEM" | "MONTAGEM" | "COTACAO" | "CONTRATO" | "AVALIACAO" | "MANUAL";
 export type PendencyGroup = "ATRASADO" | "HOJE" | "SEMANA" | "SEM_DATA";
 
 export const KIND_LABEL: Record<PendencyKind, string> = {
   MARCO: "Marco",
   ITEM: "Item",
+  MONTAGEM: "Montagem",
   COTACAO: "Cotação",
   CONTRATO: "Contrato",
   AVALIACAO: "Avaliação",

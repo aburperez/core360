@@ -44,7 +44,7 @@ export default async function PendenciesPage({ params, searchParams }: PageProps
           <NewTask eventId={eventId} areas={data.areas} people={data.people} />
         </PageHeading>
         <p className="text-sm text-muted">
-          Tudo que falta no evento, numa lista só: marcos do cronograma, itens com prazo, cotações, contratos, avaliações
+          Tudo que falta no evento, numa lista só: marcos do cronograma, itens com prazo, itens do mapa de montagem ainda não montados, cotações, contratos, avaliações
           de fornecedores no Fechamento e as pendências criadas aqui. O que está atrasado é crítico. O campo e o cliente não veem.
         </p>
 

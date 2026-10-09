@@ -12,14 +12,17 @@ export const metadata = { title: "Recebimentos" };
 
 /**
  * Itens que a Pré-produção mandou para o campo, para conferir na chegada.
- * Quem recebe vê os seus; o gerente vê todos. Sem valores.
+ * Quem recebe vê os seus; o Head da área vê os da área e marca Montado e
+ * Conferido (fase 5B); o gerente vê todos. Sem valores.
  */
 export default async function ReceiptsPage({ params }: PageProps<"/eventos/[eventId]/recebimentos">) {
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUseField(actor, eventId)) notFound();
   const [event, { all, rows }] = await Promise.all([getEvent(actor, eventId), listReceipts(actor, eventId)]);
-  const pending = rows.filter((r) => r.status === "PENDENTE").length;
+  const pending = rows.filter((r) => r.status === "PENDENTE" && r.canReceive).length;
+  const toAssemble = rows.filter((r) => r.canAssemble && r.status !== "PENDENTE" && !r.checkedAt).length;
+  const assembly = rows.some((r) => r.canAssemble);
 
   return (
     <>
@@ -35,8 +38,11 @@ export default async function ReceiptsPage({ params }: PageProps<"/eventos/[even
         ) : (
           <>
             <p className="mb-3 px-1 text-sm text-muted">
-              {pending ? `${pending} ${pending === 1 ? "item aguardando" : "itens aguardando"} conferência. ` : "Tudo conferido. "}
-              Confira cada item quando chegar e marque se veio certo ou diferente.
+              {pending ? `${pending} ${pending === 1 ? "item aguardando" : "itens aguardando"} chegada. ` : ""}
+              {assembly && toAssemble ? `${toAssemble} ${toAssemble === 1 ? "item para montar ou conferir" : "itens para montar ou conferir"}. ` : ""}
+              {assembly
+                ? "Quando o item chegar, marque Montado e depois Conferido, com uma foto do item montado."
+                : "Confira cada item quando chegar e marque se veio certo ou diferente."}
             </p>
             <ReceiptList rows={rows} all={all} />
           </>

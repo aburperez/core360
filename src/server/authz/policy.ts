@@ -211,6 +211,13 @@ export function canSendToField(a: Actor, eventId: string): boolean {
   return membershipFor(a, eventId)?.role === "GERENTE";
 }
 
+/** Marcar Montado e Conferido no item: o gestor ou o Head da área do item. Espelha app.can_assemble. */
+export function canAssemble(a: Actor, eventId: string, areaId: string | null): boolean {
+  if (canSendToField(a, eventId)) return true;
+  const m = membershipFor(a, eventId);
+  return m?.role === "HEAD" && !!areaId && m.areaId === areaId;
+}
+
 /** A participação da pessoa logada neste evento é esta? (quem recebe um item) */
 export function isMe(a: Actor, eventId: string, participantId: string): boolean {
   return membershipFor(a, eventId)?.participantId === participantId;

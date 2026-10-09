@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canSendToField, canUseField, canUsePreProduction, isMe } from "../../server/authz/policy";
+import { canAssemble, canSendToField, canUseField, canUsePreProduction, isMe } from "../../server/authz/policy";
+import { membershipFor } from "../../server/authz/actor";
 import { audit } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
+import type { Tx } from "../../server/db/with-user";
 import { getStorage } from "../../server/storage/storage";
 import { optionalText, parse, uuid } from "../../lib/validation";
 import { parseDecimal } from "../../lib/money";
@@ -133,6 +135,7 @@ export async function sendToField(actor: Actor, eventId: string) {
           data: {
             ...snap, position, sentAt: now, sentById: actor.userId,
             status: "PENDENTE", receivedQuantity: null, receivedDescription: null, note: null, receivedAt: null, receivedById: null,
+            assembledAt: null, assembledById: null, checkedAt: null, checkedById: null,
           },
         });
         updated++;
@@ -154,40 +157,65 @@ export async function sendToField(actor: Actor, eventId: string) {
 const receiptSelect = {
   id: true, eventId: true, costItemId: true, receiverId: true, sectionName: true, name: true, description: true, quantity: true,
   unit: true, location: true, status: true, receivedQuantity: true, receivedDescription: true, note: true, receivedAt: true, sentAt: true,
+  areaId: true, assembledAt: true, checkedAt: true,
   receiver: { select: { name: true } },
-  photos: { select: { id: true }, orderBy: { createdAt: "asc" as const } },
+  area: { select: { name: true } },
+  photos: { select: { id: true, stage: true }, orderBy: { createdAt: "asc" as const } },
 } as const;
 
 type ReceiptRow = {
-  quantity: unknown; receivedQuantity: unknown; photos: { id: string }[]; receiver: { name: string };
+  eventId: string; receiverId: string; areaId: string | null;
+  quantity: unknown; receivedQuantity: unknown; photos: { id: string; stage: string }[]; receiver: { name: string }; area: { name: string } | null;
 } & Record<string, unknown>;
 
-const plain = <T extends ReceiptRow>(r: T) => ({
+const plain = <T extends ReceiptRow>(actor: Actor, r: T) => ({
   ...r,
   quantity: Number(r.quantity),
   receivedQuantity: r.receivedQuantity === null ? null : Number(r.receivedQuantity),
   receiverName: r.receiver.name,
-  photoIds: r.photos.map((p) => p.id),
+  areaName: r.area?.name ?? null,
+  photoIds: r.photos.filter((p) => p.stage === "RECEBIMENTO").map((p) => p.id),
+  checkPhotoIds: r.photos.filter((p) => p.stage === "CONFERIDO").map((p) => p.id),
+  /** Pode marcar a chegada (quem recebe ou o gestor). */
+  canReceive: canSendToField(actor, r.eventId) || isMe(actor, r.eventId, r.receiverId),
+  /** Pode marcar Montado e Conferido (Head da área ou o gestor). */
+  canAssemble: canAssemble(actor, r.eventId, r.areaId),
 });
 
+/** Área de quem é Head neste evento (vê e monta os itens dela). */
+const headArea = (actor: Actor, eventId: string) => {
+  const m = membershipFor(actor, eventId);
+  return m?.role === "HEAD" ? m.areaId : null;
+};
+
+/** Quem vê quais recebimentos: o gestor todos; os outros os seus e, o Head, os da área dele. */
+function visibleWhere(actor: Actor, eventId: string) {
+  if (canSendToField(actor, eventId)) return {};
+  const me = actor.memberships.find((m) => m.eventId === eventId)?.participantId;
+  const area = headArea(actor, eventId);
+  const or = [...(me ? [{ receiverId: me }] : []), ...(area ? [{ areaId: area }] : [])];
+  return or.length ? { OR: or } : null;
+}
+
 /**
- * Recebimentos no campo. Quem recebe vê os seus; o gestor vê todos do evento.
+ * Recebimentos no campo. Quem recebe vê os seus; o Head da área vê os da
+ * área (para marcar Montado e Conferido); o gestor vê todos do evento.
  * Nada aqui tem valor: a tabela nem guarda preço.
  */
 export async function listReceipts(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
   if (!canUseField(actor, eventId)) throw new NotFoundError("Recebimentos");
   const all = canSendToField(actor, eventId);
-  const me = actor.memberships.find((m) => m.eventId === eventId)?.participantId;
-  if (!all && !me) return { all, rows: [] };
+  const where = visibleWhere(actor, eventId);
+  if (!where) return { all, rows: [] };
   const rows = await actor.run((tx) =>
     tx.itemReceipt.findMany({
-      where: { eventId, ...(all ? {} : { receiverId: me }) },
+      where: { eventId, ...where },
       orderBy: [{ position: "asc" }, { name: "asc" }],
       select: receiptSelect,
     }),
   );
-  return { all, rows: rows.map(plain) };
+  return { all, rows: rows.map((r) => plain(actor, r)) };
 }
 
 /** Quantos itens a pessoa ainda precisa conferir (aviso no início e no menu). */
@@ -200,16 +228,15 @@ export async function countMyPendingReceipts(actor: Actor, eventId: string) {
 /** Há recebimentos para esta pessoa (ou, para o gestor, no evento)? Mostra o atalho. */
 export async function hasReceipts(actor: Actor, eventId: string) {
   if (!canUseField(actor, eventId)) return false;
-  const all = canSendToField(actor, eventId);
-  const me = actor.memberships.find((m) => m.eventId === eventId)?.participantId;
-  if (!all && !me) return false;
-  const n = await actor.run((tx) => tx.itemReceipt.count({ where: { eventId, ...(all ? {} : { receiverId: me }) } }));
+  const where = visibleWhere(actor, eventId);
+  if (!where) return false;
+  const n = await actor.run((tx) => tx.itemReceipt.count({ where: { eventId, ...where } }));
   return n > 0;
 }
 
 async function loadReceipt(actor: Actor, id: string) {
   const r = uuid.safeParse(id).success ? await actor.run((tx) => tx.itemReceipt.findUnique({ where: { id } })) : null;
-  if (!r || !(isMe(actor, r.eventId, r.receiverId) || canSendToField(actor, r.eventId))) throw new NotFoundError("Item");
+  if (!r || !(isMe(actor, r.eventId, r.receiverId) || canAssemble(actor, r.eventId, r.areaId))) throw new NotFoundError("Item");
   return r;
 }
 
@@ -234,6 +261,8 @@ const checkSchema = z
 export async function checkReceipt(actor: Actor, id: string, input: unknown) {
   const data = parse(checkSchema, input);
   const r = await loadReceipt(actor, id);
+  if (!(isMe(actor, r.eventId, r.receiverId) || canSendToField(actor, r.eventId))) throw new ForbiddenError("Só quem recebe confere a chegada");
+  if (data.status === "PENDENTE" && r.assembledAt) throw new ValidationError("O item já está montado. Desfaça o Montado antes.");
   const patch = data.status === "PENDENTE"
     ? { status: "PENDENTE" as const, receivedQuantity: null, receivedDescription: null, note: null, receivedAt: null, receivedById: null }
     : {
@@ -250,32 +279,104 @@ export async function checkReceipt(actor: Actor, id: string, input: unknown) {
       eventId: r.eventId, entity: "item_receipt", entityId: r.id, action: "VALIDATE",
       before: { status: r.status }, after: { status: patch.status, receivedQuantity: patch.receivedQuantity, note: patch.note },
     });
-    return plain(saved);
+    return plain(actor, saved);
+  });
+}
+
+type Photo = { id: string; storageKey: string; mime: string; bytes: Uint8Array; sha256: string };
+
+/** Confere a foto e, fora do banco (R2), já guarda os bytes. */
+async function preparePhoto(r: { id: string; eventId: string }, bytes: Uint8Array): Promise<Photo> {
+  if (bytes.length === 0) throw new ValidationError("Arquivo vazio");
+  if (bytes.length > MAX_PHOTO_BYTES) throw new ValidationError("Foto maior que 10 MB");
+  const image = sniffImage(bytes);
+  if (!image) throw new ValidationError("Envie uma foto (JPEG, PNG, WebP ou HEIC)");
+  const id = randomUUID();
+  const storageKey = `events/${r.eventId}/receipts/${r.id}/${id}.${image.ext}`;
+  const storage = getStorage();
+  if (!storage.inDatabase) await storage.put(storageKey, bytes, image.mime);
+  return { id, storageKey, mime: image.mime, bytes, sha256: createHash("sha256").update(bytes).digest("hex") };
+}
+
+async function insertPhoto(tx: Tx, actor: Actor, r: { id: string; eventId: string }, p: Photo, stage: "RECEBIMENTO" | "CONFERIDO") {
+  const storage = getStorage();
+  if (storage.inDatabase) await storage.put(p.storageKey, p.bytes, p.mime, tx);
+  await tx.receiptPhoto.create({
+    data: { id: p.id, eventId: r.eventId, receiptId: r.id, storageKey: p.storageKey, mimeType: p.mime, sizeBytes: p.bytes.length, sha256: p.sha256, stage, uploadedById: actor.userId },
   });
 }
 
 /** Foto da conferência (ex.: o item que chegou diferente). */
 export async function addReceiptPhoto(actor: Actor, id: string, bytes: Uint8Array) {
   const r = await loadReceipt(actor, id);
-  if (bytes.length === 0) throw new ValidationError("Arquivo vazio");
-  if (bytes.length > MAX_PHOTO_BYTES) throw new ValidationError("Foto maior que 10 MB");
-  const image = sniffImage(bytes);
-  if (!image) throw new ValidationError("Envie uma foto (JPEG, PNG, WebP ou HEIC)");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const existing = await actor.run((tx) => tx.receiptPhoto.findUnique({ where: { receiptId_sha256: { receiptId: r.id, sha256 } } }));
   if (existing) return { id: existing.id };
-
-  const photoId = randomUUID();
-  const storageKey = `events/${r.eventId}/receipts/${r.id}/${photoId}.${image.ext}`;
-  const storage = getStorage();
-  if (!storage.inDatabase) await storage.put(storageKey, bytes, image.mime);
+  const photo = await preparePhoto(r, bytes);
   return actor.run(async (tx) => {
-    if (storage.inDatabase) await storage.put(storageKey, bytes, image.mime, tx);
-    await tx.receiptPhoto.create({
-      data: { id: photoId, eventId: r.eventId, receiptId: r.id, storageKey, mimeType: image.mime, sizeBytes: bytes.length, sha256, uploadedById: actor.userId },
+    await insertPhoto(tx, actor, r, photo, "RECEBIMENTO");
+    await audit(tx, actor, { eventId: r.eventId, entity: "item_receipt", entityId: r.id, action: "UPDATE", after: { photoAdded: photo.id } });
+    return { id: photo.id };
+  });
+}
+
+async function loadForAssembly(actor: Actor, id: string) {
+  const r = await loadReceipt(actor, id);
+  if (!canAssemble(actor, r.eventId, r.areaId)) throw new ForbiddenError("Só o Head da área do item ou o gerente marca a montagem");
+  return r;
+}
+
+/**
+ * Fase 5B: o Head da área (ou o gerente) marca o item Montado, depois que
+ * ele chegou, ou desfaz. O banco põe o item em Montado (ou volta para No local).
+ */
+export async function setAssembled(actor: Actor, id: string, input: unknown) {
+  const { done } = parse(z.object({ done: z.boolean() }), input);
+  const r = await loadForAssembly(actor, id);
+  if (done && r.status === "PENDENTE") throw new ValidationError("Marque primeiro a chegada do item");
+  if (!done && r.checkedAt) throw new ValidationError("O item já está conferido. Desfaça o Conferido antes.");
+  if (!!r.assembledAt === done) return { id: r.id, assembled: done };
+  return actor.run(async (tx) => {
+    await tx.itemReceipt.update({
+      where: { id: r.id },
+      data: done ? { assembledAt: new Date(), assembledById: actor.userId } : { assembledAt: null, assembledById: null },
     });
-    await audit(tx, actor, { eventId: r.eventId, entity: "item_receipt", entityId: r.id, action: "UPDATE", after: { photoAdded: photoId } });
-    return { id: photoId };
+    await audit(tx, actor, { eventId: r.eventId, entity: "item_receipt", entityId: r.id, action: "STATUS_CHANGE", before: { assembled: !done }, after: { assembled: done, name: r.name } });
+    return { id: r.id, assembled: done };
+  });
+}
+
+/**
+ * Conferido: só com uma foto, tirada na hora, que fica junto do item. O banco
+ * repete a regra e põe o item em Conferido.
+ */
+export async function markChecked(actor: Actor, id: string, bytes: Uint8Array) {
+  const r = await loadForAssembly(actor, id);
+  if (!r.assembledAt) throw new ValidationError("Marque primeiro o item como Montado");
+  if (r.checkedAt) return { id: r.id, checked: true };
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const existing = await actor.run((tx) => tx.receiptPhoto.findUnique({ where: { receiptId_sha256: { receiptId: r.id, sha256 } } }));
+  if (existing && existing.stage !== "CONFERIDO") throw new ValidationError("Essa foto já está no item. Tire uma foto nova da montagem.");
+  const photo = existing ? null : await preparePhoto(r, bytes);
+  return actor.run(async (tx) => {
+    if (photo) await insertPhoto(tx, actor, r, photo, "CONFERIDO");
+    await tx.itemReceipt.update({ where: { id: r.id }, data: { checkedAt: new Date(), checkedById: actor.userId } });
+    await audit(tx, actor, {
+      eventId: r.eventId, entity: "item_receipt", entityId: r.id, action: "STATUS_CHANGE",
+      before: { checked: false }, after: { checked: true, name: r.name, photo: photo?.id ?? existing?.id },
+    });
+    return { id: r.id, checked: true };
+  });
+}
+
+/** Desfaz o Conferido (a foto fica no histórico do item). */
+export async function uncheck(actor: Actor, id: string) {
+  const r = await loadForAssembly(actor, id);
+  if (!r.checkedAt) return { id: r.id, checked: false };
+  return actor.run(async (tx) => {
+    await tx.itemReceipt.update({ where: { id: r.id }, data: { checkedAt: null, checkedById: null } });
+    await audit(tx, actor, { eventId: r.eventId, entity: "item_receipt", entityId: r.id, action: "STATUS_CHANGE", before: { checked: true }, after: { checked: false, name: r.name } });
+    return { id: r.id, checked: false };
   });
 }
 
@@ -283,7 +384,7 @@ async function loadPhoto(actor: Actor, photoId: string) {
   const p = uuid.safeParse(photoId).success
     ? await actor.run((tx) => tx.receiptPhoto.findUnique({ where: { id: photoId }, include: { receipt: true } }))
     : null;
-  const ok = p && (isMe(actor, p.eventId, p.receipt.receiverId) || canUsePreProduction(actor, p.eventId) || canSendToField(actor, p.eventId));
+  const ok = p && (isMe(actor, p.eventId, p.receipt.receiverId) || canUsePreProduction(actor, p.eventId) || canAssemble(actor, p.eventId, p.receipt.areaId));
   if (!p || !ok) throw new NotFoundError("Foto");
   return p;
 }

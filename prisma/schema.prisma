@@ -497,6 +497,7 @@ model Area {
   costItems    CostItem[]
   tasks        EventTask[]
   arrivals     Arrival[]
+  receipts     ItemReceipt[]
 
   /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
   @@unique([eventId, id])
@@ -1110,6 +1111,13 @@ model ItemReceipt {
   note                String?
   receivedAt          DateTime?     @map("received_at") @db.Timestamptz(3)
   receivedById        String?       @map("received_by") @db.Uuid
+  /// Área do item (cópia de cost_items.area_id, o banco mantém): o Head dela marca a montagem.
+  areaId              String?       @map("area_id") @db.Uuid
+  /// Fase 5B: o Head da área marca Montado e depois Conferido (com foto).
+  assembledAt         DateTime?     @map("assembled_at") @db.Timestamptz(3)
+  assembledById       String?       @map("assembled_by") @db.Uuid
+  checkedAt           DateTime?     @map("checked_at") @db.Timestamptz(3)
+  checkedById         String?       @map("checked_by") @db.Uuid
   sentAt              DateTime      @default(now()) @map("sent_at") @db.Timestamptz(3)
   sentById            String        @map("sent_by") @db.Uuid
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1118,6 +1126,7 @@ model ItemReceipt {
   event    Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
   costItem CostItem       @relation(fields: [eventId, costItemId], references: [eventId, id], onDelete: Restrict)
   receiver Participant    @relation("ItemReceiptReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
+  area     Area?          @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction, map: "item_receipts_area_fkey")
   photos   ReceiptPhoto[]
 
   @@unique([eventId, id])
@@ -1127,16 +1136,25 @@ model ItemReceipt {
 }
 
 /// Foto da conferência (ex.: o item que chegou diferente).
+enum ReceiptPhotoStage {
+  RECEBIMENTO
+  CONFERIDO
+
+  @@map("receipt_photo_stage")
+}
+
 model ReceiptPhoto {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  eventId      String   @map("event_id") @db.Uuid
-  receiptId    String   @map("receipt_id") @db.Uuid
-  storageKey   String   @unique @map("storage_key")
-  mimeType     String   @map("mime_type")
-  sizeBytes    Int      @map("size_bytes")
+  id           String            @id @default(uuid(7)) @db.Uuid
+  eventId      String            @map("event_id") @db.Uuid
+  receiptId    String            @map("receipt_id") @db.Uuid
+  storageKey   String            @unique @map("storage_key")
+  mimeType     String            @map("mime_type")
+  sizeBytes    Int               @map("size_bytes")
   sha256       String
-  uploadedById String   @map("uploaded_by") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Foto da chegada ou do Conferido (fase 5B).
+  stage        ReceiptPhotoStage @default(RECEBIMENTO)
+  uploadedById String            @map("uploaded_by") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
   event   Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
   receipt ItemReceipt @relation(fields: [eventId, receiptId], references: [eventId, id], onDelete: Cascade)
