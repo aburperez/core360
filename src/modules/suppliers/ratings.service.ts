@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Actor } from "../../server/authz/actor";
+import { membershipFor, type Actor } from "../../server/authz/actor";
 import { canUsePreProduction } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
@@ -11,10 +11,12 @@ import { RATING_CRITERIA, RATING_OPEN_STATUSES, type RatingKey } from "./rating-
 
 /**
  * Avaliação dos fornecedores (fase 3D). Quando o evento chega no Fechamento, o
- * diretor dá de 0 a 10 em 6 critérios para cada fornecedor com contrato
- * assinado no evento. A média de todos os eventos da agência aparece no
- * cadastro e na cotação; as notas de cada evento e o comentário, só para o
- * diretor. A migration *_avaliacao_fornecedores repete as regras.
+ * diretor e o Head da área dão de 0 a 10 em 6 critérios para cada fornecedor
+ * com contrato assinado no evento (o Head, os que têm item da área dele). Cada
+ * pessoa dá a sua nota; a do evento é a média de todas. A média de todos os
+ * eventos da agência aparece no cadastro e na cotação; as notas de cada um e o
+ * comentário, só para o diretor (o Head vê a sua). As migrations
+ * *_avaliacao_fornecedores e *_avaliacao_head repetem as regras.
  */
 
 export type RatingSummary = { ratings: number; overall: number } & Record<RatingKey, number>;
@@ -40,7 +42,14 @@ function requireDirector(actor: Actor, eventId: string) {
   if (!isSupplierDirector(actor, eventId)) throw new ForbiddenError("Só o diretor avalia os fornecedores");
 }
 
-/** Os fornecedores com contrato assinado no evento, com a nota deste evento e a média geral. */
+type Scored = Record<RatingKey, number> & { comment: string | null; updatedAt: Date; ratedById: string; ratedBy: { name: string } };
+const toRating = (r: Scored) => ({ ...pick(r), average: average(pick(r)), comment: r.comment, updatedAt: r.updatedAt, ratedBy: r.ratedBy.name });
+const avgOf = (ns: number[]) => (ns.length ? Math.round((ns.reduce((a, b) => a + b, 0) / ns.length) * 10) / 10 : null);
+
+/**
+ * Os fornecedores com contrato assinado no evento (tela do diretor): a nota
+ * dele, as dos Heads, a média do evento e a média geral.
+ */
 export async function listEventRatings(actor: Actor, eventId: string) {
   requireDirector(actor, eventId);
   return actor.run(async (tx) => {
@@ -54,20 +63,26 @@ export async function listEventRatings(actor: Actor, eventId: string) {
     const [ratings, summaries] = await Promise.all([
       tx.supplierRating.findMany({
         where: { eventId, supplierId: { in: ids } },
-        select: { supplierId: true, ...scoresSelect, comment: true, updatedAt: true, ratedBy: { select: { name: true } } },
+        orderBy: { createdAt: "asc" },
+        select: { supplierId: true, ...scoresSelect, comment: true, updatedAt: true, ratedById: true, ratedBy: { select: { name: true } } },
       }),
       ratingSummaries(tx, event.agencyId),
     ]);
-    const byId = new Map(ratings.map((r) => [r.supplierId, r]));
     const items = ids.map((id) => {
       const cs = contracts.filter((c) => c.supplier.id === id);
-      const r = byId.get(id);
+      const rs = ratings.filter((r) => r.supplierId === id);
+      const mine = rs.find((r) => r.ratedById === actor.userId);
       return {
         supplierId: id,
         name: cs[0]!.supplier.tradeName || cs[0]!.supplier.companyName,
         contracts: cs.map((c) => c.number),
         total: cs.reduce((s, c) => s + c.items.reduce((t, i) => t + Number(i.value), 0), 0),
-        rating: r ? { ...pick(r), average: average(pick(r)), comment: r.comment, updatedAt: r.updatedAt, ratedBy: r.ratedBy.name } : null,
+        /** A nota de quem está vendo. */
+        rating: mine ? toRating(mine) : null,
+        /** As notas dos outros (os Heads e outro diretor). */
+        others: rs.filter((r) => r !== mine).map(toRating),
+        /** Média do evento: todas as notas. */
+        eventAverage: avgOf(rs.map((r) => average(pick(r)))),
         history: summaries.get(id) ?? null,
       };
     });
@@ -81,6 +96,27 @@ export async function listEventRatings(actor: Actor, eventId: string) {
   });
 }
 
+/**
+ * Tela Fornecedores do campo: quais o Head (ou o gestor) avalia aqui e a nota
+ * que já deu. Sem valores.
+ */
+export async function myRatings(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  return actor.run(async (tx) => {
+    const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { status: true } });
+    const open = (RATING_OPEN_STATUSES as readonly string[]).includes(event.status);
+    if (!open) return { open, canRate: new Set<string>(), mine: new Map<string, ReturnType<typeof toRating>>() };
+    const rows = await tx.$queryRaw<{ supplier_id: string }[]>`
+      SELECT DISTINCT supplier_id FROM app.event_contracted_suppliers(${eventId}::uuid)
+       WHERE app.can_rate_supplier(${eventId}::uuid, supplier_id)`;
+    const mine = await tx.supplierRating.findMany({
+      where: { eventId, ratedById: actor.userId },
+      select: { supplierId: true, ...scoresSelect, comment: true, updatedAt: true, ratedById: true, ratedBy: { select: { name: true } } },
+    });
+    return { open, canRate: new Set(rows.map((r) => r.supplier_id)), mine: new Map(mine.map((r) => [r.supplierId, toRating(r)])) };
+  });
+}
+
 const pick = (r: Record<RatingKey, number>) =>
   Object.fromEntries(RATING_CRITERIA.map((c) => [c.key, r[c.key]])) as Record<RatingKey, number>;
 
@@ -90,9 +126,10 @@ const ratingSchema = z.object({
   comment: optionalText(1000),
 });
 
-/** Dar ou corrigir a nota de um fornecedor no evento (só o diretor). */
+/** Dar ou corrigir a própria nota de um fornecedor no evento (o diretor ou o Head da área). */
 export async function rateSupplier(actor: Actor, eventId: string, supplierId: string, input: unknown) {
-  requireDirector(actor, eventId);
+  requireEventAccess(actor, eventId);
+  if (!canUsePreProduction(actor, eventId) && membershipFor(actor, eventId)?.role !== "HEAD") throw new NotFoundError("Fornecedor");
   if (!uuid.safeParse(supplierId).success) throw new NotFoundError("Fornecedor");
   const data = parse(ratingSchema, input);
   return actor.run(async (tx) => {
@@ -100,9 +137,15 @@ export async function rateSupplier(actor: Actor, eventId: string, supplierId: st
     if (!(RATING_OPEN_STATUSES as readonly string[]).includes(event.status)) {
       throw new ValidationError("A avaliação abre quando o evento chega no Fechamento");
     }
-    const signed = await tx.contract.findFirst({ where: { eventId, supplierId, status: "ASSINADO" }, select: { id: true } });
+    const [{ signed, allowed }] = await tx.$queryRaw<{ signed: boolean; allowed: boolean }[]>`
+      SELECT app.supplier_signed_in_event(${eventId}::uuid, ${supplierId}::uuid) AS signed,
+             app.can_rate_supplier(${eventId}::uuid, ${supplierId}::uuid) AS allowed`;
     if (!signed) throw new ValidationError("Só fornecedor com contrato assinado no evento é avaliado");
-    const before = await tx.supplierRating.findUnique({ where: { eventId_supplierId: { eventId, supplierId } }, select: { id: true, ...scoresSelect, comment: true } });
+    if (!allowed) throw new ForbiddenError("Só o diretor e o Head da área avaliam este fornecedor");
+    const before = await tx.supplierRating.findUnique({
+      where: { eventId_supplierId_ratedById: { eventId, supplierId, ratedById: actor.userId } },
+      select: { id: true, ...scoresSelect, comment: true },
+    });
     const values = { ...pick(data), comment: data.comment ?? null, ratedById: actor.userId };
     const saved = before
       ? await tx.supplierRating.update({ where: { id: before.id }, data: values, select: { id: true, ...scoresSelect, comment: true } })

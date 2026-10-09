@@ -7,7 +7,7 @@ import { createCostItem, createCostSection } from "@/modules/costs/costs.service
 import { addSupplierQuote, chooseQuote, createQuote, getQuote } from "@/modules/quotes/quotes.service";
 import { attachContractPdf, createContract, setContractStatus } from "@/modules/contracts/contracts.service";
 import { getSupplier, listSuppliers } from "@/modules/suppliers/suppliers.service";
-import { listEventRatings, rateSupplier } from "@/modules/suppliers/ratings.service";
+import { listEventRatings, myRatings, rateSupplier } from "@/modules/suppliers/ratings.service";
 
 /**
  * Avaliação dos fornecedores (fase 3D): com o evento no Fechamento, só o
@@ -34,12 +34,14 @@ let ev: string;
 let forte: string;
 let fraco: string;
 let request: string;
+let item: string;
+let area: string;
 
 beforeAll(async () => {
   setStorageForTests(memoryStorage());
   const e = await createEvent(await actorFor(db, "admin"), { clientId: d.clients.rock.id, name: "Feira das avaliações", startsAt: "2027-11-01T10:00", endsAt: "2027-11-02T22:00" });
   ev = e.id;
-  const area = (await owner.area.create({ data: { eventId: ev, name: "Infra" } })).id;
+  area = (await owner.area.create({ data: { eventId: ev, name: "Infra" } })).id;
   const join = (p: Person, role: "GERENTE" | "PRE_PRODUTOR" | "HEAD") =>
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-av@rockfestival.dev`, role, areaId: role === "HEAD" ? area : undefined, joinedAt: new Date() } });
   await join("marina", "GERENTE");
@@ -48,7 +50,7 @@ beforeAll(async () => {
 
   const m = await marina();
   const section = await createCostSection(m, ev, { name: "Energia" });
-  const item = (await createCostItem(m, section.id, { name: "Gerador 300 kVA", quantity: 1, frequency: 1 })).id;
+  item = (await createCostItem(m, section.id, { name: "Gerador 300 kVA", quantity: 1, frequency: 1 })).id;
   request = (await createQuote(await sofia(), ev, { title: "Gerador", briefing: "Gerador 300 kVA, 2 diárias.", responsibleId: s.id, costItemId: item })).id;
   const win = await addSupplierQuote(await sofia(), request, proposal(CNPJ.forte, "Forte Geradores Ltda", 20_000));
   await addSupplierQuote(await sofia(), request, proposal(CNPJ.fraco, "Fraco Energia Ltda", 22_000));
@@ -131,5 +133,34 @@ describe("nota e média", () => {
     const r = await owner.supplierRating.findFirstOrThrow({ where: { eventId: ev } });
     await expectPgError(as("marina", (tx) => tx.supplierRating.update({ where: { id: r.id }, data: { supplierId: fraco } })), "23514");
     await expectPgError(as("marina", (tx) => tx.supplierRating.update({ where: { id: r.id }, data: { ratedById: d.users.sofia! } })), "42501");
+  });
+});
+
+describe("o Head da área também avalia (pedido do Abu)", () => {
+  const rafael = () => actorFor(db, "rafael");
+  const HEAD = { quality: 7, deadline: 6, service: 8, cost: 7, flexibility: 6, problemSolving: 8, comment: "Atrasou a entrega do segundo gerador." };
+
+  it("só quando o fornecedor tem item da área dele (serviço e banco)", async () => {
+    await expectStatus(rateSupplier(await rafael(), ev, forte, HEAD), 403);
+    await expectPgError(insert("rafael", forte), "42501");
+    expect((await myRatings(await rafael(), ev)).canRate.size).toBe(0);
+    await owner.costItem.update({ where: { id: item }, data: { areaId: area } });
+    expect([...(await myRatings(await rafael(), ev)).canRate]).toEqual([forte]);
+  });
+
+  it("cada um dá a sua nota; a do evento é a média de todos", async () => {
+    expect(await rateSupplier(await rafael(), ev, forte, HEAD)).toMatchObject({ average: 7 });
+    expect(await owner.supplierRating.count({ where: { eventId: ev, supplierId: forte } })).toBe(2);
+    const l = await listEventRatings(await marina(), ev);
+    expect(l.items[0]).toMatchObject({ rating: { average: 9 }, others: [{ ratedBy: "Rafael Head Infra", average: 7, comment: HEAD.comment }], eventAverage: 8, history: { ratings: 1, overall: 8 } });
+    expect((await myRatings(await rafael(), ev)).mine.get(forte)).toMatchObject({ average: 7 });
+  });
+
+  it("o Head vê e corrige só a nota dele, sem valores", async () => {
+    expect(await as("rafael", (tx) => tx.supplierRating.findMany({ where: { eventId: ev }, select: { ratedById: true } }))).toEqual([{ ratedById: d.users.rafael }]);
+    const marinas = await owner.supplierRating.findFirstOrThrow({ where: { eventId: ev, ratedById: d.users.marina! } });
+    expect(await as("rafael", (tx) => tx.supplierRating.updateMany({ where: { id: marinas.id }, data: { cost: 0 } }))).toEqual({ count: 0 });
+    await expectStatus(listEventRatings(await rafael(), ev), 404);
+    await expectStatus(rateSupplier(await rafael(), ev, fraco, HEAD), 422);
   });
 });

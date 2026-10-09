@@ -1837,10 +1837,10 @@ model ContractItem {
   @@map("contract_items")
 }
 
-/// Avaliação do fornecedor num evento (fase 3D): o diretor dá de 0 a 10 em 6
-/// critérios quando o evento chega no Fechamento, para quem teve contrato
-/// assinado. Uma por fornecedor por evento; o diretor pode corrigir. A
-/// Pré-produção só vê as médias (app.supplier_rating_summary).
+/// Avaliação do fornecedor num evento (fase 3D): o diretor e o Head da área
+/// dão de 0 a 10 em 6 critérios quando o evento chega no Fechamento, para quem
+/// teve contrato assinado. Uma por pessoa por fornecedor no evento; cada um
+/// corrige a sua. A Pré-produção só vê as médias (app.supplier_rating_summary).
 model SupplierRating {
   id             String   @id @default(uuid(7)) @db.Uuid
   eventId        String   @map("event_id") @db.Uuid
@@ -1860,7 +1860,7 @@ model SupplierRating {
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   ratedBy  User     @relation(fields: [ratedById], references: [id], onDelete: Restrict)
 
-  @@unique([eventId, supplierId])
+  @@unique([eventId, supplierId, ratedById])
   @@index([supplierId])
   @@map("supplier_ratings")
 }

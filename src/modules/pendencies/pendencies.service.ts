@@ -108,7 +108,7 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
       director && ratingOpen
         ? tx.contract.findMany({ where: { eventId, status: "ASSINADO" }, select: { supplierId: true, supplier: { select: { companyName: true, tradeName: true } } } })
         : Promise.resolve([]),
-      director && ratingOpen ? tx.supplierRating.findMany({ where: { eventId }, select: { supplierId: true } }) : Promise.resolve([]),
+      director && ratingOpen ? tx.supplierRating.findMany({ where: { eventId, ratedById: actor.userId }, select: { supplierId: true } }) : Promise.resolve([]),
     ]);
 
     const all: Pendency[] = [];

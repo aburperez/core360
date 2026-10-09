@@ -18,7 +18,8 @@ export const metadata = { title: "Avaliar fornecedores" };
 
 /**
  * No Fechamento, o diretor dá de 0 a 10 em 6 critérios para cada fornecedor
- * com contrato assinado no evento. A média vai para o cadastro e a cotação.
+ * com contrato assinado no evento; os Heads das áreas dão a deles pela tela
+ * Fornecedores do campo. A média vai para o cadastro e a cotação.
  */
 export default async function RatingsPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/avaliacao">) {
   const actor = await requireUser();
@@ -39,8 +40,9 @@ export default async function RatingsPage({ params }: PageProps<"/eventos/[event
           )}
         </PageHeading>
         <p className="text-sm text-muted">
-          De 0 a 10 em cada critério, para cada fornecedor com contrato assinado. A média de todos os eventos aparece em Fornecedores e na cotação,
-          para a Pré-produção escolher melhor. As notas de cada evento e o comentário só o diretor vê. O campo e o cliente não veem nada.
+          De 0 a 10 em cada critério, para cada fornecedor com contrato assinado. O Head da área também dá a nota dele, pela tela Fornecedores
+          da Gestão de campo. A nota do evento é a média de todos, e a média de todos os eventos aparece em Fornecedores e na cotação. As notas
+          de cada pessoa e os comentários só o diretor vê; o Head vê só a dele.
         </p>
 
         {!data.open && (
@@ -69,15 +71,17 @@ export default async function RatingsPage({ params }: PageProps<"/eventos/[event
                       </p>
                     )}
                   </div>
-                  {s.rating ? (
+                  {s.eventAverage !== null ? (
                     <div className="text-right">
-                      <p className="text-3xl font-bold tabular-nums">{ratingText(s.rating.average)}</p>
-                      <p className="text-xs text-muted">neste evento</p>
+                      <p className="text-3xl font-bold tabular-nums">{ratingText(s.eventAverage)}</p>
+                      <p className="text-xs text-muted">neste evento · {s.others.length + (s.rating ? 1 : 0)} {s.others.length + (s.rating ? 1 : 0) === 1 ? "nota" : "notas"}</p>
                     </div>
                   ) : data.open && (
                     <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-bold text-amber-200">Falta avaliar</span>
                   )}
                 </div>
+                {s.rating && <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Sua nota · {ratingText(s.rating.average)}</p>}
+                {!s.rating && data.open && <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-200">Falta a sua nota</p>}
                 {s.rating ? (
                   <div className="space-y-3">
                     <RatingBars scores={s.rating} />
@@ -91,6 +95,22 @@ export default async function RatingsPage({ params }: PageProps<"/eventos/[event
                   <RatingForm eventId={eventId} supplierId={s.supplierId} initial={null} />
                 ) : (
                   <p className="text-sm text-muted">Aguardando o Fechamento.</p>
+                )}
+                {s.others.length > 0 && (
+                  <div className="mt-4 border-t border-border pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Outras notas</p>
+                    <ul className="space-y-2">
+                      {s.others.map((o) => (
+                        <li key={o.ratedBy} className="rounded-xl bg-background/50 p-3 text-sm">
+                          <p className="flex justify-between gap-3">
+                            <b>{o.ratedBy}</b>
+                            <span className="font-bold tabular-nums">{ratingText(o.average)}</span>
+                          </p>
+                          {o.comment && <p className="mt-1 whitespace-pre-wrap text-muted">{o.comment}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </Panel>
             ))}
