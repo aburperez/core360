@@ -210,6 +210,17 @@ export const TOOLS: Tool[] = [
     img: "/site/relatorios.webp", alt: "Relatório financeiro pronto para PDF no computador",
   },
   {
+    id: "alertas", part: "pre", title: "Alertas de prazo",
+    serve: "Avisar cada pessoa antes do prazo vencer, sem ninguém precisar lembrar.",
+    quem: "Cada responsável recebe os seus; sem responsável, o Diretor",
+    passos: [
+      "Itens, marcos do cronograma e pendências avisam 7 dias, 3 dias, 48 horas e na véspera do prazo, no app.",
+      "O Diretor também é avisado da chegada do dia do evento.",
+      "Quando a montagem termina, sai um aviso com o que não foi montado e as chegadas que faltaram. Nenhum aviso se repete.",
+    ],
+    img: "/site/alertas.webp", alt: "Lista de avisos de prazo no computador",
+  },
+  {
     id: "encerramento", part: "pre", title: "Histórico e encerramento",
     serve: "Guardar tudo do evento com a agência e não deixar fotos e dados pessoais esquecidos no sistema.",
     quem: "Só o Diretor",
