@@ -70,6 +70,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
         : pending.today ? `${pending.today} vence${pending.today === 1 ? "" : "m"} hoje · ${pending.week} na semana` : `Nada atrasado · ${pending.week} na semana`,
     },
     { href: `${base}/cronograma`, icon: "calendar", title: "Cronograma", line: "Marcos de T-30 ao dia do evento" },
+    { href: `${base}/montagem`, icon: "truck", title: "Mapa de montagem", line: "Chegadas dos fornecedores na montagem" },
     { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
     {
       href: `${base}/itens`, icon: "items", title: "Mapa de itens",

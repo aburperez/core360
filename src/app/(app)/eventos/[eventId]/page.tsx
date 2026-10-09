@@ -8,6 +8,7 @@ import { fieldDocumentCount } from "@/modules/documents/documents.service";
 import { getEvent } from "@/modules/events/events.service";
 import { getDashboard } from "@/modules/dashboard/dashboard.service";
 import { countMyPendingReceipts } from "@/modules/receipts/receipts.service";
+import { arrivalsSummary } from "@/modules/arrivals/arrivals.service";
 import { myBriefingState } from "@/modules/briefings/briefings.service";
 import { getMyPlan, myPlanSummary } from "@/modules/functions/functions.service";
 import { plansSummary } from "@/modules/floorplans/floorplans.service";
@@ -30,9 +31,9 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
   if (isClient(actor, eventId)) return <ClientHome actor={actor} eventId={eventId} />;
   // Pré-produtor não tem campo: a casa dele é a Pré-produção.
   if (!canUseField(actor, eventId)) redirect(`/eventos/${eventId}/pre-producao`);
-  const [event, dash, toReceive, briefing, plan, stages, docs] = await Promise.all([
+  const [event, dash, toReceive, briefing, plan, stages, docs, arrivals] = await Promise.all([
     getEvent(actor, eventId), getDashboard(actor, eventId), countMyPendingReceipts(actor, eventId), myBriefingState(actor, eventId),
-    myPlanSummary(actor, eventId), plansSummary(actor, eventId), fieldDocumentCount(actor, eventId),
+    myPlanSummary(actor, eventId), plansSummary(actor, eventId), fieldDocumentCount(actor, eventId), arrivalsSummary(actor, eventId),
   ]);
   if ("views" in dash) return null; // Cliente: já tratado acima.
   const base = `/eventos/${eventId}`;
@@ -59,6 +60,21 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
             </span>
           </span>
           <Icon name="chevron" className="h-5 w-5 shrink-0 text-amber-300" />
+        </Link>
+      )}
+      {arrivals && arrivals.late > 0 && (
+        <Link
+          href={`${base}/montagem`}
+          className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-red-500/50 bg-red-500/10 p-4 transition hover:border-red-400"
+        >
+          <span className="flex items-center gap-3">
+            <Icon name="truck" className="h-6 w-6 shrink-0 text-red-300" />
+            <span>
+              <span className="block font-semibold text-red-300">{arrivals.late === 1 ? "1 chegada atrasada" : `${arrivals.late} chegadas atrasadas`}</span>
+              <span className="block text-sm text-muted">Fornecedor que não chegou no horário ou montagem que passou do previsto.</span>
+            </span>
+          </span>
+          <Icon name="chevron" className="h-5 w-5 shrink-0 text-red-300" />
         </Link>
       )}
       {toReceive > 0 && (
@@ -96,6 +112,12 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
       line: stages ? (stages.late ? `${stages.late} ${stages.late === 1 ? "etapa atrasada" : "etapas atrasadas"}` : `${stages.done} de ${stages.total} etapas`) : "Onde fica cada etapa",
       alert: !!stages?.late,
     },
+    ...(arrivals && arrivals.total > 0
+      ? [{
+          href: `${base}/montagem`, icon: "truck" as const, title: "Montagem", alert: arrivals.late > 0,
+          line: arrivals.today ? `Hoje: ${arrivals.todayArrived} de ${arrivals.today} chegaram` : `${arrivals.done} de ${arrivals.total} montadas`,
+        }]
+      : []),
     { href: `${base}/equipe`, icon: "team", title: manager ? "Montar equipe" : "Equipe", line: "Áreas, equipes e pessoas" },
     ...(briefing !== "SEM" || plan.has
       ? [{ href: `${base}/briefing`, icon: "briefing" as const, title: "Meu briefing", line: plan.pending ? `${plan.pending} atividades a fazer` : "Função e agenda" }]

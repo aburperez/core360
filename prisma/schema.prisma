@@ -199,6 +199,9 @@ model User {
   milestonesCreated        EventMilestone[]     @relation("EventMilestoneCreatedBy")
   tasksDone                EventTask[]          @relation("EventTaskDoneBy")
   tasksCreated             EventTask[]          @relation("EventTaskCreatedBy")
+  arrivalsArrived          Arrival[]            @relation("ArrivalArrivedBy")
+  arrivalsStatus           Arrival[]            @relation("ArrivalStatusBy")
+  arrivalsCreated          Arrival[]            @relation("ArrivalCreatedBy")
   contractsCancelled       Contract[]           @relation("ContractCancelledBy")
   participantsCreated      Participant[]        @relation("ParticipantCreatedBy")
   invitationsCreated       Invitation[]
@@ -456,6 +459,7 @@ model Event {
   supplierRatings SupplierRating[]
   milestones      EventMilestone[]
   tasks           EventTask[]
+  arrivals        Arrival[]
   floorPlans      FloorPlan[]
   planPoints      PlanPoint[]
   planPhotos      PlanPointPhoto[]
@@ -492,6 +496,7 @@ model Area {
   planPoints   PlanPoint[]
   costItems    CostItem[]
   tasks        EventTask[]
+  arrivals     Arrival[]
 
   /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
   @@unique([eventId, id])
@@ -567,6 +572,7 @@ model Participant {
   responsibleItems       CostItem[]          @relation("CostItemResponsible")
   milestones             EventMilestone[]    @relation("EventMilestoneResponsible")
   tasks                  EventTask[]         @relation("EventTaskResponsible")
+  arrivals               Arrival[]           @relation("ArrivalResponsible")
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
   briefing               Briefing?
   clientView             ClientView?
@@ -1005,15 +1011,16 @@ model CostItem {
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event       Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  section     CostSection    @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
-  receiver    Participant?   @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
-  responsible Participant?   @relation("CostItemResponsible", fields: [eventId, responsibleId], references: [eventId, id], onDelete: NoAction, map: "cost_items_responsible_fkey")
-  area        Area?          @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction, map: "cost_items_area_fkey")
-  receipt     ItemReceipt?
-  dependsOn   CostItem?      @relation("CostItemDependsOn", fields: [eventId, dependsOnId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "cost_items_depends_on_fkey")
-  dependents  CostItem[]     @relation("CostItemDependsOn")
-  quotes      QuoteRequest[]
+  event        Event          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  section      CostSection    @relation(fields: [eventId, sectionId], references: [eventId, id], onDelete: Cascade)
+  receiver     Participant?   @relation("CostItemReceiver", fields: [eventId, receiverId], references: [eventId, id], onDelete: NoAction)
+  responsible  Participant?   @relation("CostItemResponsible", fields: [eventId, responsibleId], references: [eventId, id], onDelete: NoAction, map: "cost_items_responsible_fkey")
+  area         Area?          @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction, map: "cost_items_area_fkey")
+  receipt      ItemReceipt?
+  dependsOn    CostItem?      @relation("CostItemDependsOn", fields: [eventId, dependsOnId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "cost_items_depends_on_fkey")
+  dependents   CostItem[]     @relation("CostItemDependsOn")
+  arrivalItems ArrivalItem[]
+  quotes       QuoteRequest[]
 
   @@unique([eventId, number])
   @@unique([eventId, id])
@@ -1745,6 +1752,7 @@ model Supplier {
   quotes    SupplierQuote[]
   contracts Contract[]
   ratings   SupplierRating[]
+  arrivals  Arrival[]
 
   @@unique([agencyId, cnpj])
   @@index([agencyId, companyName])
@@ -1813,6 +1821,7 @@ model Contract {
   signedBy    User?          @relation("ContractSignedBy", fields: [signedById], references: [id], onDelete: Restrict)
   cancelledBy User?          @relation("ContractCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
   items       ContractItem[]
+  arrival     Arrival?
 
   @@unique([eventId, number])
   @@index([supplierId])
@@ -1913,4 +1922,80 @@ model EventTask {
 
   @@index([eventId, dueOn])
   @@map("event_tasks")
+}
+
+// ───────────────────────── Mapa de montagem (fase 5A) ─────────────────────────
+// Cada chegada de fornecedor na montagem: horário, veículo, doca, área,
+// responsável e status. Nasce do contrato assinado; a Pré-produção completa e o
+// campo (Gerente, Head da área, responsável) marca chegou, montando, montado e
+// retirado. Nada de valores: o fornecedor e os itens ficam copiados como texto.
+
+enum ArrivalStatus {
+  AGENDADO
+  CHEGOU
+  MONTANDO
+  MONTADO
+  RETIRADO
+
+  @@map("arrival_status")
+}
+
+model Arrival {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  eventId       String        @map("event_id") @db.Uuid
+  /// O contrato que criou esta chegada (uma por contrato).
+  contractId    String?       @unique @map("contract_id") @db.Uuid
+  supplierId    String?       @map("supplier_id") @db.Uuid
+  supplierName  String        @map("supplier_name")
+  scheduledAt   DateTime?     @map("scheduled_at") @db.Timestamptz(3)
+  /// Até quando vai a montagem (previsto).
+  endsAt        DateTime?     @map("ends_at") @db.Timestamptz(3)
+  vehicle       String?
+  plate         String?
+  driver        String?
+  driverPhone   String?       @map("driver_phone")
+  /// Doca ou portão de entrada.
+  dock          String?
+  areaId        String?       @map("area_id") @db.Uuid
+  responsibleId String?       @map("responsible_id") @db.Uuid
+  notes         String?
+  status        ArrivalStatus @default(AGENDADO)
+  arrivedAt     DateTime?     @map("arrived_at") @db.Timestamptz(3)
+  arrivedById   String?       @map("arrived_by") @db.Uuid
+  statusAt      DateTime?     @map("status_at") @db.Timestamptz(3)
+  statusById    String?       @map("status_by") @db.Uuid
+  /// Vazio nas que o app cria do contrato.
+  createdById   String?       @map("created_by") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  contract    Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  supplier    Supplier?     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  area        Area?         @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "arrivals_area_fkey")
+  responsible Participant?  @relation("ArrivalResponsible", fields: [eventId, responsibleId], references: [eventId, id], onDelete: NoAction, onUpdate: NoAction, map: "arrivals_responsible_fkey")
+  arrivedBy   User?         @relation("ArrivalArrivedBy", fields: [arrivedById], references: [id], onDelete: Restrict)
+  statusBy    User?         @relation("ArrivalStatusBy", fields: [statusById], references: [id], onDelete: Restrict)
+  createdBy   User?         @relation("ArrivalCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items       ArrivalItem[]
+
+  @@index([eventId, scheduledAt])
+  @@map("arrivals")
+}
+
+/// Item que chega nesta entrega (nome e quantidade copiados, sem valores).
+model ArrivalItem {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  arrivalId  String   @map("arrival_id") @db.Uuid
+  costItemId String?  @map("cost_item_id") @db.Uuid
+  name       String
+  quantity   Decimal? @db.Decimal(12, 3)
+  unit       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  arrival  Arrival   @relation(fields: [arrivalId], references: [id], onDelete: Cascade)
+  costItem CostItem? @relation(fields: [costItemId], references: [id], onDelete: SetNull)
+
+  @@unique([arrivalId, costItemId])
+  @@map("arrival_items")
 }

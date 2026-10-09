@@ -8,6 +8,7 @@ import { myBriefingState } from "@/modules/briefings/briefings.service";
 import { myPlanSummary } from "@/modules/functions/functions.service";
 import { fieldDocumentCount } from "@/modules/documents/documents.service";
 import { canSeeContractedSuppliers } from "@/modules/suppliers/supplier-meta";
+import { canSeeArrivals } from "@/modules/arrivals/arrivals.service";
 
 export default async function EventLayout({ children, params }: LayoutProps<"/eventos/[eventId]">) {
   const actor = await requireUser();
@@ -36,6 +37,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
         hasBriefing={briefing !== "SEM" || plan.has}
         hasDocuments={docs > 0}
         canSeeSuppliers={canUseField(actor, eventId) && canSeeContractedSuppliers(actor, eventId)}
+        canSeeArrivals={canUseField(actor, eventId) && canSeeArrivals(actor, eventId)}
         client={isClient(actor, eventId) ? (membershipFor(actor, eventId)?.clientView ?? null) : null}
         canSwitchEvent={actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin}
       />

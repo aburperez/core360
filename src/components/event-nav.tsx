@@ -19,6 +19,8 @@ type NavProps = {
   hasDocuments: boolean;
   /** Fornecedores contratados (o gestor e o Head da área). */
   canSeeSuppliers: boolean;
+  /** Chegadas da montagem (o gestor, o Head e o Operacional responsável). */
+  canSeeArrivals: boolean;
   /** Cliente: o que o Gerente liberou para ele acompanhar (null para os outros). */
   client: { costs: boolean; team: boolean; progress: boolean } | null;
 };
@@ -59,6 +61,7 @@ export function EventNav(props: NavProps) {
     { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`) },
     { href: `${pre}/cronograma`, label: "Cronograma", icon: "calendar", active: path.startsWith(`${pre}/cronograma`) },
     { href: `${pre}/pendencias`, label: "Pendências", icon: "pending", active: path.startsWith(`${pre}/pendencias`) },
+    { href: `${pre}/montagem`, label: "Mapa de montagem", short: "Montagem", icon: "truck", active: path.startsWith(`${pre}/montagem`) },
     { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true },
     { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`) },
     { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`), bar: true },
@@ -76,6 +79,7 @@ export function EventNav(props: NavProps) {
     ...(props.canSeeTickets ? [{ href: `${base}/ocorrencias`, label: "Chamados", icon: "tickets" as const, active: path.startsWith(`${base}/ocorrencias`) && !path.endsWith("/nova") }] : []),
     ...(props.canCreate ? [{ href: `${base}/ocorrencias/nova`, label: "Novo", icon: "plus" as const, active: path.endsWith("/nova"), primary: true }] : []),
     { href: `${base}/planta`, label: "Planta do evento", short: "Planta", icon: "map", active: path.startsWith(`${base}/planta`) },
+    ...(props.canSeeArrivals ? [{ href: `${base}/montagem`, label: "Montagem", icon: "truck" as const, active: path.startsWith(`${base}/montagem`), desktopOnly: true }] : []),
     { href: `${base}/equipe`, label: props.canBuildTeam ? "Montar equipe" : "Equipe", short: "Equipe", icon: "team", active: path.startsWith(`${base}/equipe`) },
     // Na barra de baixo cabem cinco: os recebimentos ficam no menu ☰ e no aviso do painel.
     ...(props.hasReceipts ? [{ href: `${base}/recebimentos`, label: "Recebimentos", short: "Receber", icon: "receipts" as const, active: path.startsWith(`${base}/recebimentos`), desktopOnly: true }] : []),
