@@ -14,6 +14,7 @@ import { RATING_OPEN_STATUSES } from "../suppliers/rating-meta";
 import { pendencyGroup, type PendencyGroup, type PendencyKind } from "./pendency-meta";
 import { assemblyDeadlines } from "../arrivals/assembly";
 import { formatDateTime } from "../../lib/format";
+import { financialState } from "../finance/lock";
 
 /**
  * Central de pendências (fase 4B): numa lista só, o que falta fazer no
@@ -184,6 +185,17 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
         dueOn: dates[0] ?? null, area: linked.find((x) => x.area)?.area ?? null, responsible: null, href: `${base}/contratos/${c.id}`, toggle: false,
       });
     }
+    // Fase 7B: no Fechamento, o diretor fecha o financeiro (pago, motivo dos estouros).
+    if (director && event.status === "FECHAMENTO") {
+      const fin = await financialState(tx, eventId);
+      if (fin.items > 0 && !fin.closed) {
+        push({
+          kind: "FINANCEIRO", id: eventId, title: "Fechar o financeiro",
+          detail: fin.pending ? `${fin.pending} ${fin.pending === 1 ? "item" : "itens"} sem realizado, pagamento ou motivo do estouro` : "Tudo pago: falta fechar",
+          dueOn: null, area: null, responsible: null, href: `${base}/financeiro`, toggle: false,
+        });
+      }
+    }
     const ratedIds = new Set(rated.map((r) => r.supplierId));
     const seen = new Set<string>();
     for (const s of signed) {
@@ -199,7 +211,7 @@ export async function listPendencies(actor: Actor, eventId: string, filters: unk
     }
 
     // Mais atrasado primeiro; no mesmo dia, pela ordem dos tipos.
-    const order: PendencyKind[] = ["MARCO", "ITEM", "MONTAGEM", "COTACAO", "CONTRATO", "AVALIACAO", "MANUAL"];
+    const order: PendencyKind[] = ["MARCO", "ITEM", "MONTAGEM", "COTACAO", "CONTRATO", "AVALIACAO", "FINANCEIRO", "MANUAL"];
     all.sort((a, b) => (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999") || order.indexOf(a.kind) - order.indexOf(b.kind) || a.title.localeCompare(b.title, "pt-BR"));
     const shown = all.filter((p) => (!f.areaId || p.area?.id === f.areaId) && (!f.responsibleId || p.responsible?.id === f.responsibleId));
     const count = (g: PendencyGroup, list = all) => list.filter((p) => p.group === g).length;

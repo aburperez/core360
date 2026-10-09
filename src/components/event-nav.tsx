@@ -67,7 +67,7 @@ export function EventNav(props: NavProps) {
     { href: `${pre}/montagem`, label: "Mapa de montagem", short: "Montagem", icon: "truck", active: path.startsWith(`${pre}/montagem`) },
     { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true },
     { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`) },
-    { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`), bar: true },
+    { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`) || path.startsWith(`${pre}/financeiro`), bar: true },
     { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`) },
     { href: `${pre}/fornecedores`, label: "Fornecedores", icon: "suppliers", active: path.startsWith(`${pre}/fornecedores`) },
     { href: `${pre}/contratos`, label: "Contratos", icon: "contract", active: path.startsWith(`${pre}/contratos`) },

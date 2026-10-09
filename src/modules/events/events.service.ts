@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { assertFinancialOpen, financialMissing } from "../finance/lock";
 import type { Actor, EventRole } from "../../server/authz/actor";
 import { isAgencyAdmin, isEventAdmin, membershipFor } from "../../server/authz/actor";
 import { canReviewSla, canSeeEvent, canUsePreProduction } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
-import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { DEFAULT_SLA_MINUTES } from "../occurrences/sla";
 import { DEFAULT_TZ, fromLocalInput } from "../../lib/tz";
@@ -202,6 +203,10 @@ export async function updateEvent(actor: Actor, eventId: string, input: unknown)
       });
       if (!ok) throw new ValidationError("O responsável geral e o produtor precisam ser Gerente ou Pré-produtor do evento");
     }
+    // Fase 7B: Concluído só com o financeiro fechado (quando tem algum valor).
+    if (data.status === "CONCLUIDO" && before.status !== "CONCLUIDO" && (await financialMissing(tx, eventId))) {
+      throw new ConflictError("Feche o financeiro antes de concluir o evento (Pré-produção › Orçamento › Fechamento financeiro).");
+    }
     const changes = diff(before, data as Partial<typeof before>);
     if (Object.keys(changes.after).length) {
       await tx.event.update({ where: { id: eventId }, data });
@@ -216,6 +221,7 @@ export async function updateEvent(actor: Actor, eventId: string, input: unknown)
       };
       const money = diff(old, next);
       if (Object.keys(money.after).length) {
+        if (prev?.financialClosedAt) await assertFinancialOpen(tx, eventId);
         await tx.eventFinances.upsert({
           where: { eventId },
           create: { eventId, ...old, ...next, updatedById: actor.userId },

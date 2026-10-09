@@ -12,6 +12,7 @@ import { EventTabs } from "@/components/event-nav";
 import { PageHeading, Panel } from "@/components/panel";
 import { EmptyState, LinkButton, PAGE, cx } from "@/components/ui";
 import { BudgetItems } from "./budget-items";
+import { canCloseFinancial } from "@/modules/finance/closing.service";
 import { BudgetTabs } from "./tabs";
 
 export const metadata = { title: "Orçamento" };
@@ -31,7 +32,7 @@ export default async function BudgetPage({ params }: PageProps<"/eventos/[eventI
     <>
       <TopBar title="Orçamento" subtitle={event.name} back={`/eventos/${eventId}/pre-producao`} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
-      <BudgetTabs eventId={eventId} active="orcamento" />
+      <BudgetTabs eventId={eventId} active="orcamento" financial={canCloseFinancial(actor, eventId)} />
       <main className={cx(PAGE, "space-y-4 py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Orçamento" />
         {b.items.length === 0 ? (

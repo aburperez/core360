@@ -10,6 +10,7 @@ import { requireEventAccess } from "../events/events.service";
 import { readMatrix, writeMatrix, type Matrix, type MatrixHeader } from "./matrix";
 import { costTotals, DEFAULT_RATES, lineSubtotal, type CostBilling, type CostRates } from "./totals";
 import { fieldText } from "../receipts/field-text";
+import { assertFinancialOpen, LOCKED_ITEM_FIELDS } from "../finance/lock";
 import { norm } from "../../server/xlsx";
 import { canSetItemStatus, COST_CENTERS, ITEM_CATEGORIES, ITEM_STATUS_LABEL, ITEM_STATUSES, itemCode, type ItemCategory, type ItemStatus } from "../items/item-meta";
 
@@ -277,6 +278,7 @@ export async function deleteCostSection(actor: Actor, id: string) {
   return actor.run(async (tx) => {
     const s = await loadSection(actor, tx, id);
     const items = await tx.costItem.count({ where: { sectionId: s.id } });
+    if (items) await assertFinancialOpen(tx, s.eventId);
     await dropReceipts(actor, tx, s.eventId, { costItem: { sectionId: s.id } });
     await tx.costSection.delete({ where: { id: s.id } });
     await audit(tx, actor, { eventId: s.eventId, entity: "cost_section", entityId: s.id, action: "DELETE", before: { name: s.name, items } });
@@ -292,7 +294,7 @@ const decimalInput = (max: number, places: number) =>
       z.number({ message: "Número inválido" }).min(0, "Não pode ser negativo").max(max, "Valor alto demais"),
     )
     .transform((n) => Math.round(n * 10 ** places) / 10 ** places);
-const money = decimalInput(1e11, 2);
+export const money = decimalInput(1e11, 2);
 const amount = decimalInput(1e8, 3);
 const itemFields = {
   name: text(200),
@@ -377,6 +379,7 @@ export async function createCostItem(actor: Actor, sectionId: string, input: unk
   const data = parse(itemCreateSchema, input);
   return actor.run(async (tx) => {
     const s = await loadSection(actor, tx, sectionId);
+    await assertFinancialOpen(tx, s.eventId);
     const item = await tx.costItem.create({
       data: {
         ...data,
@@ -405,6 +408,7 @@ export async function updateCostItem(actor: Actor, id: string, input: unknown) {
   const patch: Record<string, unknown> = Object.fromEntries(Object.entries(data).filter(([k]) => k in sent));
   return actor.run(async (tx) => {
     const i = await loadItem(actor, tx, id);
+    if (LOCKED_ITEM_FIELDS.some((k) => k in patch)) await assertFinancialOpen(tx, i.eventId);
     await checkItemFields(actor, tx, i, patch);
     if (sectionId && sectionId !== i.sectionId) {
       // Outra seção, do MESMO evento (a FK composta também garante).
@@ -428,6 +432,7 @@ export async function updateCostItem(actor: Actor, id: string, input: unknown) {
 export async function deleteCostItem(actor: Actor, id: string) {
   return actor.run(async (tx) => {
     const i = await loadItem(actor, tx, id);
+    await assertFinancialOpen(tx, i.eventId);
     await dropReceipts(actor, tx, i.eventId, { costItemId: i.id });
     await tx.costItem.delete({ where: { id: i.id } });
     await audit(tx, actor, { eventId: i.eventId, entity: "cost_item", entityId: i.id, action: "DELETE", before: auditItem({ name: i.name, unitValue: i.unitValue, quantity: i.quantity }) });
@@ -483,6 +488,7 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
   };
 
   return actor.run(async (tx) => {
+    await assertFinancialOpen(tx, eventId);
     const sections = await tx.costSection.findMany({ where: { eventId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } });
     const current = await tx.costItem.findMany({
       where: { eventId },

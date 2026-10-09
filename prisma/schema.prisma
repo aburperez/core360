@@ -238,6 +238,7 @@ model User {
   visitsCreated            TechnicalVisit[]     @relation("TechnicalVisitCreatedBy")
   archivesDownloaded       EventArchive[]       @relation("EventArchiveDownloadedBy")
   archivesClosed           EventArchive[]       @relation("EventArchiveClosedBy")
+  financialClosings        EventFinances[]      @relation("FinancialClosedBy")
 
   @@map("users")
 }
@@ -1015,6 +1016,11 @@ model CostItem {
   /// Contratado e Realizado (totais do item): só o diretor de produção.
   contractedValue Decimal?      @map("contracted_value") @db.Decimal(14, 2)
   actualValue     Decimal?      @map("actual_value") @db.Decimal(14, 2)
+  /// Fechamento financeiro (fase 7B): pago em, nota fiscal e o motivo quando o
+  /// realizado passou do contratado. Só o produtor executivo e o diretor.
+  paidOn          DateTime?     @map("paid_on") @db.Date
+  invoiceNumber   String?       @map("invoice_number")
+  overrunReason   String?       @map("overrun_reason")
   /// Cronograma (fase 4A): o item que precisa ficar pronto antes deste.
   dependsOnId     String?       @map("depends_on_id") @db.Uuid
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1623,13 +1629,17 @@ model ClientView {
 /// Valores da ficha do evento: orçamento aprovado e centro de custo. Tabela à
 /// parte para o campo nunca ler (só a Pré-produção e o Admin).
 model EventFinances {
-  eventId        String   @id @map("event_id") @db.Uuid
-  approvedBudget Decimal? @map("approved_budget") @db.Decimal(14, 2)
-  costCenter     String?  @map("cost_center")
-  updatedById    String   @map("updated_by") @db.Uuid
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  eventId           String    @id @map("event_id") @db.Uuid
+  approvedBudget    Decimal?  @map("approved_budget") @db.Decimal(14, 2)
+  costCenter        String?   @map("cost_center")
+  updatedById       String    @map("updated_by") @db.Uuid
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// Fechamento financeiro (fase 7B): fechado, os valores do evento travam.
+  financialClosedAt DateTime? @map("financial_closed_at") @db.Timestamptz(3)
+  financialClosedBy String?   @map("financial_closed_by") @db.Uuid
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  financialCloser User? @relation("FinancialClosedBy", fields: [financialClosedBy], references: [id], onDelete: SetNull)
 
   @@map("event_finances")
 }

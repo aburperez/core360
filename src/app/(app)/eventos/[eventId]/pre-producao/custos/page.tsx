@@ -7,6 +7,7 @@ import { listReceiverOptions } from "@/modules/receipts/receipts.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
+import { canCloseFinancial } from "@/modules/finance/closing.service";
 import { BudgetTabs } from "../orcamento/tabs";
 import { CostsEditor } from "./costs-editor";
 
@@ -23,7 +24,7 @@ export default async function CostsPage({ params }: PageProps<"/eventos/[eventId
     <>
       <TopBar title="Orçamento" subtitle={event.name} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
-      <BudgetTabs eventId={eventId} active="planilha" />
+      <BudgetTabs eventId={eventId} active="planilha" financial={canCloseFinancial(actor, eventId)} />
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <CostsEditor eventId={eventId} sheet={sheet} receivers={receivers} />
       </main>

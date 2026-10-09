@@ -17,14 +17,14 @@ export async function getBudget(actor: Actor, eventId: string) {
   if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
   const data = await actor.run(async (tx) => {
     const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { number: true } });
-    const finances = await tx.eventFinances.findUnique({ where: { eventId }, select: { approvedBudget: true } });
+    const finances = await tx.eventFinances.findUnique({ where: { eventId }, select: { approvedBudget: true, financialClosedAt: true } });
     const items = await tx.costItem.findMany({
       where: { eventId },
       orderBy: { number: "asc" },
       select: {
         id: true, number: true, name: true, category: true, costCenter: true, status: true, optional: true,
         unitValue: true, quantity: true, frequency: true, billing: true,
-        quotedValue: true, contractedValue: true, actualValue: true,
+        quotedValue: true, contractedValue: true, actualValue: true, paidOn: true, invoiceNumber: true,
       },
     });
     // Cotado sozinho: a menor proposta na disputa (o negociado, se houver) das cotações do item que não foram canceladas.
@@ -66,6 +66,9 @@ export async function getBudget(actor: Actor, eventId: string) {
       quotedFrom: fromQuote !== undefined ? ("COTACAO" as const) : i.quotedValue !== null ? ("DIGITADO" as const) : null,
       saving: lineSaving(line),
       overrun: lineOverrun(line),
+      /** Fechamento financeiro (fase 7B). */
+      paidOn: i.paidOn ? i.paidOn.toISOString().slice(0, 10) : null,
+      invoiceNumber: i.invoiceNumber,
     };
   });
 
@@ -79,6 +82,16 @@ export async function getBudget(actor: Actor, eventId: string) {
   };
 
   const totals = budgetTotals(rows);
+  const paymentTotals = (list: typeof rows) => {
+    const counted = list.filter((r) => !r.optional && (r.contracted !== null || r.actual !== null));
+    const round = (x: number) => Math.round(x * 100) / 100;
+    return {
+      paid: round(counted.filter((r) => r.paidOn).reduce((a, r) => a + (r.actual ?? 0), 0)),
+      toPay: round(counted.filter((r) => !r.paidOn).reduce((a, r) => a + (r.actual ?? r.contracted ?? 0), 0)),
+      paidItems: counted.filter((r) => r.paidOn).length,
+      items: counted.length,
+    };
+  };
   const approved = n(data.finances?.approvedBudget ?? null);
   return {
     items: rows,
@@ -86,6 +99,9 @@ export async function getBudget(actor: Actor, eventId: string) {
     byCategory: group(ITEM_CATEGORIES, (r) => r.category),
     byCostCenter: group(COST_CENTERS, (r) => r.costCenter),
     approved: { value: approved, contractedPct: approvedUse(totals.contracted, approved), left: approved === null ? null : Math.round((approved - totals.contracted) * 100) / 100 },
+    /** Fase 7B: pago e a pagar (itens com contratado ou realizado) e se o financeiro já fechou. */
+    payments: paymentTotals(rows),
+    financialClosedAt: data.finances?.financialClosedAt ?? null,
     can: { director: canReviewSla(actor, eventId) },
   };
 }

@@ -331,15 +331,24 @@ async function financeBlocks({ actor, eventId }: Ctx): Promise<Block[]> {
         [t.saving >= 0 ? "Economia" : "Contratou acima do estimado", brl(Math.abs(t.saving))],
         [t.overrun > 0 ? "Estouro" : "Pagou abaixo do contratado", brl(Math.abs(t.overrun))],
         ...(b.approved.value === null ? [] : [["Saldo do orçamento", brl(b.approved.left!)] as [string, string]]),
+        ["Pago", `${brl(b.payments.paid)} (${b.payments.paidItems} de ${b.payments.items} itens)`],
+        ["A pagar", brl(b.payments.toPay)],
+        ["Fechamento financeiro", b.financialClosedAt ? `Fechado em ${day(b.financialClosedAt.toISOString().slice(0, 10))}` : "Aberto"],
       ],
     },
     table("Por categoria", groupCols("Categoria"), b.byCategory.map((g) => groupRow(g.key ? CATEGORY[g.key as ItemCategory].label : "Sem categoria", g)), "Nenhum item."),
     table("Por centro de custo", groupCols("Centro de custo"), b.byCostCenter.map((g) => groupRow(g.key ? COST_CENTER_LABEL[g.key] : "Sem centro de custo", g)), "Nenhum item."),
     table("Itens",
-      [col("Código", 16), col("Item", 34), col("Categoria", 18), col("Status", 14), money("Estimado"), money("Cotado"), money("Contratado"), money("Realizado"), money("Economia"), money("Estouro")],
-      b.items.map((i) => [i.code, i.optional ? `${i.name} (opcional)` : i.name, category(i.category), ITEM_STATUS_LABEL[i.status], i.estimated, i.quoted, i.contracted, i.actual, i.saving, i.overrun]),
+      [col("Código", 16), col("Item", 34), col("Categoria", 18), col("Status", 14), money("Estimado"), money("Cotado"), money("Contratado"), money("Realizado"), money("Economia"), money("Estouro"), col("Pago em", 11), money("A pagar")],
+      b.items.map((i) => {
+        const counted = !i.optional && (i.contracted !== null || i.actual !== null);
+        return [
+          i.code, i.optional ? `${i.name} (opcional)` : i.name, category(i.category), ITEM_STATUS_LABEL[i.status], i.estimated, i.quoted, i.contracted, i.actual, i.saving, i.overrun,
+          i.paidOn ? day(i.paidOn) : "", counted && !i.paidOn ? (i.actual ?? i.contracted) : null,
+        ];
+      }),
       "Nenhum item.",
-      "Economia = Estimado − Contratado. Estouro = Realizado − Contratado. Os totais contam só os itens que já têm os dois valores; itens opcionais ficam fora."),
+      "Economia = Estimado − Contratado. Estouro = Realizado − Contratado. Os totais contam só os itens que já têm os dois valores; itens opcionais ficam fora. A pagar = o realizado (ou o contratado, sem realizado) dos itens ainda não pagos."),
     table("Contratos",
       [col("Nº", 6, { number: true }), col("Fornecedor", 28), col("Situação", 12), col("Itens", 8, { number: true }), money("Valor"), col("Assinado em", 13)],
       contracts.items.map((c) => [c.number, c.supplier, CONTRACT_STATUS[c.status], c.items, c.total, c.signedOn ? day(c.signedOn.toISOString().slice(0, 10)) : ""]),

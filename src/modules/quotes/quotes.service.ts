@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { assertFinancialOpen } from "../finance/lock";
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
@@ -719,6 +720,7 @@ export async function chooseQuote(actor: Actor, id: string, input: unknown) {
     // para comparar). Contratado preenchido põe o item em Contratado (banco).
     let applied: { contractedValue: number } | null = null;
     if (data.applyToCost && r.costItemId) {
+      await assertFinancialOpen(tx, r.eventId);
       const item = await tx.costItem.findFirst({ where: { id: r.costItemId, eventId: r.eventId } });
       if (!item) throw new NotFoundError("Item");
       const value = chosen.value;

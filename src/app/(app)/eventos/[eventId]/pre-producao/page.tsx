@@ -17,11 +17,12 @@ import { getSchedule } from "@/modules/schedule/schedule.service";
 import { arrivalsSummary } from "@/modules/arrivals/arrivals.service";
 import { itemStages } from "@/modules/panels/panels.service";
 import { canCloseEvent } from "@/modules/closure/closure.service";
+import { financialSummary } from "@/modules/finance/closing.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
 import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, Tile, pct } from "@/components/panel";
-import { ROLE_LABEL, formatDateTime, formatDuration, formatPeriod } from "@/lib/format";
+import { ROLE_LABEL, formatDate, formatDateTime, formatDuration, formatPeriod } from "@/lib/format";
 import { brl } from "@/lib/money";
 
 export const metadata = { title: "Pré-produção" };
@@ -37,10 +38,11 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
-  const [event, types, sheet, fn, quotes, visits, finances, brief, docs, pending, schedule, arrivals] = await Promise.all([
+  const [event, types, sheet, fn, quotes, visits, finances, brief, docs, pending, schedule, arrivals, money] = await Promise.all([
     getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
     quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId), getEventBriefing(actor, eventId),
     listDocuments(actor, eventId), pendenciesSummary(actor, eventId), getSchedule(actor, eventId), arrivalsSummary(actor, eventId),
+    financialSummary(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
   const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
@@ -92,6 +94,16 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       line: sheet.itemCount ? `${sheet.itemCount} itens · ${toDefine} a definir · ${noOwner} sem responsável` : "Nenhum item ainda",
     },
     { href: `${base}/orcamento`, icon: "costs", title: "Orçamento", line: sheet.itemCount ? `Planilha ${brl(sheet.totals.total)}` : "Planilha vazia" },
+    ...(money
+      ? [{
+          href: `${base}/financeiro`, icon: "costs" as const, title: "Fechamento financeiro",
+          alert: money.status === "FECHAMENTO" && money.needed && !money.closed,
+          line: money.closed ? `Fechado em ${formatDate(money.closed.at)}`
+            : !money.needed ? "Nenhum item contratado ainda"
+            : money.pending ? `${money.pending} ${money.pending === 1 ? "item falta" : "itens faltam"} · a pagar ${brl(money.toPay)}`
+            : money.status === "FECHAMENTO" ? "Tudo pago: pode fechar" : "Tudo pago · fecha na etapa Fechamento",
+        }]
+      : []),
     { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
     {
       href: `${base}/visitas`, icon: "visit", title: "Visitas técnicas",
