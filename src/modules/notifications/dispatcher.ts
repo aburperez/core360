@@ -267,12 +267,6 @@ export async function sendPending({ db, whatsapp, now = () => new Date() }: Disp
   return stats;
 }
 
-/** Fase 6C: lembrete semanal para baixar o histórico do evento concluído (só no app). */
-async function scanHistory({ db, now = () => new Date() }: DispatchDeps) {
-  const [r] = await db.$queryRaw<{ n: number }[]>`SELECT history_reminders(${now()}::timestamptz) AS n`;
-  return r?.n ?? 0;
-}
-
 /** Fase 7A: avisos de prazo (7 dias, 3 dias, 48 horas, véspera) e do fim da montagem (só no app). */
 async function scanDeadlines({ db, now = () => new Date() }: DispatchDeps) {
   const [r] = await db.$queryRaw<{ n: number }[]>`SELECT deadline_alerts(${now()}::timestamptz) AS n`;
@@ -283,8 +277,7 @@ export async function dispatch(deps: DispatchDeps) {
   const created = await processOutbox(deps);
   const sla = await scanSla(deps);
   const reminders = await scanUrgentReminders(deps);
-  const history = await scanHistory(deps);
   const deadlines = await scanDeadlines(deps);
   const whatsapp = await sendPending(deps);
-  return { created, sla, reminders, history, deadlines, whatsapp };
+  return { created, sla, reminders, deadlines, whatsapp };
 }

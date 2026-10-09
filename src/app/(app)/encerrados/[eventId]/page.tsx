@@ -6,10 +6,11 @@ import { TopBar } from "@/components/top-bar";
 import { Panel } from "@/components/panel";
 import { formatDateTime, formatPeriod } from "@/lib/format";
 import { brl } from "@/lib/money";
+import { CATEGORY, type ItemCategory } from "@/modules/items/item-meta";
 
 export const metadata = { title: "Evento encerrado" };
 
-/** O resumo de um evento encerrado: datas, cliente, os 4 valores e as notas dos fornecedores. */
+/** O resumo de um evento encerrado: datas, cliente, os 4 valores, os preços dos itens e as notas dos fornecedores. */
 export default async function ArchivedEventPage({ params }: PageProps<"/encerrados/[eventId]">) {
   const actor = await requireUser();
   const { eventId } = await params;
@@ -50,6 +51,29 @@ export default async function ArchivedEventPage({ params }: PageProps<"/encerrad
             <Row label="Itens" value={String(t.items)} />
           </dl>
         </Panel>
+        {s.items && s.items.length > 0 && (
+          <Panel title={`Preços dos itens (${s.items.length})`}>
+            <ul className="divide-y divide-border text-sm">
+              {s.items.map((i) => {
+                const price = i.actual ?? i.contracted ?? i.quoted ?? i.estimated;
+                return (
+                  <li key={i.code} className="flex items-start justify-between gap-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block">{i.name}{i.optional && <span className="text-muted"> (opcional)</span>}</span>
+                      <span className="block text-xs text-muted">
+                        {[i.category ? CATEGORY[i.category as ItemCategory]?.label : null, `${i.quantity.toLocaleString("pt-BR")}${i.unit ? ` ${i.unit}` : ""}`, i.supplier].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right tabular-nums">
+                      {price === null ? <span className="text-muted">—</span> : <b>{brl(price)}</b>}
+                      <span className="block text-xs text-muted">{i.actual !== null ? "realizado" : i.contracted !== null ? "contratado" : i.quoted !== null ? "cotado" : i.estimated !== null ? "estimado" : ""}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+        )}
         <Panel title={`Fornecedores (${s.ratings.length})`}>
           {s.ratings.length === 0 ? (
             <p className="text-sm text-muted">Nenhum fornecedor contratado.</p>
@@ -75,7 +99,7 @@ export default async function ArchivedEventPage({ params }: PageProps<"/encerrad
               </div>
             ))}
           </dl>
-          <p className="mt-3 text-sm text-muted">As fotos, os arquivos e os dados das pessoas foram apagados do app. Estão no histórico que a agência baixou.</p>
+          <p className="mt-3 text-sm text-muted">As fotos, os arquivos e os dados das pessoas foram apagados do app. Se a agência baixou a cópia do histórico, eles estão lá.</p>
         </Panel>
       </main>
     </>

@@ -232,13 +232,13 @@ export const TOOLS: Tool[] = [
     img: "/site/financeiro.webp", alt: "Tela do fechamento financeiro do evento no computador",
   },
   {
-    id: "encerramento", part: "pre", title: "Histórico e encerramento",
-    serve: "Guardar tudo do evento com a agência e não deixar fotos e dados pessoais esquecidos no sistema.",
+    id: "encerramento", part: "pre", title: "Histórico guardado e encerramento",
+    serve: "Manter o histórico de cada evento no app e só apagar quando a agência decidir.",
     quem: "Só o Diretor",
     passos: [
-      "Nada se apaga enquanto o evento não passa do Fechamento. Ao marcar Concluído, o Diretor recebe o aviso para baixar o histórico, e um lembrete por semana.",
-      "O histórico sai em ZIP com os relatórios em Excel, os documentos, os orçamentos, os contratos e as fotos.",
-      "Depois de baixar, o Diretor encerra digitando o nome do evento. Fica só um resumo: datas, cliente, os 4 valores e as notas dos fornecedores.",
+      "Nada se apaga sozinho. O evento concluído continua no app com relatórios, documentos, contratos e fotos.",
+      "A qualquer momento, o Diretor baixa uma cópia em ZIP para arquivar, com os relatórios em Excel e todos os arquivos.",
+      "Se quiser liberar espaço, usa \"Encerrar e excluir\", digitando o nome do evento. Fica um resumo com datas, cliente, os 4 valores, os preços dos itens e as notas dos fornecedores.",
     ],
     img: "/site/encerramento.webp", alt: "Tela de histórico e encerramento do evento no computador",
   },

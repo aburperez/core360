@@ -62,10 +62,10 @@ export function HistoryParts({ eventId, parts }: { eventId: string; parts: Part[
   );
 }
 
-/** Encerrar e apagar: só depois de baixar, com a caixa marcada e o nome do evento digitado. */
-export function ClosureForm({ eventId, eventName, parts, downloaded }: { eventId: string; eventName: string; parts: number; downloaded: boolean }) {
+/** Encerrar e excluir: com a caixa marcada e o nome do evento digitado. Baixar a cópia antes é opcional. */
+export function ClosureForm({ eventId, eventName, downloaded }: { eventId: string; eventName: string; downloaded: boolean }) {
   const router = useRouter();
-  const [saved, setSaved] = useState(false);
+  const [understood, setUnderstood] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +76,7 @@ export function ClosureForm({ eventId, eventName, parts, downloaded }: { eventId
     setError(null);
     setBusy(true);
     try {
-      await api(`/api/events/${eventId}/close`, { body: { confirm, savedAllParts: saved } });
+      await api(`/api/events/${eventId}/close`, { body: { confirm, understood } });
       router.replace(`/encerrados/${eventId}`);
     } catch (err) {
       setError((err as Error).message);
@@ -84,25 +84,27 @@ export function ClosureForm({ eventId, eventName, parts, downloaded }: { eventId
     }
   }
 
-  if (!downloaded) {
-    return <p className="text-sm text-muted">Primeiro baixe o histórico. O botão de encerrar aparece depois do download.</p>;
-  }
   return (
     <form onSubmit={close} className="space-y-3">
       <p className="text-sm">
-        Isto <b className="text-red-300">não tem volta</b>. O evento sai da lista, as pessoas perdem o acesso e as fotos e os arquivos são apagados. Fica só o resumo, em Eventos encerrados.
+        Só use se a agência não precisa mais do evento no app. Isto <b className="text-red-300">não tem volta</b>: as pessoas perdem o acesso e as fotos, os arquivos e os dados do evento são apagados. Fica só o resumo, em Eventos encerrados.
       </p>
+      {!downloaded && (
+        <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">
+          Ninguém baixou a cópia do histórico ainda. Se quiser guardar os arquivos, baixe antes de excluir.
+        </p>
+      )}
       <label className="flex items-start gap-3 rounded-xl border border-border p-3">
-        <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-red-500" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
-        <span className="text-sm">Baixei {parts === 1 ? "o histórico" : `as ${parts} partes do histórico`} e guardei num lugar seguro.</span>
+        <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-red-500" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
+        <span className="text-sm">Entendo que fotos, arquivos e pessoas do evento serão apagados sem volta.</span>
       </label>
       <label className="block">
         <Label>Para confirmar, digite o nome do evento: <b className="select-all">{eventName}</b></Label>
         <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" spellCheck={false} />
       </label>
       <FormError message={error} />
-      <Button type="submit" variant="danger" className="w-full sm:w-auto" disabled={!saved || !nameOk || busy}>
-        {busy ? "Encerrando…" : "Encerrar e apagar"}
+      <Button type="submit" variant="danger" className="w-full sm:w-auto" disabled={!understood || !nameOk || busy}>
+        {busy ? "Excluindo…" : "Encerrar e excluir"}
       </Button>
     </form>
   );

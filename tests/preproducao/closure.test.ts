@@ -8,7 +8,7 @@ import { createEvent, listEvents } from "@/modules/events/events.service";
 import { createCostItem, createCostSection, updateCostItem } from "@/modules/costs/costs.service";
 import { addDocument } from "@/modules/documents/documents.service";
 import { dispatch } from "@/modules/notifications/dispatcher";
-import { canCloseEvent, closeEvent, getArchived, getClosure, historyPart, listArchived, pendingClosures, splitParts } from "@/modules/closure/closure.service";
+import { canCloseEvent, closeEvent, getArchived, getClosure, historyPart, listArchived, splitParts } from "@/modules/closure/closure.service";
 
 /**
  * Fase 6C: com o evento Concluído, o diretor recebe o aviso, baixa o
@@ -75,7 +75,7 @@ describe("antes de concluir", () => {
       expect(canCloseEvent(a, ev)).toBe(false);
       await expectStatus(getClosure(a, ev), 404);
       await expectStatus(historyPart(a, ev, 1), 404);
-      await expectStatus(closeEvent(a, ev, { confirm: NAME, savedAllParts: true }), 404);
+      await expectStatus(closeEvent(a, ev, { confirm: NAME, understood: true }), 404);
     }
   });
 
@@ -83,7 +83,7 @@ describe("antes de concluir", () => {
     const m = await actorFor(db, "marina");
     expect((await getClosure(m, ev)).archive).toBeNull();
     await expectStatus(historyPart(m, ev, 1), 409);
-    await expectStatus(closeEvent(m, ev, { confirm: NAME, savedAllParts: true }), 409);
+    await expectStatus(closeEvent(m, ev, { confirm: NAME, understood: true }), 409);
   });
 });
 
@@ -103,21 +103,16 @@ describe("concluído", () => {
     expect(await owner.eventArchive.count({ where: { eventId: ev } })).toBe(1);
   });
 
-  it("lembrete semanal enquanto não baixou", async () => {
+  it("não tem lembrete semanal: o evento fica guardado", async () => {
     await owner.eventArchive.update({ where: { eventId: ev }, data: { concludedAt: new Date(Date.now() - 8 * 86_400_000) } });
-    const r = await dispatch({ db: worker, whatsapp: null });
-    expect(r.history).toBeGreaterThanOrEqual(1);
+    await dispatch({ db: worker, whatsapp: null });
     const titles = (await owner.notification.findMany({ where: { eventId: ev, type: "HISTORICO" } })).map((n) => n.title);
-    expect(titles).toEqual(expect.arrayContaining(["Lembrete: o histórico do evento ainda não foi baixado"]));
-    // De novo na mesma semana: não repete.
-    expect((await dispatch({ db: worker, whatsapp: null })).history).toBe(0);
+    expect(new Set(titles)).toEqual(new Set(["Evento concluído: o histórico fica guardado"]));
   });
 
-  it("Meus eventos mostra o que falta; sem baixar, não encerra", async () => {
+  it("sem confirmar, não exclui", async () => {
     const m = await actorFor(db, "marina");
-    expect((await pendingClosures(m, [{ id: ev, status: "CONCLUIDO" }])).get(ev)).toEqual({ downloaded: false });
-    expect((await pendingClosures(await actorFor(db, "sofia"), [{ id: ev, status: "CONCLUIDO" }])).size).toBe(0);
-    await expectStatus(closeEvent(m, ev, { confirm: NAME, savedAllParts: true }), 409);
+    await expectStatus(closeEvent(m, ev, { confirm: NAME }), 422);
   });
 
   it("a parte 1 do histórico traz os relatórios e os arquivos, e marca como baixado", async () => {
@@ -138,7 +133,6 @@ describe("concluído", () => {
     const after = await getClosure(m, ev);
     expect(after.archive).toMatchObject({ downloadedBy: expect.any(String), closed: false });
     expect(after.archive!.downloadedAt).toBeInstanceOf(Date);
-    expect((await pendingClosures(m, [{ id: ev, status: "CONCLUIDO" }])).get(ev)).toEqual({ downloaded: true });
   });
 
   it("divide em partes abaixo do limite, com os relatórios na primeira", () => {
@@ -151,17 +145,19 @@ describe("concluído", () => {
 });
 
 describe("encerrar", () => {
-  it("exige a caixa marcada e o nome certo", async () => {
+  it("exige a caixa marcada e o nome certo (baixar a cópia é opcional)", async () => {
+    // Como se ninguém tivesse baixado: excluir continua possível.
+    await owner.eventArchive.update({ where: { eventId: ev }, data: { historyDownloadedAt: null, historyDownloadedBy: null } });
     const m = await actorFor(db, "marina");
     await expectStatus(closeEvent(m, ev, { confirm: NAME }), 422);
-    await expectStatus(closeEvent(m, ev, { confirm: "Outro nome", savedAllParts: true }), 422);
+    await expectStatus(closeEvent(m, ev, { confirm: "Outro nome", understood: true }), 422);
     expect(await owner.participant.count({ where: { eventId: ev } })).toBeGreaterThanOrEqual(4);
   });
 
   it("guarda o resumo e apaga pessoas, itens e arquivos; as notas dos fornecedores ficam", async () => {
     const m = await actorFor(db, "marina");
     expect(storage.objects.has(docKey)).toBe(true);
-    const r = await closeEvent(m, ev, { confirm: `  ${NAME.toUpperCase()} `, savedAllParts: true });
+    const r = await closeEvent(m, ev, { confirm: `  ${NAME.toUpperCase()} `, understood: true });
     expect(r).toEqual({ eventId: ev, files: 1 });
 
     expect(await owner.participant.count({ where: { eventId: ev } })).toBe(0);
@@ -175,6 +171,10 @@ describe("encerrar", () => {
     expect(a.summary).toMatchObject({ name: NAME, client: expect.any(String), counts: { files: 1 } });
     expect(a.summary.counts.people).toBeGreaterThanOrEqual(4);
     expect(a.summary.totals).toMatchObject({ estimated: 50_000, contracted: 45_000, actual: 48_000 });
+    // Os preços dos itens ficam no resumo (banco de preços da 7C), sem pessoas.
+    expect(a.summary.items).toEqual([
+      expect.objectContaining({ name: "Palco 12x8", quantity: 1, estimated: 50_000, contracted: 45_000, actual: 48_000, supplier: null }),
+    ]);
     expect(a.closedBy).toBeTruthy();
   });
 
@@ -187,7 +187,7 @@ describe("encerrar", () => {
     const admin = await loadActor(db, d.users.admin!);
     expect(admin!.adminEventIds.has(ev)).toBe(false);
     await expectPgError(owner.event.update({ where: { id: ev }, data: { name: "x" } }), "23514");
-    await expectStatus(closeEvent(await actorFor(db, "admin"), ev, { confirm: NAME, savedAllParts: true }), 404);
+    await expectStatus(closeEvent(await actorFor(db, "admin"), ev, { confirm: NAME, understood: true }), 404);
   });
 
   it("o resumo aparece em Eventos encerrados só para o Admin e os diretores da agência", async () => {

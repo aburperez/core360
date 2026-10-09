@@ -16,11 +16,12 @@ import { reportFileName, writeReportXlsx } from "../reports/report-xlsx";
 import { exportDailyReport, getDailyReport } from "../reports/reports.service";
 
 /**
- * Fase 6C: histórico e encerramento. Com o evento Concluído, o diretor baixa
- * o histórico (ZIP em partes, por causa do limite de download da
- * hospedagem) e depois encerra: o banco (app.close_event) confere tudo de
- * novo, guarda só o resumo e apaga fotos, arquivos e pessoas. Nada se apaga
- * sozinho.
+ * Fase 6C: histórico e encerramento. O evento Concluído fica guardado com
+ * tudo. O diretor pode baixar uma cópia para arquivar (ZIP em partes, por
+ * causa do limite de download da hospedagem) e, se quiser, "Encerrar e
+ * excluir": o banco (app.close_event) confere tudo de novo, guarda só o
+ * resumo (com os preços dos itens) e apaga fotos, arquivos e pessoas. Nada
+ * se apaga sozinho.
  */
 
 /** Cada parte do ZIP fica abaixo do limite de resposta da Vercel (4,5 MB). */
@@ -211,10 +212,10 @@ function readme(event: { name: string; startsAt: Date; endsAt: Date; timezone: s
   return [
     `Histórico do evento: ${event.name}`,
     `Datas: ${formatPeriod(event.startsAt, event.endsAt, event.timezone, true)}`,
-    `Parte ${n} de ${total}. Baixe e guarde todas as partes antes de encerrar o evento no CORE 360.`,
+    `Parte ${n} de ${total}. Cópia para arquivar: o evento continua guardado no CORE 360 até alguém usar "Encerrar e excluir".`,
     "",
     n === 1 ? "Nesta parte: os relatórios em Excel (pasta relatorios), os documentos, os orçamentos e a planta." : "Nesta parte: fotos e arquivos que não couberam nas partes anteriores.",
-    "Os relatórios também podem ser salvos em PDF pela tela Relatórios do app, enquanto o evento não for encerrado.",
+    "Os relatórios também podem ser salvos em PDF pela tela Relatórios do app, enquanto o evento não for excluído.",
     ...(missing.length ? ["", "Arquivos que não foram encontrados no armazenamento:", ...missing.map((m) => `- ${m}`)] : []),
     "",
   ].join("\r\n");
@@ -233,6 +234,26 @@ export type ClosureSummary = {
   approved: number | null;
   ratings: { supplier: string; average: number | null; ratings: number }[];
   counts: { people: number; occurrences: number; suppliers: number; files: number };
+  /**
+   * Preços dos itens (Abu, 2026-10-09): ficam para o banco de preços e o
+   * comparativo entre eventos. Sem pessoas, fotos ou arquivos. Resumos de
+   * antes dessa mudança não têm.
+   */
+  items?: ClosureItem[];
+};
+
+export type ClosureItem = {
+  code: string;
+  name: string;
+  category: string | null;
+  quantity: number;
+  unit: string | null;
+  optional: boolean;
+  estimated: number | null;
+  quoted: number | null;
+  contracted: number | null;
+  actual: number | null;
+  supplier: string | null;
 };
 
 async function buildSummary(actor: Actor, eventId: string): Promise<ClosureSummary> {
@@ -243,10 +264,31 @@ async function buildSummary(actor: Actor, eventId: string): Promise<ClosureSumma
     actor.run(async (tx) => ({
       people: await tx.participant.count({ where: { eventId, deletedAt: null, role: { not: "CLIENTE" } } }),
       occurrences: (await tx.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM app.report_occurrences(${eventId}::uuid)`)[0]!.n,
+      items: await tx.costItem.findMany({ where: { eventId }, select: { id: true, quantity: true, unit: true } }),
+      // O fornecedor de cada item: o do orçamento escolhido na cotação fechada.
+      chosen: await tx.quoteRequest.findMany({
+        where: { eventId, status: "FECHADA", costItemId: { not: null }, chosenQuoteId: { not: null } },
+        select: { costItemId: true, chosen: { select: { companyName: true, supplier: { select: { tradeName: true, companyName: true } } } } },
+      }),
     })),
     storedFiles(actor, eventId),
   ]);
   const t = budget.totals;
+  const extra = new Map(counts.items.map((i) => [i.id, i]));
+  const supplierOf = new Map(counts.chosen.map((q) => [q.costItemId!, q.chosen ? (q.chosen.supplier.tradeName || q.chosen.supplier.companyName || q.chosen.companyName) : null]));
+  const items: ClosureItem[] = budget.items.map((i) => ({
+    code: i.code,
+    name: i.name,
+    category: i.category,
+    quantity: Number(extra.get(i.id)?.quantity ?? 0),
+    unit: extra.get(i.id)?.unit ?? null,
+    optional: i.optional,
+    estimated: i.estimated,
+    quoted: i.quoted,
+    contracted: i.contracted,
+    actual: i.actual,
+    supplier: supplierOf.get(i.id) ?? null,
+  }));
   return {
     name: event.name,
     client: event.client.name,
@@ -258,15 +300,19 @@ async function buildSummary(actor: Actor, eventId: string): Promise<ClosureSumma
     approved: budget.approved.value,
     ratings: ratings.items.map((r) => ({ supplier: r.name, average: r.eventAverage, ratings: (r.rating ? 1 : 0) + r.others.length })),
     counts: { people: counts.people, occurrences: Number(counts.occurrences), suppliers: ratings.items.length, files: files.length },
+    items,
   };
 }
 
 const closeSchema = z.object({
   confirm: z.string().max(300),
-  savedAllParts: z.literal(true, { message: "Confirme que baixou e guardou todas as partes" }),
+  understood: z.literal(true, { message: "Confirme que entende que fotos, arquivos e pessoas serão apagados" }),
 });
 
-/** Encerrar e apagar: guarda o resumo e apaga o resto. Não tem volta. */
+/**
+ * Encerrar e excluir: guarda o resumo (com os preços dos itens) e apaga o
+ * resto. Não tem volta. Baixar a cópia antes é opcional (Abu, 2026-10-09).
+ */
 export async function closeEvent(actor: Actor, eventId: string, input: unknown) {
   requireCloser(actor, eventId);
   const data = parse(closeSchema, input);
@@ -286,7 +332,6 @@ export async function closeEvent(actor: Actor, eventId: string, input: unknown) 
     if (pgErrorCode(e) === "23514") {
       const msg = String((e as { message?: string }).message ?? "");
       if (msg.includes("nome do evento")) throw new ValidationError("Digite o nome do evento exatamente como aparece", { confirm: ["O nome não confere"] });
-      if (msg.includes("Baixe o histórico")) throw new ConflictError("Baixe o histórico do evento antes de encerrar");
       throw new ConflictError("Só um evento concluído (e ainda não encerrado) pode ser encerrado");
     }
     if (pgErrorCode(e) === "42501") throw new NotFoundError("Encerramento");
@@ -332,16 +377,6 @@ export async function getArchived(actor: Actor, eventId: string) {
   const row = await actor.run((tx) => tx.eventArchive.findFirst({ where: { eventId, closedAt: { not: null } }, select: archivedSelect }));
   if (!row) throw new NotFoundError("Evento encerrado");
   return toArchived(row);
-}
-
-/** Para Meus eventos: os concluídos que esperam o histórico ou o encerramento. */
-export async function pendingClosures(actor: Actor, events: { id: string; status: string }[]) {
-  const ids = events.filter((e) => e.status === "CONCLUIDO" && canCloseEvent(actor, e.id)).map((e) => e.id);
-  if (!ids.length) return new Map<string, { downloaded: boolean }>();
-  const rows = await actor.run((tx) =>
-    tx.eventArchive.findMany({ where: { eventId: { in: ids }, closedAt: null }, select: { eventId: true, historyDownloadedAt: true } }),
-  );
-  return new Map(rows.map((r) => [r.eventId, { downloaded: !!r.historyDownloadedAt }]));
 }
 
 export const REPORT_TITLES = REPORT_KEYS.map((k) => REPORTS[k].title);

@@ -5,7 +5,7 @@ import { isAgencyAdmin, isEventSupport } from "@/server/authz/actor";
 import { listEvents } from "@/modules/events/events.service";
 import { agenciesWithoutSupport } from "@/modules/agencies/agencies.service";
 import { homePriorities, type Priority } from "@/modules/panels/panels.service";
-import { hasArchived, pendingClosures } from "@/modules/closure/closure.service";
+import { hasArchived } from "@/modules/closure/closure.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
@@ -22,16 +22,9 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   // Quem só participa de um evento vai direto para ele (os diretores de produção veem a lista e o painel da agência).
   if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
   const many = actor.adminAgencies.length > 1;
-  const [noSupport, priorities, closures, archived] = await Promise.all([
-    agenciesWithoutSupport(actor), homePriorities(actor, events), pendingClosures(actor, events), hasArchived(actor),
+  const [noSupport, priorities, archived] = await Promise.all([
+    agenciesWithoutSupport(actor), homePriorities(actor, events), hasArchived(actor),
   ]);
-  // Concluído: o diretor baixa o histórico e encerra (fase 6C).
-  for (const [id, c] of closures) {
-    const chip: Priority = c.downloaded
-      ? { tone: "amber", text: "Histórico baixado: falta encerrar", href: `/eventos/${id}/encerramento` }
-      : { tone: "amber", text: "Concluído: baixe o histórico", href: `/eventos/${id}/encerramento` };
-    priorities.set(id, [...(priorities.get(id) ?? []), chip]);
-  }
   const urgent = events.filter((e) => priorities.get(e.id)?.length);
 
   return (
