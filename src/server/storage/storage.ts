@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { PrismaClient } from "../../generated/prisma/client";
 
@@ -12,6 +12,10 @@ export interface Storage {
   put(key: string, body: Uint8Array, contentType: string, db?: Db): Promise<void>;
   signedUrl(key: string, expiresInSeconds?: number): Promise<string>;
   get?(key: string, db?: Db): Promise<Uint8Array | undefined>;
+  /** Lê o arquivo pelo servidor (histórico do evento), onde as telas usam o link assinado. */
+  fetch?(key: string): Promise<Uint8Array | undefined>;
+  /** Apaga os arquivos (encerramento do evento). No banco, quem apaga é a própria função do banco. */
+  remove?(keys: string[]): Promise<void>;
   /** Grava e lê pela conexão da pessoa (db), dentro da transação dela, com RLS. */
   inDatabase?: boolean;
 }
@@ -41,6 +45,20 @@ export function s3Storage(cfg: {
     signedUrl(key, expiresIn = SIGNED_URL_TTL_SECONDS) {
       return getSignedUrl(client, new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { expiresIn });
     },
+    async fetch(key) {
+      const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key })).catch((e: { name?: string }) => {
+        if (e.name === "NoSuchKey") return null;
+        throw e;
+      });
+      return res?.Body ? await res.Body.transformToByteArray() : undefined;
+    },
+    async remove(keys) {
+      // Até 1000 por pedido (limite do S3).
+      for (let i = 0; i < keys.length; i += 1000) {
+        const chunk = keys.slice(i, i + 1000);
+        await client.send(new DeleteObjectsCommand({ Bucket: cfg.bucket, Delete: { Objects: chunk.map((Key) => ({ Key })), Quiet: true } }));
+      }
+    },
   };
 }
 
@@ -57,6 +75,9 @@ export function memoryStorage(): Storage & { objects: Map<string, { body: Uint8A
     },
     async get(key) {
       return objects.get(key)?.body;
+    },
+    async remove(keys) {
+      for (const k of keys) objects.delete(k);
     },
   };
 }

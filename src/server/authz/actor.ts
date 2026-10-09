@@ -79,7 +79,11 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
     });
     const active = admin.filter((a) => a.agency.status === "ACTIVE").map((a) => ({ ...a.agency, role: a.role }));
     const events = active.length
-      ? await tx.event.findMany({ where: { agencyId: { in: active.map((a) => a.id) } }, select: { id: true, agencyId: true } })
+      ? await tx.event.findMany({
+          // Evento encerrado (fase 6C) fica só no resumo: ninguém mais trabalha nele.
+          where: { agencyId: { in: active.map((a) => a.id) }, OR: [{ archive: { is: null } }, { archive: { is: { closedAt: null } } }] },
+          select: { id: true, agencyId: true },
+        })
       : [];
     return { user, participations, admin, active, events };
   });

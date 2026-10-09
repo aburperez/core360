@@ -209,6 +209,17 @@ export const TOOLS: Tool[] = [
     ],
     img: "/site/relatorios.webp", alt: "Relatório financeiro pronto para PDF no computador",
   },
+  {
+    id: "encerramento", part: "pre", title: "Histórico e encerramento",
+    serve: "Guardar tudo do evento com a agência e não deixar fotos e dados pessoais esquecidos no sistema.",
+    quem: "Só o Diretor",
+    passos: [
+      "Nada se apaga enquanto o evento não passa do Fechamento. Ao marcar Concluído, o Diretor recebe o aviso para baixar o histórico, e um lembrete por semana.",
+      "O histórico sai em ZIP com os relatórios em Excel, os documentos, os orçamentos, os contratos e as fotos.",
+      "Depois de baixar, o Diretor encerra digitando o nome do evento. Fica só um resumo: datas, cliente, os 4 valores e as notas dos fornecedores.",
+    ],
+    img: "/site/encerramento.webp", alt: "Tela de histórico e encerramento do evento no computador",
+  },
 ];
 
 const PARTS = {

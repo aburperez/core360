@@ -24,6 +24,7 @@
     "@prisma/client": "7.10.0",
     "better-auth": "1.7.7",
     "exceljs": "4.4.0",
+    "fflate": "0.8.2",
     "next": "16.3.8",
     "pdfjs-dist": "^6.4.299",
     "pg": "^8.23.1",

@@ -158,6 +158,7 @@ enum NotificationType {
   REPROVADA
   LEMBRETE
   COTACAO
+  HISTORICO
 
   @@map("notification_type")
 }
@@ -234,6 +235,8 @@ model User {
   suppliersCreated         Supplier[]           @relation("SupplierCreatedBy")
   supplierBonuses          SupplierBonus[]      @relation("SupplierBonusUpdatedBy")
   visitsCreated            TechnicalVisit[]     @relation("TechnicalVisitCreatedBy")
+  archivesDownloaded       EventArchive[]       @relation("EventArchiveDownloadedBy")
+  archivesClosed           EventArchive[]       @relation("EventArchiveClosedBy")
 
   @@map("users")
 }
@@ -309,6 +312,7 @@ model Agency {
   events      Event[]
   directors   Director[]
   suppliers   Supplier[]
+  archives    EventArchive[]
 
   @@map("agencies")
 }
@@ -457,6 +461,7 @@ model Event {
   supplierQuotes  SupplierQuote[]
   contracts       Contract[]
   supplierRatings SupplierRating[]
+  archive         EventArchive?
   milestones      EventMilestone[]
   tasks           EventTask[]
   arrivals        Arrival[]
@@ -2016,4 +2021,29 @@ model ArrivalItem {
 
   @@unique([arrivalId, costItemId])
   @@map("arrival_items")
+}
+
+// ─────────────────────── Encerramento (fase 6C) ───────────────────────
+
+/// Evento concluído: o diretor baixa o histórico e depois encerra. Ao
+/// encerrar, o banco apaga fotos, arquivos e pessoas do evento e guarda só o
+/// resumo (summary). Só funções do banco escrevem aqui.
+model EventArchive {
+  eventId             String    @id @map("event_id") @db.Uuid
+  agencyId            String    @map("agency_id") @db.Uuid
+  concludedAt         DateTime  @default(now()) @map("concluded_at") @db.Timestamptz(3)
+  historyDownloadedAt DateTime? @map("history_downloaded_at") @db.Timestamptz(3)
+  historyDownloadedBy String?   @map("history_downloaded_by") @db.Uuid
+  closedAt            DateTime? @map("closed_at") @db.Timestamptz(3)
+  closedBy            String?   @map("closed_by") @db.Uuid
+  /// Nome, datas, cliente, totais e notas dos fornecedores (o que fica).
+  summary             Json?
+
+  event        Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  agency       Agency @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  downloadedBy User?  @relation("EventArchiveDownloadedBy", fields: [historyDownloadedBy], references: [id], onDelete: SetNull)
+  closedByUser User?  @relation("EventArchiveClosedBy", fields: [closedBy], references: [id], onDelete: SetNull)
+
+  @@index([agencyId, closedAt])
+  @@map("event_archives")
 }

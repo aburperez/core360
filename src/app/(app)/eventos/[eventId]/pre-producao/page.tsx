@@ -16,6 +16,7 @@ import { pendenciesSummary } from "@/modules/pendencies/pendencies.service";
 import { getSchedule } from "@/modules/schedule/schedule.service";
 import { arrivalsSummary } from "@/modules/arrivals/arrivals.service";
 import { itemStages } from "@/modules/panels/panels.service";
+import { canCloseEvent } from "@/modules/closure/closure.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
@@ -112,6 +113,18 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
         <PageHeading trail={[event.name, "Pré-produção"]} title="Painel da pré-produção" />
         <MobileHero name={actor.name} role={role} detail={event.name} />
         <EventStages status={event.status} className="mb-4" />
+        {event.status === "CONCLUIDO" && canCloseEvent(actor, eventId) && (
+          <Link
+            href={`/eventos/${eventId}/encerramento`}
+            className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/50 bg-amber-400/10 p-4 transition hover:border-amber-300"
+          >
+            <span className="min-w-0">
+              <b className="text-amber-200">Evento concluído: baixe o histórico e encerre</b>
+              <span className="block text-sm text-muted">Guarde os relatórios, fotos e documentos. Depois o app apaga tudo e fica só um resumo.</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold text-amber-200">Abrir ›</span>
+          </Link>
+        )}
         {pending.late > 0 && (
           <Link
             href={`${base}/pendencias`}

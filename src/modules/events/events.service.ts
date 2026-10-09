@@ -24,7 +24,8 @@ function myRole(actor: Actor, eventId: string): EventRole | "ADMIN" | null {
 export async function listEvents(actor: Actor) {
   const events = await actor.run((tx) =>
     tx.event.findMany({
-      where: { deletedAt: null },
+      // Encerrado (fase 6C) sai da lista: o resumo fica em Eventos encerrados.
+      where: { deletedAt: null, OR: [{ archive: { is: null } }, { archive: { is: { closedAt: null } } }] },
       orderBy: { startsAt: "asc" },
       include: { client: { select: { id: true, name: true } } },
     }),

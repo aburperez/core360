@@ -5,6 +5,7 @@ import { isAgencyAdmin, isEventSupport } from "@/server/authz/actor";
 import { listEvents } from "@/modules/events/events.service";
 import { agenciesWithoutSupport } from "@/modules/agencies/agencies.service";
 import { homePriorities, type Priority } from "@/modules/panels/panels.service";
+import { hasArchived, pendingClosures } from "@/modules/closure/closure.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
@@ -21,7 +22,16 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   // Quem só participa de um evento vai direto para ele (os diretores de produção veem a lista e o painel da agência).
   if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
   const many = actor.adminAgencies.length > 1;
-  const [noSupport, priorities] = await Promise.all([agenciesWithoutSupport(actor), homePriorities(actor, events)]);
+  const [noSupport, priorities, closures, archived] = await Promise.all([
+    agenciesWithoutSupport(actor), homePriorities(actor, events), pendingClosures(actor, events), hasArchived(actor),
+  ]);
+  // Concluído: o diretor baixa o histórico e encerra (fase 6C).
+  for (const [id, c] of closures) {
+    const chip: Priority = c.downloaded
+      ? { tone: "amber", text: "Histórico baixado: falta encerrar", href: `/eventos/${id}/encerramento` }
+      : { tone: "amber", text: "Concluído: baixe o histórico", href: `/eventos/${id}/encerramento` };
+    priorities.set(id, [...(priorities.get(id) ?? []), chip]);
+  }
   const urgent = events.filter((e) => priorities.get(e.id)?.length);
 
   return (
@@ -112,6 +122,15 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
           {!!priorities.get(e.id)?.length && <div className="relative mt-3"><PriorityChips items={priorities.get(e.id)!} /></div>}
           </div>
         ))}
+        {archived && (
+          <Link href="/encerrados" className="flex items-center justify-between gap-3 rounded-2xl border border-border p-4 text-muted hover:border-primary/60 lg:col-span-2 xl:col-span-3">
+            <span className="min-w-0">
+              <span className="block font-semibold text-foreground">Eventos encerrados</span>
+              <span className="block text-sm">O resumo que ficou de cada evento depois de apagado</span>
+            </span>
+            <span className="text-2xl text-primary">›</span>
+          </Link>
+        )}
       </main>
     </>
   );

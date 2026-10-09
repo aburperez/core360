@@ -87,6 +87,7 @@ export const HEADLINE: Record<NotificationType, string> = {
   CONCLUIDA: "Concluído, falta validar",
   REPROVADA: "Chamado reprovado na validação",
   COTACAO: "Cotação",
+  HISTORICO: "Histórico do evento",
 };
 
 const CLOSED: OccurrenceStatus[] = ["CONCLUIDO", "CANCELADO"];
