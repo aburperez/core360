@@ -188,15 +188,26 @@ export const TOOLS: Tool[] = [
     img: "/site/custos.webp", alt: "Planilha Padrão CORE 360 no computador",
   },
   {
-    id: "relatorio", part: "pre", title: "Relatório diário",
-    serve: "Fechar o dia com números claros para o cliente, sem ninguém montar planilha.",
-    quem: "Gerente (o Pré-produtor também vê)",
+    id: "paineis", part: "pre", title: "Painéis e prioridades do dia",
+    serve: "Abrir o app e saber na hora o que pede atenção hoje, em cada evento.",
+    quem: "Cada pessoa vê o seu; o painel executivo é só do Diretor",
     passos: [
-      "Escolha o dia.",
-      "Veja chamados abertos, concluídos, atrasados e os prazos por equipe.",
-      "Escreva as observações do dia e baixe em Excel.",
+      "Em Meus eventos aparecem as prioridades de hoje: pendências atrasadas, chamados urgentes e chegadas atrasadas.",
+      "O painel da pré-produção mostra os itens por etapa, de A definir até Conferido, e quantos já estão no local.",
+      "O painel executivo junta os 4 valores, a economia, o estouro, o orçamento aprovado e os maiores riscos.",
     ],
-    img: "/site/relatorio.webp", alt: "Relatório diário no computador",
+    img: "/site/painel-executivo.webp", alt: "Painel executivo no computador",
+  },
+  {
+    id: "relatorios", part: "pre", title: "Relatórios em PDF e Excel",
+    serve: "Entregar ao cliente e à equipe documentos prontos, sem ninguém montar planilha.",
+    quem: "Diretor e Pré-produtor (financeiro e executivo só o Diretor)",
+    passos: [
+      "Book de produção, master de itens, mapa de fornecedores, mapa de montagem, pendências e relatório do campo, sem valores.",
+      "Financeiro e executivo com os 4 valores, só para o Diretor.",
+      "Cada um sai em PDF ou Excel na hora. O relatório diário fecha cada dia com os chamados e as observações.",
+    ],
+    img: "/site/relatorios.webp", alt: "Relatório financeiro pronto para PDF no computador",
   },
 ];
 
@@ -269,7 +280,7 @@ function ToolBlock({ tool, n }: { tool: Tool; n: number }) {
 }
 
 const ROLES = [
-  { title: "Diretor de produção", text: "Vê todos os eventos da agência, escolhe os fornecedores e acompanha a preparação, os prazos e os custos." },
+  { title: "Diretor de produção", text: "Vê todos os eventos da agência, escolhe os fornecedores e acompanha a preparação, os prazos e os custos no painel executivo." },
   { title: "Gerente do evento", text: "Coordena áreas, equipes e chamados e fecha o relatório do dia." },
   { title: "Head de área", text: "Recebe os urgentes da área, confirma a montagem, valida a entrega e avalia os fornecedores." },
   { title: "Produtor operacional", text: "Lê o briefing e abre e resolve chamados com foto, pelo celular." },
