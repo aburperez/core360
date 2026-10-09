@@ -101,7 +101,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       line: docs.documents.length ? `${docs.documents.length} ${docs.documents.length === 1 ? "arquivo" : "arquivos"} · ${docs.documents.filter((d) => d.visibleToField).length} no campo` : "Nenhum enviado",
     },
     { href: `${base}/funcoes`, icon: "functions", title: "Produtores e Funções", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
-    { href: `${base}/relatorio`, icon: "report", title: "Relatório diário", line: "Chamados e recebimentos do dia" },
+    { href: `${base}/relatorios`, icon: "report", title: "Relatórios", line: "Book, itens, fornecedores, montagem e mais, em PDF e Excel" },
   ];
 
   return (
