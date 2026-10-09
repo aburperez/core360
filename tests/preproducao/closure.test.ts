@@ -158,7 +158,7 @@ describe("encerrar", () => {
     const m = await actorFor(db, "marina");
     expect(storage.objects.has(docKey)).toBe(true);
     const r = await closeEvent(m, ev, { confirm: `  ${NAME.toUpperCase()} `, understood: true });
-    expect(r).toEqual({ eventId: ev, files: 1 });
+    expect(r).toEqual({ eventId: ev, files: 1, summary: true });
 
     expect(await owner.participant.count({ where: { eventId: ev } })).toBe(0);
     expect(await owner.costItem.count({ where: { eventId: ev } })).toBe(0);

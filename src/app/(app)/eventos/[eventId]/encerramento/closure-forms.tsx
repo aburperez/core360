@@ -76,8 +76,8 @@ export function ClosureForm({ eventId, eventName, downloaded }: { eventId: strin
     setError(null);
     setBusy(true);
     try {
-      await api(`/api/events/${eventId}/close`, { body: { confirm, understood } });
-      router.replace(`/encerrados/${eventId}`);
+      const r = await api<{ summary: boolean }>(`/api/events/${eventId}/close`, { body: { confirm, understood } });
+      router.replace(r.summary ? `/encerrados/${eventId}` : "/eventos");
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

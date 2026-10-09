@@ -342,7 +342,9 @@ export async function closeEvent(actor: Actor, eventId: string, input: unknown) 
   if (!storage.inDatabase && storage.remove && keys.length) {
     await storage.remove(keys).catch((err) => console.error("Encerramento: arquivos não apagados do armazenamento", eventId, err));
   }
-  return { eventId, files: keys.length };
+  // O resumo fica para o Admin e os diretores da agência; o Gerente que não é diretor volta para a lista.
+  const visible = !!(await actor.run((tx) => tx.eventArchive.findFirst({ where: { eventId, closedAt: { not: null } }, select: { eventId: true } })));
+  return { eventId, files: keys.length, summary: visible };
 }
 
 // ───────────────────────────── eventos encerrados ─────────────────────────────
