@@ -100,7 +100,7 @@ export function PaymentItems({ eventId, items, editable }: { eventId: string; it
                   </div>
                   {action(i)}
                 </div>
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                   <Pair label="Contratado">{money(i.contracted)}</Pair>
                   <Pair label="Realizado">{money(i.actual)}</Pair>
                   <Pair label="Diferença"><Diff value={i.diff} /></Pair>

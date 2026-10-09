@@ -7,10 +7,10 @@ import { PAGE, cx } from "@/components/ui";
  */
 export function BudgetTabs({ eventId, active, financial }: { eventId: string; active: "orcamento" | "planilha" | "financeiro"; financial: boolean }) {
   const base = `/eventos/${eventId}/pre-producao`;
-  const tabs = [
+  const tabs: { key: string; href: string; label: string; short?: string }[] = [
     { key: "orcamento", href: `${base}/orcamento`, label: "Orçamento" },
-    { key: "planilha", href: `${base}/custos`, label: "Planilha Padrão CORE 360" },
-    ...(financial ? [{ key: "financeiro", href: `${base}/financeiro`, label: "Fechamento financeiro" }] : []),
+    { key: "planilha", href: `${base}/custos`, label: "Planilha Padrão CORE 360", short: "Planilha" },
+    ...(financial ? [{ key: "financeiro", href: `${base}/financeiro`, label: "Fechamento financeiro", short: "Financeiro" }] : []),
   ];
   return (
     <div className={cx(PAGE, "flex gap-2 overflow-x-auto pt-3")}>
@@ -24,7 +24,7 @@ export function BudgetTabs({ eventId, active, financial }: { eventId: string; ac
             t.key === active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface transition hover:border-primary/60",
           )}
         >
-          {t.label}
+          {t.short ? <><span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.label}</span></> : t.label}
         </Link>
       ))}
     </div>
