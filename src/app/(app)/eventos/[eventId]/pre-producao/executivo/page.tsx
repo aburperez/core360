@@ -113,7 +113,7 @@ export default async function ExecutivePage({ params }: PageProps<"/eventos/[eve
                   </tbody>
                 </table>
               </div>
-              <p className="mt-2 text-xs text-muted">Verde: economizou (contratou abaixo do estimado e pagou até o contratado). Vermelho: gastou mais.</p>
+              <p className="mt-2 text-xs text-muted">Verde: economizou (contratou abaixo do estimado e pagou até o contratado). Vermelho: gastou mais. A conta usa só os itens que já têm os dois valores.</p>
             </Panel>
           </div>
 
