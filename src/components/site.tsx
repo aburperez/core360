@@ -221,6 +221,17 @@ export const TOOLS: Tool[] = [
     img: "/site/alertas.webp", alt: "Lista de avisos de prazo no computador",
   },
   {
+    id: "financeiro", part: "pre", title: "Fechamento financeiro",
+    serve: "Fechar as contas do evento com tudo pago, explicado e travado.",
+    quem: "Produtor executivo e Diretor",
+    passos: [
+      "Cada item contratado mostra contratado, realizado e a diferença. Marque o pagamento com a data e a nota fiscal.",
+      "Quando o realizado passa do contratado, o app pede o motivo. Os totais mostram o pago, o que falta pagar e os estouros.",
+      "Com tudo pago, fecha o financeiro e os valores travam. Reabrir pede um motivo, e o evento só vai para Concluído com o financeiro fechado.",
+    ],
+    img: "/site/financeiro.webp", alt: "Tela do fechamento financeiro do evento no computador",
+  },
+  {
     id: "encerramento", part: "pre", title: "Histórico e encerramento",
     serve: "Guardar tudo do evento com a agência e não deixar fotos e dados pessoais esquecidos no sistema.",
     quem: "Só o Diretor",
