@@ -313,7 +313,11 @@ async function financeBlocks({ actor, eventId }: Ctx): Promise<Block[]> {
   const [b, contracts] = await Promise.all([getBudget(actor, eventId), listContracts(actor, eventId)]);
   const t = b.totals;
   const groupCols = (first: string) => [col(first, 24), money("Estimado"), money("Cotado"), money("Contratado"), money("Realizado"), money("Economia"), money("Estouro")];
-  const groupRow = (label: string, g: typeof t) => [label, g.estimated, g.quoted, g.contracted, g.actual, g.saving, g.overrun];
+  // Sem nenhum item com o valor, a célula fica vazia ("—"), não R$ 0,00.
+  const groupRow = (label: string, g: typeof t) => [
+    label, g.estimated, g.withQuoted ? g.quoted : null, g.withContracted ? g.contracted : null, g.withActual ? g.actual : null,
+    g.withContracted ? g.saving : null, g.withActual ? g.overrun : null,
+  ];
   return [
     {
       kind: "facts",

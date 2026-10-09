@@ -41,12 +41,12 @@ export default async function ReportSheetPage({ params }: PageProps<"/eventos/[e
         </div>
 
         <article className="rounded-2xl bg-white p-5 text-slate-900 shadow-xl sm:p-8 print:rounded-none print:p-0 print:shadow-none">
-          <header className="flex items-start justify-between gap-4 border-b-2 border-[#043246] pb-4">
+          <header className="flex flex-col gap-2 border-b-2 border-[#043246] pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 print:flex-row print:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold uppercase tracking-wide text-[#043246]">{r.title}</p>
               <h1 className="mt-1 text-2xl font-bold">{r.eventName}</h1>
             </div>
-            <p className="shrink-0 text-right text-xs text-slate-500">
+            <p className="shrink-0 text-xs text-slate-500 sm:text-right print:text-right">
               CORE 360
               <br />
               {r.generated}
@@ -116,7 +116,7 @@ function BlockView({ b }: { b: Block }) {
               {b.rows.map((row, i) => (
                 <tr key={i} className="break-inside-avoid border-b border-slate-200 align-top">
                   {row.map((v, j) => (
-                    <td key={j} className={`px-1.5 py-1.5 ${right(b.columns[j]!) ? "whitespace-nowrap text-right tabular-nums" : ""} ${j === 0 ? "font-semibold" : ""}`}>
+                    <td key={j} className={`px-1.5 py-1.5 ${right(b.columns[j]!) ? "whitespace-nowrap text-right tabular-nums" : ""} ${j === 0 ? "font-semibold" : ""} ${b.columns[j]!.header === "Código" ? "whitespace-nowrap" : ""}`}>
                       {show(v, b.columns[j]!)}
                     </td>
                   ))}

@@ -63,6 +63,10 @@ body {
     color: #000;
     color-scheme: light;
   }
+  /* Com "gráficos de fundo" ligado, a margem do papel seguia o tema escuro. */
+  @page {
+    background: #fff;
+  }
 }
 
 /* Espaço para a barra inferior fixa + área segura do iPhone. */
