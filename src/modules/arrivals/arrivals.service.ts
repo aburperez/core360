@@ -117,7 +117,11 @@ export async function arrivalsSummary(actor: Actor, eventId: string, now = new D
   if (!canSeeArrivals(actor, eventId)) return null;
   const l = await listArrivals(actor, eventId, now);
   const today = l.items.filter((i) => i.day === l.today);
-  return { ...l.totals, today: today.length, todayArrived: today.filter((i) => i.status !== "AGENDADO").length };
+  return {
+    ...l.totals, today: today.length, todayArrived: today.filter((i) => i.status !== "AGENDADO").length,
+    /** Ainda vão chegar hoje e não estão atrasadas. */
+    todayWaiting: today.filter((i) => i.status === "AGENDADO" && !i.late).length,
+  };
 }
 
 // ───────────────────────── Pré-produção: criar e mudar ─────────────────────────

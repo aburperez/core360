@@ -4,6 +4,7 @@ import { requireUser } from "@/server/http/session";
 import { isAgencyAdmin, isEventSupport } from "@/server/authz/actor";
 import { listEvents } from "@/modules/events/events.service";
 import { agenciesWithoutSupport } from "@/modules/agencies/agencies.service";
+import { homePriorities, type Priority } from "@/modules/panels/panels.service";
 import { TopBar } from "@/components/top-bar";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
@@ -20,7 +21,8 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   // Quem só participa de um evento vai direto para ele (os diretores de produção veem a lista e o painel da agência).
   if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
   const many = actor.adminAgencies.length > 1;
-  const noSupport = await agenciesWithoutSupport(actor);
+  const [noSupport, priorities] = await Promise.all([agenciesWithoutSupport(actor), homePriorities(actor, events)]);
+  const urgent = events.filter((e) => priorities.get(e.id)?.length);
 
   return (
     <>
@@ -71,8 +73,26 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
             )}
           </div>
         )}
+        {priorities.size > 0 && (
+          <section className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2 xl:col-span-3" aria-label="Prioridades de hoje">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Prioridades de hoje</h2>
+            {urgent.length === 0 ? (
+              <p className="mt-2 text-sm text-emerald-300">Nada atrasado nem vencendo hoje nos seus eventos.</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-border/60">
+                {urgent.map((e) => (
+                  <li key={e.id} className="py-2.5 sm:flex sm:items-start sm:gap-4">
+                    <Link href={`/eventos/${e.id}`} className="block font-semibold hover:text-primary sm:w-56 sm:shrink-0 sm:truncate">{e.name}</Link>
+                    <PriorityChips items={priorities.get(e.id)!} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
         {events.map((e) => (
-          <Link key={e.id} href={`/eventos/${e.id}`} className="block rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.99]">
+          <div key={e.id} className="relative rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.99]">
+          <Link href={`/eventos/${e.id}`} className="block after:absolute after:inset-0 after:rounded-2xl" aria-label={e.name}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-lg font-semibold">{e.name}</p>
@@ -89,6 +109,8 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
               </div>
             </div>
           </Link>
+          {!!priorities.get(e.id)?.length && <div className="relative mt-3"><PriorityChips items={priorities.get(e.id)!} /></div>}
+          </div>
         ))}
       </main>
     </>
@@ -100,5 +122,25 @@ function AdminLink({ href, children }: { href: string; children: React.ReactNode
     <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-surface px-3 py-2 text-center leading-tight font-semibold">
       {children}
     </Link>
+  );
+}
+
+/** Atrasado em vermelho, vence hoje em amarelo; cada um leva à tela onde se resolve. */
+function PriorityChips({ items }: { items: Priority[] }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5 sm:mt-0">
+      {items.map((p) => (
+        <Link
+          key={p.text}
+          href={p.href}
+          className={cx(
+            "rounded-full px-2.5 py-1 text-xs font-semibold",
+            p.tone === "red" ? "bg-red-500/15 text-red-300 hover:bg-red-500/25" : "bg-amber-400/15 text-amber-200 hover:bg-amber-400/25",
+          )}
+        >
+          {p.text}
+        </Link>
+      ))}
+    </div>
   );
 }

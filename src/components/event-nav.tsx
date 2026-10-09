@@ -21,6 +21,8 @@ type NavProps = {
   canSeeSuppliers: boolean;
   /** Chegadas da montagem (o gestor, o Head e o Operacional responsável). */
   canSeeArrivals: boolean;
+  /** Painel executivo da Pré-produção: só o diretor de produção. */
+  canSeeExecutive: boolean;
   /** Cliente: o que o Gerente liberou para ele acompanhar (null para os outros). */
   client: { costs: boolean; team: boolean; progress: boolean } | null;
 };
@@ -58,6 +60,7 @@ export function EventNav(props: NavProps) {
 
   const preItems: Item[] = [
     { href: pre, label: "Painel", icon: "overview", active: path === pre, bar: true },
+    ...(props.canSeeExecutive ? [{ href: `${pre}/executivo`, label: "Painel executivo", short: "Executivo", icon: "chart" as const, active: path.startsWith(`${pre}/executivo`) }] : []),
     { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`) },
     { href: `${pre}/cronograma`, label: "Cronograma", icon: "calendar", active: path.startsWith(`${pre}/cronograma`) },
     { href: `${pre}/pendencias`, label: "Pendências", icon: "pending", active: path.startsWith(`${pre}/pendencias`) },
