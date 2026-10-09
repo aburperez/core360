@@ -75,7 +75,7 @@ export const TOOLS: Tool[] = [
       "Os pontos de montagem e de finalização são marcados no lugar onde acontecem, por área.",
       "A cor mostra a situação de cada ponto: não iniciada, em andamento, concluída ou atrasada.",
     ],
-    img: "/site/planta.webp", alt: "Planta do evento no celular com pontos por área", phone: true,
+    img: "/site/planta.webp", alt: "Etapas da planta do evento no celular, cada uma com a sua cor", phone: true,
   },
   {
     id: "equipe", part: "campo", title: "Equipe e convites",
@@ -170,11 +170,11 @@ export const TOOLS: Tool[] = [
     serve: "Dar a cada pessoa a sua função, a sua agenda e um briefing claro do que fazer.",
     quem: "Gerente e Pré-produtor escrevem; cada pessoa lê o seu",
     passos: [
-      "Escolha as funções do evento e coloque as pessoas.",
-      "Preencha posto, horários e o que a pessoa faz.",
+      "Abra a pessoa e veja a função, a agenda e a ficha dela.",
+      "Escreva o briefing: posto, horários e o que a pessoa faz.",
       "Ela lê no celular, em Meu briefing, e confirma Li e entendi.",
     ],
-    img: "/site/funcoes.webp", alt: "Painel de funções e briefing no computador",
+    img: "/site/funcoes.webp", alt: "Função, agenda e ficha de uma pessoa no computador",
   },
   {
     id: "custos", part: "pre", title: "Planilha Padrão CORE 360",
