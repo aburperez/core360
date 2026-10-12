@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { FormError, Input, Label } from "@/components/field";
@@ -41,6 +42,9 @@ export function LoginForm({ next = "/eventos" }: { next?: string }) {
         <Label>Senha</Label>
         <Input name="password" type="password" autoComplete="current-password" required minLength={8} />
       </label>
+      <p className="-mt-2 text-right text-sm">
+        <Link href="/esqueci-senha" className="font-semibold text-primary hover:underline">Esqueci minha senha</Link>
+      </p>
       <FormError message={error} />
       <Button type="submit" className="w-full" disabled={busy}>
         {busy ? "Entrando…" : "Entrar"}

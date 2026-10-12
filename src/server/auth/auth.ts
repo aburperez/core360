@@ -1,10 +1,12 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
+import { after } from "next/server";
 import { isIP } from "node:net";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { authPrisma } from "../db/client";
 import { publicUrl } from "../../lib/public-url";
+import { getMailer, resetPasswordEmail, type Mailer } from "../email/email";
 
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -16,7 +18,19 @@ export interface AuthConfig {
   trustedOrigins?: string[];
   /** Limite de tentativas de login (desligar só em testes unitários específicos). */
   rateLimit?: boolean;
+  /** Endereço fixo do app nos links do e-mail (nunca o Host do pedido, que quem pede escolhe). */
+  appUrl?: string;
+  /** Quem envia o e-mail; null = envio desligado. Padrão: o do ambiente (src/server/email). */
+  mailer?: () => Mailer | null;
+  /**
+   * Roda o envio depois da resposta (na Vercel, `after`), para a resposta não
+   * demorar mais quando o e-mail existe. Padrão: espera o envio (testes).
+   */
+  defer?: (task: () => Promise<void>) => void | Promise<void>;
 }
+
+/** O link do e-mail vale 1 hora. */
+export const RESET_TOKEN_SECONDS = 60 * 60;
 
 /**
  * Login com Better Auth. Usa a conexão "core_auth", que só enxerga tabelas de
@@ -26,7 +40,7 @@ export interface AuthConfig {
 export function createAuth(cfg: AuthConfig) {
   const db = cfg.db;
 
-  async function logLogin(userId: string | null, action: "LOGIN" | "LOGIN_DENIED", ip?: string | null, ua?: string | null) {
+  async function logLogin(userId: string | null, action: "LOGIN" | "LOGIN_DENIED" | "PASSWORD_RESET", ip?: string | null, ua?: string | null) {
     // createMany não usa RETURNING: core_auth grava na auditoria mas não lê.
     await db.auditLog.createMany({
       data: {
@@ -54,7 +68,27 @@ export function createAuth(cfg: AuthConfig) {
       disableSignUp: true,
       minPasswordLength: MIN_PASSWORD_LENGTH,
       maxPasswordLength: 128,
+      // "Esqueci minha senha": o link vale 1 hora e uma vez só; trocar a senha
+      // derruba as sessões em todos os aparelhos. A resposta é sempre a mesma,
+      // exista o e-mail ou não.
       revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: RESET_TOKEN_SECONDS,
+      sendResetPassword: async ({ user, token }) => {
+        // Conta desativada não recebe o link (e não descobre que está desativada).
+        const u = await db.user.findUnique({ where: { id: user.id }, select: { active: true, name: true, email: true } });
+        const mailer = (cfg.mailer ?? getMailer)();
+        if (!u?.active || !mailer) return;
+        const url = `${(cfg.appUrl ?? cfg.baseURL).replace(/\/$/, "")}/redefinir-senha?token=${encodeURIComponent(token)}`;
+        const task = () =>
+          mailer.send(resetPasswordEmail({ to: u.email, name: u.name, url })).catch((err) => {
+            console.error("Esqueci minha senha: e-mail não enviado", err);
+          });
+        await (cfg.defer ?? ((t) => t()))(task);
+      },
+      onPasswordReset: async ({ user }, request) => {
+        const ip = request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request?.headers.get("x-real-ip");
+        await logLogin(user.id, "PASSWORD_RESET", ip, request?.headers.get("user-agent"));
+      },
     },
     user: {
       additionalFields: {
@@ -76,6 +110,8 @@ export function createAuth(cfg: AuthConfig) {
       max: 100,
       customRules: {
         "/sign-in/email": { window: 60, max: 5 },
+        "/request-password-reset": { window: 60, max: 3 },
+        "/reset-password": { window: 60, max: 10 },
       },
     },
     advanced: {
@@ -117,6 +153,9 @@ export function getAuth(): Auth {
       db: authPrisma(),
       secret,
       baseURL: process.env.BETTER_AUTH_URL || publicUrl(),
+      appUrl: publicUrl(),
+      // Na Vercel, o e-mail sai depois da resposta (a função continua viva até terminar).
+      defer: (task) => after(task),
       // Na Vercel o mesmo app responde no domínio de produção e no endereço do deploy.
       trustedOrigins: [process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
         .filter((h): h is string => !!h)

@@ -116,6 +116,8 @@ enum AuditAction {
   DELETE
   LOGIN
   LOGIN_DENIED
+  /// Senha nova pelo link do e-mail ("Esqueci minha senha").
+  PASSWORD_RESET
 
   @@map("audit_action")
 }
