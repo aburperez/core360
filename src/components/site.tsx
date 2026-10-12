@@ -242,6 +242,17 @@ export const TOOLS: Tool[] = [
     ],
     img: "/site/encerramento.webp", alt: "Tela de histórico e encerramento do evento no computador",
   },
+  {
+    id: "inteligencia", part: "pre", title: "Inteligência da agência",
+    serve: "Usar o que cada evento ensinou para escolher fornecedores e negociar preços.",
+    quem: "Diretor (na cotação, também o Gerente do evento)",
+    passos: [
+      "Ranking dos fornecedores pela nota média de todos os eventos, geral e por categoria, com os 6 critérios.",
+      "Banco de preços: o que a agência pagou por cada item em todos os eventos, inclusive os encerrados. Na cotação, os preços de itens parecidos aparecem como referência para negociar.",
+      "Comparativo entre eventos: os 4 valores, o custo de cada categoria e o custo por pessoa do público.",
+    ],
+    img: "/site/inteligencia.webp", alt: "Comparativo de custos entre eventos no computador",
+  },
 ];
 
 const PARTS = {
