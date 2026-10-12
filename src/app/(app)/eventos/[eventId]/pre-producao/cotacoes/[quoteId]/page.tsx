@@ -2,6 +2,10 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
 import { NotFoundError } from "@/server/errors";
 import { getQuote } from "@/modules/quotes/quotes.service";
+import { similarPrices } from "@/modules/intelligence/intelligence.service";
+import { canReviewSla } from "@/server/authz/policy";
+import { isAgencyAdmin } from "@/server/authz/actor";
+import { PriceList } from "@/components/price-list";
 import { TopBar } from "@/components/top-bar";
 import { PageHeading, Panel } from "@/components/panel";
 import { Card, PAGE, cx } from "@/components/ui";
@@ -43,6 +47,9 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
   const subject = `Cotação: ${q.title} · ${q.eventName}`;
   const emailText = supplierEmail({ title: q.title, briefing: q.briefing, eventName: q.eventName, sender: actor.name });
   const slots = [1, 2, 3];
+  // Fase 7C: o que a agência pagou por itens parecidos em outros eventos (só o gestor vê).
+  const lookFor = q.costItem?.name ?? q.title;
+  const prices = canReviewSla(actor, eventId) ? await similarPrices(actor, eventId, { name: lookFor, category: q.costItem?.category }) : null;
 
   return (
     <>
@@ -260,6 +267,27 @@ export default async function QuotePage({ params }: PageProps<"/eventos/[eventId
             )}
             {!q.can.choose && q.status !== "FECHADA" && q.quotes.length > 0 && (
               <p className="mt-3 text-sm text-muted">Quem escolhe o orçamento é o gestor do evento.</p>
+            )}
+          </Panel>
+        )}
+
+        {prices && (
+          <Panel
+            title="Preços pagos em outros eventos"
+            action={isAgencyAdmin(actor) && prices.total > 0 && (
+              <a href={`/inteligencia?aba=precos&q=${encodeURIComponent(lookFor)}`} className="text-sm font-semibold text-primary hover:underline">Banco de preços ›</a>
+            )}
+          >
+            {prices.items.length === 0 ? (
+              <p className="text-sm text-muted">Nenhum item parecido com preço nos outros eventos da agência ainda.</p>
+            ) : (
+              <>
+                <p className="mb-3 text-sm text-muted">
+                  Referência para negociar: itens parecidos com &ldquo;{lookFor}&rdquo; nos outros eventos da agência. Só o gestor vê.
+                </p>
+                <PriceList items={prices.items} compact />
+                {prices.total > prices.items.length && <p className="mt-2 text-xs text-muted">Mais {prices.total - prices.items.length} {prices.total - prices.items.length === 1 ? "item parecido" : "itens parecidos"}.</p>}
+              </>
             )}
           </Panel>
         )}

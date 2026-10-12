@@ -62,6 +62,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
                 </Link>
                 <AdminLink href={`/clientes${q}`}>Clientes</AdminLink>
                 <AdminLink href={`/diretores${q}`}>Diretores de produção</AdminLink>
+                <AdminLink href={`/inteligencia${q}`}>Inteligência</AdminLink>
                 <AdminLink href={`/agencias/${a.id}`}>Suporte CORE 360</AdminLink>
               </div>
             </div>

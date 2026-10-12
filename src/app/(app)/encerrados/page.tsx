@@ -18,7 +18,7 @@ export default async function ArchivedPage() {
       <TopBar title="Eventos encerrados" subtitle={actor.name} back="/eventos?todos=1" narrow />
       <main className="mx-auto max-w-2xl space-y-3 px-4 py-4 lg:py-6">
         <p className="text-sm text-muted">
-          Eventos que já tiveram o histórico baixado e foram encerrados. As fotos, os arquivos e as pessoas foram apagados; fica o resumo.
+          Eventos encerrados e excluídos. As fotos, os arquivos e as pessoas foram apagados; fica o resumo, com os preços dos itens.
         </p>
         {rows.length === 0 ? (
           <EmptyState title="Nenhum evento encerrado">Quando um evento concluído for encerrado, o resumo dele aparece aqui.</EmptyState>

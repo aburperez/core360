@@ -205,7 +205,7 @@ export async function getQuote(actor: Actor, id: string, now = new Date()) {
       eventName: event.name,
       stage: quoteStage(r, now),
       costItem: costItem && {
-        id: costItem.id, label: `${costItem.section.name} › ${costItem.name}`,
+        id: costItem.id, label: `${costItem.section.name} › ${costItem.name}`, name: costItem.name, category: costItem.category,
         quantity: Number(costItem.quantity), frequency: num(costItem.frequency), unitValue: num(costItem.unitValue),
       },
       quotes: list,
