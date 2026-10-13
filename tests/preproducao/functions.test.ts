@@ -77,6 +77,26 @@ describe("funções do evento", () => {
     await deleteFunction(marina, f.id);
   });
 
+  it("alterar o nome e excluir uma função é só do diretor de produção", async () => {
+    const sofia = await actorFor(db, "sofia");
+    const marina = await actorFor(db, "marina");
+    const f = (await createFunction(marina, rock, { name: `Palco ${uniq()}` }))!;
+    // A Pré-produtora não renomeia nem para um nome da lista, e não exclui.
+    await expectStatus(updateFunction(sofia, f.id, { name: DEFAULT_FUNCTIONS[0] }), 403);
+    await expectStatus(deleteFunction(sofia, f.id), 403);
+    await expectPgError(as("sofia", (tx) => tx.eventFunction.update({ where: { id: f.id }, data: { name: `Outro ${uniq()}` } })), "42501");
+    expect(await as("sofia", (tx) => tx.eventFunction.deleteMany({ where: { id: f.id } }))).toEqual({ count: 0 });
+    // O diretor altera e exclui; quem tinha a função fica sem função.
+    const novo = `Palco principal ${uniq()}`;
+    expect(await updateFunction(marina, f.id, { name: novo })).toMatchObject({ name: novo });
+    const before = (await owner.participantProfile.findUnique({ where: { participantId: P.joao.id } }))?.functionId ?? null;
+    await setFunctionPeople(marina, f.id, { participantIds: [P.joao.id] });
+    await deleteFunction(marina, f.id);
+    expect(await owner.eventFunction.count({ where: { id: f.id } })).toBe(0);
+    expect((await owner.participantProfile.findUnique({ where: { participantId: P.joao.id } }))?.functionId).toBeNull();
+    if (before) await owner.participantProfile.update({ where: { participantId: P.joao.id }, data: { functionId: before } });
+  });
+
   it("click and build: cria só as funções marcadas da lista padrão", async () => {
     const paulo = await actorFor(db, "paulo");
     const picked = [DEFAULT_FUNCTIONS[0], DEFAULT_FUNCTIONS[3]];

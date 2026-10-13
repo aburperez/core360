@@ -34,9 +34,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const sofia = await actorFor(db, "sofia");
-  await deleteFunction(sofia, fnA);
-  await deleteFunction(sofia, fnB);
+  const marina = await actorFor(db, "marina");
+  await deleteFunction(marina, fnA);
+  await deleteFunction(marina, fnB);
   for (const b of before) await owner.participantProfile.update({ where: { participantId: b.participantId }, data: { functionId: b.functionId } });
   await Promise.all([db.$disconnect(), owner.$disconnect()]);
 });

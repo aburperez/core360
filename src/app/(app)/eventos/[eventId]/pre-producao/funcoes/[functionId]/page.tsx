@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getFunction } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
@@ -30,7 +30,7 @@ export default async function FunctionPage({ params }: PageProps<"/eventos/[even
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           <div>
             <SectionTitle>Função</SectionTitle>
-            <Card><FunctionEditor fn={fn} back={back} /></Card>
+            <Card><FunctionEditor fn={fn} back={back} director={canReviewSla(actor, eventId)} /></Card>
           </div>
           <div>
             <SectionTitle>Atividades ({fn.activities.length})</SectionTitle>

@@ -153,6 +153,15 @@ const PATHS = {
       <path d="M13 20.5h7.5" />
     </>
   ),
+  // Excluir: lixeira com tampa.
+  trash: (
+    <>
+      <A d="M6.5 7.5h11l-.8 11.6a1.5 1.5 0 0 1-1.5 1.4H8.8a1.5 1.5 0 0 1-1.5-1.4z" />
+      <path d="M6.5 7.5h11l-.8 11.6a1.5 1.5 0 0 1-1.5 1.4H8.8a1.5 1.5 0 0 1-1.5-1.4z" />
+      <path d="M4 7.5h16M9.5 7.5V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2.5" />
+      <path d="M10.5 11v6M13.5 11v6" />
+    </>
+  ),
   menu: <path d="M4 6.5h16M4 12h11M4 17.5h16" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
   // Mapa de itens: caixas empilhadas.

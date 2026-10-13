@@ -9,7 +9,7 @@ import { EventTabs } from "@/components/event-nav";
 import { BriefingPill } from "@/components/briefing-view";
 import { Card, EmptyState, PAGE, SectionTitle, cx } from "@/components/ui";
 import { ROLE_LABEL } from "@/lib/format";
-import { DefaultsPicker, FunctionSelect, NewFunctionForm } from "./forms";
+import { DefaultsPicker, FunctionActions, FunctionSelect, NewFunctionForm } from "./forms";
 import { SheetPanel } from "./sheet";
 import { ProducersTabs } from "./tabs";
 
@@ -86,16 +86,16 @@ export default async function FunctionsPanelPage({ params }: PageProps<"/eventos
         ) : (
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             {panel.functions.map((f) => (
-              <Link
-                key={f.id}
-                href={`${base}/funcoes/${f.id}`}
-                className="block rounded-2xl border border-border bg-surface px-4 py-3 transition hover:border-primary/60 active:scale-[0.99]"
-              >
-                <p className="truncate font-semibold">{f.name}</p>
-                <p className="text-sm text-muted">
-                  {f.peopleCount} {f.peopleCount === 1 ? "produtor" : "produtores"} · {f.activityCount} {f.activityCount === 1 ? "atividade" : "atividades"}
-                </p>
-              </Link>
+              <div key={f.id} className="flex flex-col rounded-2xl border border-border bg-surface transition hover:border-primary/60">
+                <Link href={`${base}/funcoes/${f.id}`} className="block flex-1 px-4 py-3 active:scale-[0.99]">
+                  <p className="truncate font-semibold">{f.name}</p>
+                  <p className="text-sm text-muted">
+                    {f.peopleCount} {f.peopleCount === 1 ? "produtor" : "produtores"} · {f.activityCount} {f.activityCount === 1 ? "atividade" : "atividades"}
+                  </p>
+                </Link>
+                {/* Diretor de produção: alterar e excluir direto no painel. */}
+                {director && <div className="border-t border-border px-2 py-1"><FunctionActions fn={f} /></div>}
+              </div>
             ))}
           </div>
         )}

@@ -38,6 +38,11 @@ function requireCustomFunction(actor: Actor, eventId: string, name: string | und
   }
 }
 
+/** Mudar o nome ou excluir uma função: só o diretor de produção (a RLS confere de novo). */
+function requireDirector(actor: Actor, eventId: string, what: string) {
+  if (!canReviewSla(actor, eventId)) throw new ForbiddenError(`Só o diretor de produção ${what}.`);
+}
+
 const FIELD_ROLES = ["GERENTE", "HEAD", "OPERACIONAL"] as const;
 const PROFILE_FIELDS = ["document", "uniformSize", "dietary", "emergencyName", "emergencyPhone"] as const;
 
@@ -242,7 +247,7 @@ export async function getFunction(actor: Actor, functionId: string) {
 export async function updateFunction(actor: Actor, functionId: string, input: unknown) {
   const f = await loadFunction(actor, functionId);
   const data = parse(functionSchema.partial(), input);
-  if (data.name !== undefined && data.name !== f.name) requireCustomFunction(actor, f.eventId, data.name);
+  if (data.name !== undefined && data.name !== f.name) requireDirector(actor, f.eventId, "muda o nome de uma função");
   try {
     return await actor.run(async (tx) => {
       const saved = await tx.eventFunction.update({ where: { id: f.id }, data, select: { id: true, name: true, description: true } });
@@ -257,9 +262,10 @@ export async function updateFunction(actor: Actor, functionId: string, input: un
   }
 }
 
-/** Apaga a função e as atividades dela; quem tinha fica sem função. */
+/** Apaga a função e as atividades dela; quem tinha fica sem função. Só o diretor. */
 export async function deleteFunction(actor: Actor, functionId: string) {
   const f = await loadFunction(actor, functionId);
+  requireDirector(actor, f.eventId, "exclui uma função");
   return actor.run(async (tx) => {
     const { count } = await tx.participantProfile.updateMany({ where: { eventId: f.eventId, functionId: f.id }, data: { functionId: null } });
     await tx.eventFunction.delete({ where: { id: f.id } });

@@ -161,6 +161,7 @@ export const TOOLS: Tool[] = [
     passos: [
       "Abra Produtores e Funções.",
       "Monte por planilha ou clicando: escolha as pessoas e as funções de cada uma.",
+      "O diretor altera ou exclui uma função direto no cartão dela.",
       "Pronto: todos consultam quem faz o quê.",
     ],
     img: "/site/produtores.webp", alt: "Página Produtores e Funções no computador",

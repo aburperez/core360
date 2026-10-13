@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, cx } from "@/components/ui";
 import { FormError, Input, Label, Textarea } from "@/components/field";
 import { api } from "@/components/api-client";
+import { Icon } from "@/components/icons";
 
 function useAction() {
   const router = useRouter();
@@ -145,8 +146,116 @@ export function FunctionSelect({
   );
 }
 
-/** Nome e descrição da função, e apagar. */
-export function FunctionEditor({ fn, back }: { fn: { id: string; name: string; description: string | null }; back: string }) {
+function Dialog({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      role="dialog"
+      aria-modal
+      aria-label={label}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
+      <Card className="w-full max-w-lg">{children}</Card>
+    </div>
+  );
+}
+
+type PanelFunction = { id: string; name: string; description: string | null; peopleCount: number; activityCount: number };
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Botões do diretor de produção em cada função do painel: alterar (nome e
+ * descrição) e excluir. Excluir apaga as atividades da função e deixa sem
+ * função quem tinha; a confirmação diz quantos são antes.
+ */
+export function FunctionActions({ fn }: { fn: PanelFunction }) {
+  const { busy, error, run } = useAction();
+  const [open, setOpen] = useState<"edit" | "delete" | null>(null);
+  const close = () => !busy && setOpen(null);
+  const small = "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-1 text-sm font-semibold transition hover:bg-white/5";
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-1">
+        <button type="button" className={cx(small, "text-primary")} onClick={() => setOpen("edit")} aria-label={`Alterar a função ${fn.name}`}>
+          <Icon name="edit" className="h-4 w-4" /> Alterar
+        </button>
+        <button type="button" className={cx(small, "text-red-300")} onClick={() => setOpen("delete")} aria-label={`Excluir a função ${fn.name}`}>
+          <Icon name="trash" className="h-4 w-4" /> Excluir
+        </button>
+      </div>
+
+      {open === "edit" && (
+        <Dialog label={`Alterar a função ${fn.name}`} onClose={close}>
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              const ok = await run(() =>
+                api(`/api/functions/${fn.id}`, { method: "PATCH", body: { name: String(f.get("name") ?? ""), description: String(f.get("description") ?? "") } }),
+              );
+              if (ok) setOpen(null);
+            }}
+          >
+            <p className="font-semibold">Alterar função</p>
+            <label className="block">
+              <Label>Nome da função</Label>
+              <Input name="name" required maxLength={80} defaultValue={fn.name} autoFocus />
+            </label>
+            <label className="block">
+              <Label hint="(aparece para quem tem a função)">O que essa função faz</Label>
+              <Textarea name="description" maxLength={2000} defaultValue={fn.description ?? ""} />
+            </label>
+            {fn.peopleCount > 0 && (
+              <p className="text-sm text-muted">{plural(fn.peopleCount, "produtor continua", "produtores continuam")} com a função, já com o nome novo.</p>
+            )}
+            <FormError message={error} />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={busy}>{busy ? "Salvando…" : "Salvar"}</Button>
+              <Button type="button" variant="secondary" disabled={busy} onClick={close}>Cancelar</Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {open === "delete" && (
+        <Dialog label={`Excluir a função ${fn.name}`} onClose={close}>
+          <div className="space-y-3">
+            <p className="font-semibold">Excluir a função &ldquo;{fn.name}&rdquo;?</p>
+            {fn.peopleCount + fn.activityCount === 0 ? (
+              <p className="text-sm text-muted">Ninguém tem esta função e ela não tem atividades.</p>
+            ) : (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-amber-200">
+                {fn.peopleCount > 0 && <li>{plural(fn.peopleCount, "produtor fica", "produtores ficam")} sem função. Dá para escolher outra depois, no painel.</li>}
+                {fn.activityCount > 0 && <li>{plural(fn.activityCount, "atividade da função é apagada", "atividades da função são apagadas")}.</li>}
+              </ul>
+            )}
+            <p className="text-sm text-muted">Não dá para desfazer. Se for só trocar o nome, use Alterar.</p>
+            <FormError message={error} />
+            <div className="flex gap-2">
+              <Button
+                className="bg-red-500 text-white hover:bg-red-400"
+                disabled={busy}
+                onClick={async () => {
+                  if (await run(() => api(`/api/functions/${fn.id}`, { method: "DELETE" }))) setOpen(null);
+                }}
+              >
+                {busy ? "Excluindo…" : "Excluir função"}
+              </Button>
+              <Button type="button" variant="secondary" disabled={busy} onClick={close}>Cancelar</Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+    </>
+  );
+}
+
+/** Nome e descrição da função; mudar o nome e apagar é só do diretor de produção. */
+export function FunctionEditor({ fn, back, director }: { fn: { id: string; name: string; description: string | null }; back: string; director: boolean }) {
   const { busy, error, run, router } = useAction();
   const [saved, setSaved] = useState(false);
   return (
@@ -156,15 +265,14 @@ export function FunctionEditor({ fn, back }: { fn: { id: string; name: string; d
         e.preventDefault();
         const f = new FormData(e.currentTarget);
         setSaved(false);
-        const ok = await run(() =>
-          api(`/api/functions/${fn.id}`, { method: "PATCH", body: { name: String(f.get("name") ?? ""), description: String(f.get("description") ?? "") } }),
-        );
+        const body = { description: String(f.get("description") ?? ""), ...(director ? { name: String(f.get("name") ?? "") } : {}) };
+        const ok = await run(() => api(`/api/functions/${fn.id}`, { method: "PATCH", body }));
         setSaved(ok);
       }}
     >
       <label className="block">
-        <Label>Nome da função</Label>
-        <Input name="name" required maxLength={80} defaultValue={fn.name} />
+        <Label hint={director ? undefined : "(só o diretor de produção muda)"}>Nome da função</Label>
+        <Input name="name" required maxLength={80} defaultValue={fn.name} disabled={!director} />
       </label>
       <label className="block">
         <Label hint="(aparece para quem tem a função)">O que essa função faz</Label>
@@ -174,19 +282,19 @@ export function FunctionEditor({ fn, back }: { fn: { id: string; name: string; d
       {saved && <p className="text-sm text-emerald-300">Salvo.</p>}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={busy}>{busy ? "Salvando…" : "Salvar"}</Button>
-        <Button
+        {director && <Button
           type="button"
           variant="secondary"
           className="text-red-300"
           disabled={busy}
           onClick={async () => {
-            if (!confirm(`Apagar a função “${fn.name}” e as atividades dela? Quem tinha essa função fica sem função.`)) return;
+            if (!confirm(`Excluir a função “${fn.name}” e as atividades dela? Quem tinha essa função fica sem função.`)) return;
             const ok = await run(() => api(`/api/functions/${fn.id}`, { method: "DELETE" }));
             if (ok) router.push(back);
           }}
         >
-          Apagar função
-        </Button>
+          Excluir função
+        </Button>}
       </div>
     </form>
   );
