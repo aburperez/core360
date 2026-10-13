@@ -332,7 +332,7 @@ const ROLES = [
 
 const SECURITY = [
   { title: "Dados separados", text: "Uma agência nunca vê eventos, pessoas ou custos de outra. A regra está no banco de dados, não só na tela." },
-  { title: "Acesso por evento", text: "Cada pessoa entra por convite e vê só a sua parte. Saiu do evento, o acesso sai na hora." },
+  { title: "Acesso por evento", text: "Cada pessoa entra por convite e vê só a sua parte. Saiu do evento, o acesso sai na hora. Esqueceu a senha? Um link por e-mail cria uma nova." },
   { title: "Tudo registrado", text: "Quem abriu, mudou ou concluiu cada coisa fica no histórico, com data e hora." },
   { title: "Suporte com permissão", text: "A equipe CORE 360 só entra numa agência se o diretor de produção autorizar." },
 ];
