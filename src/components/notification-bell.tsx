@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { Icon } from "./icons";
 
 /** Sino com o número de avisos não lidos. Atualiza a cada 30 s com a tela aberta. */
 export function NotificationBell() {
@@ -33,7 +34,7 @@ export function NotificationBell() {
   const label = count > 0 ? `Avisos: ${count} não lidos` : "Avisos";
   return (
     <Link href="/avisos" aria-label={label} className="relative flex h-11 w-11 items-center justify-center rounded-xl text-xl transition hover:bg-white/10">
-      <span aria-hidden>🔔</span>
+      <Icon name="bell" className="h-6 w-6" />
       {count > 0 && (
         <span className="absolute right-0.5 top-0.5 min-w-5 rounded-full bg-accent px-1 text-center text-xs font-bold leading-5 text-accent-foreground">
           {count > 99 ? "99+" : count}

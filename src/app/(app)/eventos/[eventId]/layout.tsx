@@ -19,7 +19,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
     hasReceipts(actor, eventId), myBriefingState(actor, eventId), myPlanSummary(actor, eventId), fieldDocumentCount(actor, eventId),
   ]);
   return (
-    <div className="pb-nav lg:pb-0 lg:pl-60 print:p-0">
+    <div className="pb-nav lg:pb-0 print:p-0">
       {isEventSupport(actor, eventId) && (
         <p className="bg-amber-500/15 print:hidden px-4 py-2 text-center text-sm text-amber-100">
           Você está aqui como <b>Suporte</b>, autorizado pela agência. Tudo o que você faz fica registrado.

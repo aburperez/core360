@@ -117,27 +117,64 @@ export function Bars({ rows }: { rows: { label: string; value: number }[] }) {
   );
 }
 
-/** Atalho grande com ícone, nome e uma linha do momento. */
-export function Tile({ href, icon, title, line, tone, i = 0 }: { href: string; icon: IconName; title: string; line?: ReactNode; tone?: "alert"; i?: number }) {
+/**
+ * Cores dos círculos dos cartões de seção (na ordem), no estilo da grade de
+ * pastas: anel colorido, miolo cheio e o ícone branco no meio.
+ */
+export const RING_COLORS = ["#00c9d1", "#8b5cf6", "#f2762e", "#f2a900", "#11968f", "#22a55b", "#2f7de1", "#e0457b", "#64748b"] as const;
+
+export const ringColor = (i: number) => RING_COLORS[((i % RING_COLORS.length) + RING_COLORS.length) % RING_COLORS.length];
+
+/** Ícone grande e redondo dos cartões. `size` "sm" para listas e para o celular apertado. */
+export function RoundIcon({ icon, i = 0, size = "lg" }: { icon: IconName; i?: number; size?: "lg" | "sm" }) {
+  const c = ringColor(i);
+  return (
+    <span
+      className={cx("grid shrink-0 place-items-center rounded-full bg-background", size === "lg" ? "h-[76px] w-[76px] border-[5px]" : "h-12 w-12 border-[3px]")}
+      style={{ borderColor: c }}
+      aria-hidden
+    >
+      <span className={cx("grid place-items-center rounded-full text-white", size === "lg" ? "h-[54px] w-[54px]" : "h-[34px] w-[34px]")} style={{ background: c }}>
+        <Icon name={icon} className={size === "lg" ? "h-7 w-7" : "h-[18px] w-[18px]"} />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Cartão de seção: o círculo com o ícone em cima e, embaixo, o nome e uma
+ * linha do momento, com o pontinho de cor (amarelo quando pede atenção).
+ */
+export function SectionCard({ href, icon, title, line, tone, i = 0 }: { href: string; icon: IconName; title: string; line?: ReactNode; tone?: "alert"; i?: number }) {
   return (
     <Link
       href={href}
       className={cx(
-        "flex items-center gap-3 rounded-2xl border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.99]",
-        tone === "alert" ? "border-amber-400/50" : "border-border",
+        "group flex flex-col overflow-hidden rounded-xl border bg-surface transition hover:border-primary/70 hover:bg-surface/80 active:scale-[0.98]",
+        tone === "alert" ? "border-amber-400/60" : "border-border",
       )}
     >
-      <span className={cx("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", serie(i).soft, serie(i).text)}>
-        <Icon name={icon} />
+      <span className="grid h-28 place-items-center transition group-hover:scale-[1.04]">
+        <RoundIcon icon={icon} i={i} />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold">{title}</span>
-        {line && <span className={cx("block text-sm leading-snug", tone === "alert" ? "text-amber-200" : "text-muted")}>{line}</span>}
+      <span className="flex min-w-0 items-start gap-2 px-3 pb-3">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">{title}</span>
+          {line && <span className={cx("mt-0.5 line-clamp-2 block text-xs leading-snug", tone === "alert" ? "text-amber-200" : "text-muted")}>{line}</span>}
+        </span>
+        <span className={cx("mt-1.5 h-2 w-2 shrink-0 rounded-full", tone === "alert" && "bg-amber-400")} style={tone === "alert" ? undefined : { background: ringColor(i) }} aria-hidden />
       </span>
-      <Icon name="chevron" className="h-5 w-5 shrink-0 text-muted" />
     </Link>
   );
 }
+
+/** Grade dos cartões: 2 por linha no celular e quantos couberem no computador. */
+export function SectionGrid({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]", className)}>{children}</div>;
+}
+
+/** Os atalhos antigos agora são cartões de seção. */
+export const Tile = SectionCard;
 
 /** Quem está vendo: iniciais, nome e papel (topo da coluna da direita). */
 export function Profile({ name, role, detail }: { name: string; role: string; detail?: string }) {
@@ -155,45 +192,20 @@ export function Profile({ name, role, detail }: { name: string; role: string; de
   );
 }
 
-/** Cartão quadrado do celular (grade 2 por linha): ícone grande, nome e número. */
-export function SquareTile({ href, icon, title, line, tone, i = 0 }: { href: string; icon: IconName; title: string; line?: ReactNode; tone?: "alert"; i?: number }) {
-  return (
-    <Link
-      href={href}
-      className={cx(
-        "flex min-h-32 flex-col justify-between gap-3 rounded-2xl border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.98]",
-        tone === "alert" ? "border-amber-400/50" : "border-border",
-      )}
-    >
-      <span className={cx("flex h-12 w-12 items-center justify-center rounded-2xl", serie(i).soft, serie(i).text)}>
-        <Icon name={icon} className="h-6 w-6" />
-      </span>
-      <span className="min-w-0">
-        <span className="block font-semibold leading-tight">{title}</span>
-        {line && <span className={cx("mt-0.5 block text-sm leading-snug", tone === "alert" ? "text-amber-200" : "text-muted")}>{line}</span>}
-      </span>
-    </Link>
-  );
-}
+export const SquareTile = SectionCard;
 
-/** Título grande da página com o caminho (Evento › Bloco), como na referência. */
+/**
+ * Título grande da página no computador. O caminho (Evento › Bloco) fica na
+ * linha de navegação embaixo da barra do topo; aqui ele vira a descrição.
+ */
 export function PageHeading({ trail, title, children }: { trail: string[]; title: string; children?: ReactNode }) {
   return (
-    <div className="mb-4 hidden lg:block">
-      <p className="text-sm text-muted">{trail.join(" › ")}</p>
-      <div className="mt-1 flex items-end justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+    <div className="mb-5 hidden lg:block">
+      <div className="flex items-end justify-between gap-4">
+        <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
         {children}
       </div>
-    </div>
-  );
-}
-
-/** Cabeçalho do perfil no celular (faixa da marca com a pessoa). */
-export function MobileHero({ name, role, detail }: { name: string; role: string; detail?: string }) {
-  return (
-    <div className="-mx-4 -mt-4 mb-4 bg-gradient-to-b from-brand-navy to-background px-4 pb-5 pt-4 lg:hidden">
-      <Profile name={name} role={role} detail={detail} />
+      <p className="mt-1 text-muted">{trail.join(" › ")}</p>
     </div>
   );
 }

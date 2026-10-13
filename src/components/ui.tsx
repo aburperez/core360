@@ -5,9 +5,9 @@ import { PRIORITY_LABEL, PRIORITY_STYLE, STATUS_LABEL, STATUS_STYLE, slaText } f
 
 /**
  * Largura das telas: uma coluna no celular; no computador (lg) a tela se abre
- * até 6xl ao lado do menu lateral. Usada pela barra do topo e pelo conteúdo.
+ * até 7xl (o menu do evento abre pelo ☰). Usada pela barra do topo e pelo conteúdo.
  */
-export const PAGE = "mx-auto w-full max-w-2xl px-4 lg:max-w-6xl lg:px-8";
+export const PAGE = "mx-auto w-full max-w-2xl px-4 lg:max-w-7xl lg:px-8";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");

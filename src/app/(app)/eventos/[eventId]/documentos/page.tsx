@@ -25,7 +25,7 @@ export default async function FieldDocumentsPage({ params }: PageProps<"/eventos
       <main className={cx(PAGE, "space-y-4 py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Gestão de campo"]} title="Documentos" />
         <p className="text-sm text-muted">
-          {docs.length ? "Liberados pela produção para consulta. Toque para abrir." : "A produção ainda não liberou documentos para o campo."}
+          {docs.length ? "Liberados pela produção para consulta. Toque num arquivo para ver os detalhes e abrir." : "A produção ainda não liberou documentos para o campo."}
         </p>
         <DocumentList docs={docs} />
       </main>

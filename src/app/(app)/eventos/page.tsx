@@ -7,7 +7,9 @@ import { agenciesWithoutSupport } from "@/modules/agencies/agencies.service";
 import { homePriorities, type Priority } from "@/modules/panels/panels.service";
 import { hasArchived } from "@/modules/closure/closure.service";
 import { TopBar } from "@/components/top-bar";
-import { EmptyState, PAGE, cx } from "@/components/ui";
+import { EmptyState, PAGE, SectionTitle, cx } from "@/components/ui";
+import { type TileData, SectionCard, SectionGrid } from "@/components/panel";
+import { EventBrowser, type BrowserEvent } from "./event-browser";
 import { ROLE_LABEL, formatDate } from "@/lib/format";
 import { EVENT_STATUS_LABEL as EVENT_STATUS } from "@/lib/event-stages";
 
@@ -21,65 +23,78 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
   const admin = isAgencyAdmin(actor);
   // Quem só participa de um evento vai direto para ele (os diretores de produção veem a lista e o painel da agência).
   if (events.length === 1 && !todos && !admin && !actor.isPlatformAdmin) redirect(`/eventos/${events[0].id}`);
-  const many = actor.adminAgencies.length > 1;
   const [noSupport, priorities, archived] = await Promise.all([
     agenciesWithoutSupport(actor), homePriorities(actor, events), hasArchived(actor),
   ]);
   const urgent = events.filter((e) => priorities.get(e.id)?.length);
 
+  const STAGE: Record<string, BrowserEvent["stage"]> = { MONTAGEM: "campo", EVENTO: "campo", DESMONTAGEM: "campo", FECHAMENTO: "fim", CONCLUIDO: "fim", CANCELADO: "fim" };
+  const rows: BrowserEvent[] = events.map((e) => ({
+    id: e.id, name: e.name, client: e.client.name,
+    place: [e.venue, e.city].filter(Boolean).join(" · ") || null,
+    dates: `${formatDate(e.startsAt)} – ${formatDate(e.endsAt)}`,
+    status: EVENT_STATUS[e.status], stage: STAGE[e.status] ?? "pre",
+    role: e.myRole ? (isEventSupport(actor, e.id) ? "Suporte" : ROLE_LABEL[e.myRole]) : null,
+    type: e.eventType, audience: e.expectedAudience ? `${e.expectedAudience.toLocaleString("pt-BR")} pessoas` : null,
+    description: e.description, priorities: priorities.get(e.id) ?? [],
+  }));
+  // Atalhos em cartões redondos, como as pastas do topo da referência.
+  const one = actor.adminAgencies.length === 1 ? actor.adminAgencies[0] : null;
+  const shortcuts: TileData[] = [
+    ...(actor.isPlatformAdmin ? [{ href: "/agencias", icon: "agency" as const, title: "Agências", line: "Criar, convidar, suspender" }] : []),
+    ...(one
+      ? [
+          { href: "/eventos/novo", icon: "plus" as const, title: "Novo evento", line: "Criar evento" },
+          { href: "/clientes", icon: "client" as const, title: "Clientes", line: "Quem contrata a agência" },
+          { href: "/diretores", icon: "team" as const, title: "Diretores", line: "Diretores de produção" },
+          { href: "/inteligencia", icon: "sparkles" as const, title: "Inteligência", line: "Fornecedores e preços" },
+          { href: `/agencias/${one.id}`, icon: "support" as const, title: "Suporte CORE 360", line: noSupport.has(one.id) ? "Autorize o suporte" : "Autorizado", alert: noSupport.has(one.id) },
+        ]
+      : []),
+    ...(archived ? [{ href: "/encerrados", icon: "archive" as const, title: "Encerrados", line: "Resumo dos eventos apagados" }] : []),
+  ];
+
   return (
     <>
-      <TopBar title="Meus eventos" subtitle={actor.name} brand />
-      <main className={cx(PAGE, "grid gap-3 py-4 lg:grid-cols-2 lg:py-6 xl:grid-cols-3")}>
-        {actor.isPlatformAdmin && (
-          <Link href="/agencias" className="flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
-            <span className="min-w-0">
-              <span className="block font-semibold">Agências</span>
-              <span className="block text-sm text-muted">Criar, convidar o diretor de produção, suspender e reativar</span>
-            </span>
-            <span className="text-2xl text-primary">›</span>
-          </Link>
-        )}
+      <TopBar title="Meus eventos" subtitle={actor.name} />
+      <main className={cx(PAGE, "space-y-6 py-4 lg:py-6")}>
+        <p className="text-muted">
+          {one ? `Todos os eventos da ${one.name}. ` : ""}
+          <span className="hidden lg:inline">Clique em um evento para ver os detalhes ao lado; dois cliques abrem.</span>
+          <span className="lg:hidden">Toque em um evento para abrir.</span>
+        </p>
         {actor.suspendedAgencies.map((a) => (
-          <p key={a.id} className="rounded-2xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100 lg:col-span-2 xl:col-span-3">
+          <p key={a.id} className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">
             A agência <b>{a.name}</b> está suspensa. Os eventos dela voltam quando ela for reativada.
           </p>
         ))}
-        {actor.adminAgencies.map((a) => {
-          const q = many ? `?agencia=${a.id}` : "";
+        {shortcuts.length > 0 && (
+          <section>
+            <SectionTitle>Atalhos</SectionTitle>
+            <SectionGrid>
+              {shortcuts.map((t, i) => <SectionCard key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
+            </SectionGrid>
+          </section>
+        )}
+        {/* Mais de uma agência: um bloco de atalhos por agência. */}
+        {!one && actor.adminAgencies.map((a) => {
+          const q = `?agencia=${a.id}`;
           return (
-            <div key={a.id} className="rounded-2xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2 xl:col-span-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{a.role === "SUPORTE" ? "Agência · você é Suporte" : "Agência · diretor de produção"}</p>
-              <p className="text-lg font-semibold">{a.name}</p>
-              {noSupport.has(a.id) && (
-                <Link href={`/agencias/${a.id}`} className="mt-1 block text-sm text-amber-200 underline">
-                  Autorize o Suporte CORE 360 para a gente poder ajudar quando algo der errado ›
-                </Link>
-              )}
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                <Link href={`/eventos/novo${q}`} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 font-semibold text-primary-foreground sm:col-span-1">
-                  + Novo evento
-                </Link>
-                <AdminLink href={`/clientes${q}`}>Clientes</AdminLink>
-                <AdminLink href={`/diretores${q}`}>Diretores de produção</AdminLink>
-                <AdminLink href={`/inteligencia${q}`}>Inteligência</AdminLink>
-                <AdminLink href={`/agencias/${a.id}`}>Suporte CORE 360</AdminLink>
-              </div>
-            </div>
+            <section key={a.id}>
+              <SectionTitle>{a.name} · {a.role === "SUPORTE" ? "você é Suporte" : "diretor de produção"}</SectionTitle>
+              <SectionGrid>
+                <SectionCard href={`/eventos/novo${q}`} icon="plus" title="Novo evento" line="Criar evento" i={0} />
+                <SectionCard href={`/clientes${q}`} icon="client" title="Clientes" line="Quem contrata a agência" i={1} />
+                <SectionCard href={`/diretores${q}`} icon="team" title="Diretores" line="Diretores de produção" i={2} />
+                <SectionCard href={`/inteligencia${q}`} icon="sparkles" title="Inteligência" line="Fornecedores e preços" i={3} />
+                <SectionCard href={`/agencias/${a.id}`} icon="support" title="Suporte CORE 360" line={noSupport.has(a.id) ? "Autorize o suporte" : "Autorizado"} tone={noSupport.has(a.id) ? "alert" : undefined} i={4} />
+              </SectionGrid>
+            </section>
           );
         })}
-        {events.length === 0 && (
-          <div className="lg:col-span-2 xl:col-span-3">
-            {admin ? (
-              <EmptyState title="Nenhum evento ainda">Cadastre um cliente e crie o primeiro evento.</EmptyState>
-            ) : actor.isPlatformAdmin ? null : (
-              <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>
-            )}
-          </div>
-        )}
         {priorities.size > 0 && (
-          <section className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2 xl:col-span-3" aria-label="Prioridades de hoje">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Prioridades de hoje</h2>
+          <section className="rounded-xl border border-border bg-surface p-4" aria-label="Prioridades de hoje">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted">Prioridades de hoje</h2>
             {urgent.length === 0 ? (
               <p className="mt-2 text-sm text-emerald-300">Nada atrasado nem vencendo hoje nos seus eventos.</p>
             ) : (
@@ -94,47 +109,20 @@ export default async function EventsPage({ searchParams }: PageProps<"/eventos">
             )}
           </section>
         )}
-        {events.map((e) => (
-          <div key={e.id} className="relative rounded-2xl border border-border bg-surface p-4 transition hover:border-primary/60 active:scale-[0.99]">
-          <Link href={`/eventos/${e.id}`} className="block after:absolute after:inset-0 after:rounded-2xl" aria-label={e.name}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-lg font-semibold">{e.name}</p>
-                <p className="truncate text-sm text-muted">{e.client.name}{e.venue ? ` · ${e.venue}` : ""}</p>
-                <p className="mt-1 text-sm text-muted">{formatDate(e.startsAt)} – {formatDate(e.endsAt)}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                {e.myRole && (
-                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                    {isEventSupport(actor, e.id) ? "Suporte" : ROLE_LABEL[e.myRole]}
-                  </span>
-                )}
-                <p className="mt-2 text-xs text-muted">{EVENT_STATUS[e.status]}</p>
-              </div>
-            </div>
-          </Link>
-          {!!priorities.get(e.id)?.length && <div className="relative mt-3"><PriorityChips items={priorities.get(e.id)!} /></div>}
-          </div>
-        ))}
-        {archived && (
-          <Link href="/encerrados" className="flex items-center justify-between gap-3 rounded-2xl border border-border p-4 text-muted hover:border-primary/60 lg:col-span-2 xl:col-span-3">
-            <span className="min-w-0">
-              <span className="block font-semibold text-foreground">Eventos encerrados</span>
-              <span className="block text-sm">O resumo que ficou de cada evento depois de apagado</span>
-            </span>
-            <span className="text-2xl text-primary">›</span>
-          </Link>
-        )}
+        <section>
+          <SectionTitle>Eventos</SectionTitle>
+          {events.length === 0 ? (
+            admin ? (
+              <EmptyState title="Nenhum evento ainda">Cadastre um cliente e crie o primeiro evento.</EmptyState>
+            ) : actor.isPlatformAdmin ? null : (
+              <EmptyState title="Você ainda não está em nenhum evento">Peça ao gerente do evento para cadastrar você.</EmptyState>
+            )
+          ) : (
+            <EventBrowser events={rows} />
+          )}
+        </section>
       </main>
     </>
-  );
-}
-
-function AdminLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-surface px-3 py-2 text-center leading-tight font-semibold">
-      {children}
-    </Link>
   );
 }
 

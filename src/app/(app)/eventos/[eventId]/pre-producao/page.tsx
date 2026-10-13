@@ -21,7 +21,7 @@ import { financialSummary } from "@/modules/finance/closing.service";
 import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { PAGE, cx } from "@/components/ui";
-import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, Tile, pct } from "@/components/panel";
+import { type TileData, Bars, PageHeading, Panel, Profile, ProgressRow, Ring, SectionCard, SectionGrid, pct } from "@/components/panel";
 import { ROLE_LABEL, formatDate, formatDateTime, formatDuration, formatPeriod } from "@/lib/format";
 import { brl } from "@/lib/money";
 
@@ -123,7 +123,6 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Painel da pré-produção" />
-        <MobileHero name={actor.name} role={role} detail={event.name} />
         <EventStages status={event.status} className="mb-4" />
         {event.status === "CONCLUIDO" && canCloseEvent(actor, eventId) && (
           <Link
@@ -149,16 +148,12 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
             <span className="shrink-0 text-sm font-semibold text-red-300">Ver ›</span>
           </Link>
         )}
+        {/* As seções da pré-produção em cartões (como pastas); o painel com os números vem embaixo. */}
+        <SectionGrid className="mb-6">
+          {tiles.map((t, i) => <SectionCard key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
+        </SectionGrid>
         <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-4">
-            {/* Celular: cartões quadrados; computador: atalhos em linha. */}
-            <div className="grid grid-cols-2 gap-3 lg:hidden">
-              {tiles.map((t, i) => <SquareTile key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
-            </div>
-            <div className="hidden gap-3 lg:grid lg:grid-cols-2">
-              {tiles.map((t, i) => <Tile key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
-            </div>
-
             {toReview.length > 0 && (
               <Panel title={`Aguardando sua revisão (${toReview.length})`}>
                 <ul className="divide-y divide-border">

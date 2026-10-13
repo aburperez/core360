@@ -253,6 +253,17 @@ export const TOOLS: Tool[] = [
     ],
     img: "/site/inteligencia.webp", alt: "Comparativo de custos entre eventos no computador",
   },
+  {
+    id: "pastas", part: "pre", title: "Tudo em pastas, com detalhes ao lado",
+    serve: "Achar qualquer parte do evento num toque: cada seção é um cartão com ícone próprio da CORE 360, como pastas, e os arquivos aparecem em miniatura.",
+    quem: "Todos (cada um vê os cartões da sua parte)",
+    passos: [
+      "Em Meus eventos, cada evento tem a sua capa; clique para ver cliente, datas, local e as prioridades do dia ao lado.",
+      "Dentro do evento, as seções da Gestão de campo e da Pré-produção aparecem em cartões com o número do momento.",
+      "Em Documentos, toque num arquivo para ver tipo, data, quem enviou e etiquetas. No computador os detalhes ficam à direita; no celular sobem numa gaveta.",
+    ],
+    img: "/site/documentos.webp", alt: "Documentos do evento em miniaturas, com o painel de detalhes à direita",
+  },
 ];
 
 const PARTS = {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BrandWordmark } from "./brand";
 import { Icon, type IconName } from "./icons";
-import { cx } from "./ui";
+import { PAGE, cx } from "./ui";
 
 type NavProps = {
   eventId: string; canCreate: boolean; canSeeTickets: boolean; canBuildTeam: boolean; canSwitchEvent: boolean;
@@ -34,9 +34,10 @@ export const OPEN_MENU_EVENT = "core360:menu";
 
 /**
  * Navegação do evento, em dois blocos: Gestão de campo e Pré-produção. Cada
- * bloco abre o seu painel e lista as páginas com ícone. No computador (lg) é o
- * menu lateral fixo; no celular o mesmo menu abre pelo ☰ do topo, e a barra de
- * baixo fica com os atalhos do bloco em que a pessoa está. Esconder um atalho é
+ * bloco abre o seu painel e lista as páginas com ícone. O menu abre pelo ☰ do
+ * topo (celular e computador); no dia a dia a pessoa navega pelos cartões de
+ * cada painel. No celular a barra de baixo fica com os atalhos do bloco em que a
+ * pessoa está. Esconder um atalho é
  * só conforto: quem decide o acesso é o servidor.
  */
 export function EventNav(props: NavProps) {
@@ -153,10 +154,8 @@ export function EventNav(props: NavProps) {
         </ul>
       </nav>
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden print:hidden! w-60 flex-col border-r border-white/10 bg-brand-navy text-white lg:flex">{menu}</aside>
-
       {open && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu do evento">
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Menu do evento">
           <button type="button" aria-label="Fechar menu" className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-[85%] max-w-xs flex-col bg-brand-navy pt-[env(safe-area-inset-top)] text-white shadow-2xl">{menu}</aside>
         </div>
@@ -254,15 +253,15 @@ function FooterLink({ href, icon, children }: { href: string; icon: IconName; ch
   );
 }
 
-/** Abas Gestão de campo / Pré-produção no topo das telas (só no celular), como um botão de duas partes. */
+/** Abas Gestão de campo / Pré-produção no topo dos painéis, como um botão de duas partes. */
 export function EventTabs({ eventId, active }: { eventId: string; active: "campo" | "pre" }) {
   const tabs = [
     { key: "campo", label: "Gestão de campo", icon: "field", href: `/eventos/${eventId}` },
     { key: "pre", label: "Pré-produção", icon: "pre", href: `/eventos/${eventId}/pre-producao` },
   ] as const;
   return (
-    <nav aria-label="Abas do evento" className="print:hidden bg-background px-4 pt-3 lg:hidden">
-      <ul className="mx-auto flex max-w-2xl rounded-full border border-border bg-surface p-1">
+    <nav aria-label="Abas do evento" className={cx(PAGE, "print:hidden pt-2")}>
+      <ul className="mx-auto flex max-w-2xl rounded-full border border-border bg-surface p-1 lg:mx-0 lg:max-w-md">
         {tabs.map((t) => (
           <li key={t.key} className="flex-1">
             <Link

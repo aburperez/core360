@@ -1,299 +1,377 @@
 import type { ReactNode } from "react";
 
 /**
- * Ícones de traço (desenho do Lucide, licença ISC), embutidos para não depender
- * de pacote. Herdam a cor do texto (currentColor).
+ * Ícones próprios da CORE 360, desenhados para o app (grade de 24 px, traço
+ * arredondado). Cada um tem uma parte preenchida de leve, a marca do conjunto:
+ * fica bem no menu, nos botões e dentro dos círculos coloridos dos cartões.
+ * Herdam a cor do texto (currentColor).
  */
+const A = ({ d }: { d: string }) => <path d={d} fill="currentColor" fillOpacity={0.32} stroke="none" />;
+
 const PATHS = {
+  // Gestão de campo: capacete de obra.
   field: (
     <>
-      <path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5" />
-      <path d="M14 6a6 6 0 0 1 6 6v3" />
-      <path d="M4 15v-3a6 6 0 0 1 6-6" />
-      <rect x="2" y="15" width="20" height="4" rx="1" />
+      <A d="M4.5 16.5V15a7.5 7.5 0 0 1 15 0v1.5z" />
+      <path d="M4.5 16.5V15a7.5 7.5 0 0 1 15 0v1.5" />
+      <path d="M2.5 16.5h19v2a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1z" />
+      <path d="M10 8V6.2a2 2 0 0 1 4 0V8" />
+      <path d="M12 11v2.5" />
     </>
   ),
+  // Pré-produção: caderno de produção com espiral.
   pre: (
     <>
-      <rect width="8" height="4" x="8" y="2" rx="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <path d="M12 11h4" />
-      <path d="M12 16h4" />
-      <path d="M8 11h.01" />
-      <path d="M8 16h.01" />
+      <A d="M5 7.5V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1.5z" />
+      <rect x="5" y="4" width="14" height="17" rx="2" />
+      <path d="M9 2.5v3M15 2.5v3" />
+      <path d="M8.5 11.5h7M8.5 15h7M8.5 18.5h4" />
     </>
   ),
+  // Painel: quatro blocos, um destacado.
   overview: (
     <>
-      <rect width="7" height="9" x="3" y="3" rx="1" />
-      <rect width="7" height="5" x="14" y="3" rx="1" />
-      <rect width="7" height="9" x="14" y="12" rx="1" />
-      <rect width="7" height="5" x="3" y="16" rx="1" />
+      <A d="M4 4h6.5v8.5H4z" />
+      <rect x="4" y="4" width="6.5" height="8.5" rx="1.5" />
+      <rect x="13.5" y="4" width="6.5" height="5" rx="1.5" />
+      <rect x="13.5" y="12" width="6.5" height="8" rx="1.5" />
+      <rect x="4" y="15.5" width="6.5" height="4.5" rx="1.5" />
     </>
   ),
+  // Chamados: giroflex de alerta.
   tickets: (
     <>
-      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
-      <path d="M12 9v4" />
-      <path d="M12 17h.01" />
+      <A d="M7 17v-4a5 5 0 0 1 10 0v4z" />
+      <path d="M7 17v-4a5 5 0 0 1 10 0v4" />
+      <rect x="4.5" y="17" width="15" height="3.5" rx="1" />
+      <path d="M12 2.5v2.5M4.6 5.6l1.6 1.6M19.4 5.6l-1.6 1.6" />
+      <path d="M12 11v3" />
     </>
   ),
-  plus: (
-    <>
-      <path d="M5 12h14" />
-      <path d="M12 5v14" />
-    </>
-  ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  // Equipe: três pessoas, a da frente destacada.
   team: (
     <>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <A d="M12 12.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+      <circle cx="12" cy="9.5" r="3" />
+      <path d="M6.5 20a5.5 5.5 0 0 1 11 0" />
+      <circle cx="5" cy="8" r="2" />
+      <circle cx="19" cy="8" r="2" />
+      <path d="M2 15.5a3.5 3.5 0 0 1 4-2.4M22 15.5a3.5 3.5 0 0 0-4-2.4" />
     </>
   ),
+  // Recebimentos: caixa com a tampa destacada.
   receipts: (
     <>
-      <path d="m7.5 4.27 9 5.15" />
-      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-      <path d="m3.3 7 8.7 5 8.7-5" />
-      <path d="M12 22V12" />
+      <A d="M3.5 7.5 12 3.5l8.5 4L12 11.5z" />
+      <path d="M3.5 7.5 12 3.5l8.5 4v9L12 20.5l-8.5-4z" />
+      <path d="M3.5 7.5 12 11.5l8.5-4M12 11.5v9" />
+      <path d="m14.5 15 1.5 1.5 2.5-3" />
     </>
   ),
+  // Briefing: megafone.
   briefing: (
     <>
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path d="M10 9H8" />
-      <path d="M16 13H8" />
-      <path d="M16 17H8" />
+      <A d="M13.5 6.5v11L7 14.5V9.5z" />
+      <path d="M3.5 9.5H7l6.5-3v11L7 14.5H3.5z" />
+      <path d="m6 14.5 1.5 5h2.5l-1-4.5" />
+      <path d="M16.5 9.5a3.5 3.5 0 0 1 0 5M19 7a7 7 0 0 1 0 10" />
     </>
   ),
+  // Tipos e SLA: cronômetro com fatia do tempo.
   sla: (
     <>
-      <path d="M10 2h4" />
-      <path d="m12 14 3-3" />
-      <circle cx="12" cy="14" r="8" />
+      <A d="M12 13.5V6a7.5 7.5 0 0 1 6.5 3.75z" />
+      <circle cx="12" cy="13.5" r="7.5" />
+      <path d="M10 2.5h4M12 2.5V6M12 13.5l3.5-3.5M19 5.5l1.5 1.5" />
     </>
   ),
+  // Quem faz o quê: grade com uma célula marcada.
   matrix: (
     <>
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M3 15h18" />
-      <path d="M9 3v18" />
-      <path d="M15 3v18" />
+      <A d="M10 10h4v4h-4z" />
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
+      <path d="M3.5 10h17M3.5 14h17M10 3.5v17M14 3.5v17" />
     </>
   ),
+  // Orçamento e custos: cédula.
   costs: (
     <>
-      <rect width="20" height="12" x="2" y="6" rx="2" />
-      <circle cx="12" cy="12" r="2" />
-      <path d="M6 12h.01M18 12h.01" />
+      <A d="M12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 9.5v5M18 9.5v5" />
     </>
   ),
+  // Funções: crachá.
   functions: (
     <>
-      <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-      <rect width="20" height="14" x="2" y="6" rx="2" />
+      <A d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />
+      <rect x="4.5" y="4" width="15" height="17" rx="2.5" />
+      <path d="M10 2.5h4V5h-4z" />
+      <circle cx="12" cy="10" r="2.5" />
+      <path d="M8 17.5a4 4 0 0 1 8 0" />
     </>
   ),
+  // Relatórios: folha com barras.
   report: (
     <>
-      <path d="M3 3v18h18" />
-      <path d="M18 17V9" />
-      <path d="M13 17V5" />
-      <path d="M8 17v-3" />
+      <A d="M14.5 3v4.5H19z" />
+      <path d="M5 3h9.5L19 7.5V21H5z" />
+      <path d="M14.5 3v4.5H19" />
+      <path d="M8.5 17.5v-3M12 17.5v-6M15.5 17.5v-4" />
     </>
   ),
+  // Painel executivo: gráfico subindo.
   chart: (
     <>
-      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
-      <path d="M7 16v-4" />
-      <path d="M12 16V8" />
-      <path d="M17 16v-7" />
+      <A d="M7 15.5 11 11l3 3 5.5-6.5V20H7z" />
+      <path d="M3.5 3.5v17h17" />
+      <path d="M7 15.5 11 11l3 3 5.5-6.5" />
+      <path d="M16 7.5h3.5V11" />
     </>
   ),
   bell: (
     <>
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      <A d="M6 16.5V11a6 6 0 0 1 12 0v5.5z" />
+      <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" />
+      <path d="M10 21h4M12 3v2" />
     </>
   ),
+  // Trocar de evento: setas em sentidos opostos.
   swap: (
     <>
-      <path d="M8 3 4 7l4 4" />
-      <path d="M4 7h16" />
-      <path d="m16 21 4-4-4-4" />
-      <path d="M20 17H4" />
+      <path d="M4 8h14l-3.5-3.5" />
+      <path d="M20 16H6l3.5 3.5" />
+      <A d="M18 8l-3.5 3.5V4.5z" />
     </>
   ),
-  edit: <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />,
-  menu: (
+  edit: (
     <>
-      <path d="M4 6h16" />
-      <path d="M4 12h16" />
-      <path d="M4 18h16" />
+      <A d="m14.5 6 3.5 3.5L9 18.5H5.5V15z" />
+      <path d="m14.5 6 2-2a1.5 1.5 0 0 1 2 0l1.5 1.5a1.5 1.5 0 0 1 0 2l-2 2L9 18.5H5.5V15z" />
+      <path d="M13 20.5h7.5" />
     </>
   ),
-  close: (
-    <>
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </>
-  ),
+  menu: <path d="M4 6.5h16M4 12h11M4 17.5h16" />,
+  close: <path d="M6 6l12 12M18 6 6 18" />,
+  // Mapa de itens: caixas empilhadas.
   items: (
     <>
-      <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
-      <path d="M12 22V12" />
-      <path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7" />
-      <path d="m7.5 4.27 9 5.15" />
+      <A d="M8.5 3.5h7v7h-7z" />
+      <rect x="8.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="3.5" y="12.5" width="7.5" height="7" rx="1" />
+      <rect x="13" y="12.5" width="7.5" height="7" rx="1" />
+      <path d="M2.5 21.5h19M12 3.5V6M6.7 12.5V15M16.7 12.5V15" />
     </>
   ),
+  // Fornecedores: galpão com chaminé.
   suppliers: (
     <>
-      <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
-      <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-      <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
-      <path d="M10 6h4" />
-      <path d="M10 10h4" />
-      <path d="M10 14h4" />
-      <path d="M10 18h4" />
+      <A d="M14 3.5h5v5h-5z" />
+      <path d="M3 20.5V11l5.5 3.5V11l5.5 3.5V3.5h5v17z" />
+      <path d="M2 20.5h20M7 17.5h2M12 17.5h2M16.5 12v1M16.5 16v1" />
     </>
   ),
+  // Montagem: caminhão.
   truck: (
     <>
-      <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
-      <path d="M15 18H9" />
-      <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" />
-      <circle cx="17" cy="18" r="2" />
-      <circle cx="7" cy="18" r="2" />
+      <A d="M2.5 6h11v10h-11z" />
+      <path d="M2.5 6h11v10.5h-11z" />
+      <path d="M13.5 9.5h4l3.5 3.5v3.5h-7.5" />
+      <circle cx="6.5" cy="17.5" r="2" />
+      <circle cx="17" cy="17.5" r="2" />
     </>
   ),
+  // Pendências: ampulheta.
   pending: (
     <>
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 8v4" />
-      <path d="M12 16h.01" />
+      <A d="M9 20.5v-2.2l3-3.3 3 3.3v2.2z" />
+      <path d="M6.5 3h11M6.5 21h11" />
+      <path d="M8 3v3.5L12 12l4-5.5V3M8 21v-3.5l4-5.5 4 5.5V21" />
     </>
   ),
   calendar: (
     <>
-      <rect width="18" height="18" x="3" y="4" rx="2" />
-      <path d="M16 2v4" />
-      <path d="M8 2v4" />
-      <path d="M3 10h18" />
-      <path d="m9 16 2 2 4-4" />
+      <A d="M13.5 14h3.5v3.5h-3.5z" />
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+      <path d="M7 14h2M7 17.5h2M11 14h1M11 17.5h1" />
     </>
   ),
+  // Contratos: folha com assinatura.
   contract: (
     <>
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path d="M8 13h8" />
-      <path d="M8 17h3" />
-      <path d="m14 18 1.5 1.5L19 16" />
+      <A d="M14.5 3v4.5H19z" />
+      <path d="M5 3h9.5L19 7.5V21H5z" />
+      <path d="M8.5 10h7M8.5 13.5h4" />
+      <path d="M8.5 18c.8-1.4 1.6-1.6 2.2-.3.5 1 1.3 1 2.1-.4.6-.9 1.2-.6 1.6.2.3.5.8.6 1.6.1" />
     </>
   ),
+  // Cotações: etiqueta de preço.
   quotes: (
     <>
-      <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
-      <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
-      <path d="M7 21h10" />
-      <path d="M12 3v18" />
-      <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
+      <A d="M8.5 9.8a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6z" />
+      <path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.6 8.6a1 1 0 0 1 0 1.4l-7.3 7.3a1 1 0 0 1-1.4 0z" />
+      <circle cx="8.5" cy="8.5" r="1.3" />
+      <path d="m11.5 14.5 3-3M13 16l1.5-1.5" />
     </>
   ),
+  // Visita técnica: lupa sobre o local.
   visit: (
     <>
-      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <path d="m9 14 2 2 4-4" />
+      <A d="M8 13v-2.7l2.5-2 2.5 2V13z" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5" />
+      <path d="M8 13v-2.7l2.5-2 2.5 2V13z" />
     </>
   ),
+  // Documentos: pasta.
   docs: (
     <>
-      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-      <path d="M8 13h8" />
+      <A d="M3 7.5V6a1.5 1.5 0 0 1 1.5-1.5h4.3l2 2.2H19.5A1.5 1.5 0 0 1 21 8.2v.3H3z" />
+      <path d="M3 6a1.5 1.5 0 0 1 1.5-1.5h4.3l2 2.2h8.7A1.5 1.5 0 0 1 21 8.2v10.3a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" />
+      <path d="M3 9.5h18M9 14h6" />
     </>
   ),
   camera: (
     <>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-      <circle cx="12" cy="13" r="3" />
+      <A d="M12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+      <path d="M3 8.5a2 2 0 0 1 2-2h2.5L9 4h6l1.5 2.5H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <circle cx="12" cy="13" r="3.5" />
+      <path d="M17.5 9.5h.5" />
     </>
   ),
   copy: (
     <>
-      <rect width="14" height="14" x="8" y="8" rx="2" />
-      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+      <A d="M9 9h11v11H9z" />
+      <rect x="9" y="9" width="11.5" height="11.5" rx="2" />
+      <path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h8.5A1.5 1.5 0 0 1 15 5v.5" />
     </>
   ),
   mail: (
     <>
-      <rect width="20" height="16" x="2" y="4" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+      <A d="m3.5 6.5 8.5 6.5 8.5-6.5z" />
+      <rect x="2.5" y="5" width="19" height="14" rx="2" />
+      <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
     </>
   ),
+  // Planta do evento: mapa dobrado.
   map: (
     <>
-      <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" />
-      <path d="M15 5.764v15" />
-      <path d="M9 3.236v15" />
+      <A d="M9 4l6 2.5V20L9 17.5z" />
+      <path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z" />
+      <path d="M9 4v13.5M15 6.5V20" />
     </>
   ),
   pin: (
     <>
-      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
-      <circle cx="12" cy="10" r="3" />
+      <A d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />
+      <path d="M12 21.5s7-6 7-11.5a7 7 0 0 0-14 0c0 5.5 7 11.5 7 11.5z" />
+      <circle cx="12" cy="10" r="2.5" />
     </>
   ),
   zoomIn: (
     <>
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-      <path d="M11 8v6" />
-      <path d="M8 11h6" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5M10.5 8v5M8 10.5h5" />
     </>
   ),
   zoomOut: (
     <>
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-      <path d="M8 11h6" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5M8 10.5h5" />
     </>
   ),
-  fit: (
-    <>
-      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
-      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
-      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
-      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
-    </>
-  ),
+  fit: <path d="M3.5 8.5v-4a1 1 0 0 1 1-1h4M15.5 3.5h4a1 1 0 0 1 1 1v4M20.5 15.5v4a1 1 0 0 1-1 1h-4M8.5 20.5h-4a1 1 0 0 1-1-1v-4" />,
   upload: (
     <>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <path d="m17 8-5-5-5 5" />
-      <path d="M12 3v12" />
+      <A d="M4 15.5h16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+      <path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+      <path d="M12 15V3.5M7.5 8 12 3.5 16.5 8" />
     </>
   ),
   download: (
     <>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M12 15V3" />
+      <A d="M4 15.5h16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+      <path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+      <path d="M12 3.5V15M7.5 10.5 12 15l4.5-4.5" />
     </>
   ),
-  chevron: <path d="m9 18 6-6-6-6" />,
+  chevron: <path d="m9.5 6 6 6-6 6" />,
+  // Inteligência: brilho de ideia.
   sparkles: (
     <>
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-      <path d="M20 3v4" />
-      <path d="M22 5h-4" />
+      <A d="M10 3.5c.6 3.8 2.2 5.4 6 6-3.8.6-5.4 2.2-6 6-.6-3.8-2.2-5.4-6-6 3.8-.6 5.4-2.2 6-6z" />
+      <path d="M10 3.5c.6 3.8 2.2 5.4 6 6-3.8.6-5.4 2.2-6 6-.6-3.8-2.2-5.4-6-6 3.8-.6 5.4-2.2 6-6z" />
+      <path d="M18 14c.3 1.8 1 2.5 2.8 2.8-1.8.3-2.5 1-2.8 2.8-.3-1.8-1-2.5-2.8-2.8 1.8-.3 2.5-1 2.8-2.8z" />
     </>
   ),
-  paperclip: <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />,
+  paperclip: <path d="m20.5 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l8-8" />,
+  // Busca.
+  search: (
+    <>
+      <A d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 5 5" />
+    </>
+  ),
+  // Agência: prédio de escritórios.
+  agency: (
+    <>
+      <A d="M5 3.5h9v4H5z" />
+      <path d="M5 21V3.5h9V21M14 9h5v12" />
+      <path d="M3 21h18M8 7.5h3M8 11h3M8 14.5h3M16.5 12.5v.5M16.5 16v.5" />
+    </>
+  ),
+  // Cliente: aperto de mãos simplificado (pessoa com estrela).
+  client: (
+    <>
+      <A d="M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+      <circle cx="10" cy="7.5" r="3.5" />
+      <path d="M3.5 20a6.5 6.5 0 0 1 10.5-5.1" />
+      <path d="m18 14 1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5L17 16z" />
+    </>
+  ),
+  // Arquivo / encerrados: caixa de arquivo.
+  archive: (
+    <>
+      <A d="M3 4h18v4.5H3z" />
+      <rect x="3" y="4" width="18" height="4.5" rx="1" />
+      <path d="M4.5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8.5M10 12.5h4" />
+    </>
+  ),
+  // Suporte: fone com microfone.
+  support: (
+    <>
+      <A d="M3.5 13.5h3v5h-1.5a1.5 1.5 0 0 1-1.5-1.5z" />
+      <path d="M3.5 17v-5a8.5 8.5 0 0 1 17 0v5" />
+      <path d="M3.5 13.5h3v5h-1.5a1.5 1.5 0 0 1-1.5-1.5zM20.5 13.5h-3v5h1.5a1.5 1.5 0 0 0 1.5-1.5z" />
+      <path d="M19 18.5c0 1.5-1.5 2.5-4 2.5h-1.5" />
+    </>
+  ),
+  info: (
+    <>
+      <A d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5M12 7.5h.01" />
+    </>
+  ),
+  home: (
+    <>
+      <A d="M9.5 20.5V14h5v6.5z" />
+      <path d="M3.5 11 12 3.5l8.5 7.5" />
+      <path d="M5.5 9.5v11h13v-11" />
+      <path d="M9.5 20.5V14h5v6.5" />
+    </>
+  ),
+  logout: (
+    <>
+      <A d="M4 4.5h8v15H4z" />
+      <path d="M12 4.5H5.5A1.5 1.5 0 0 0 4 6v12a1.5 1.5 0 0 0 1.5 1.5H12" />
+      <path d="M10 12h10.5M17 8.5l3.5 3.5-3.5 3.5" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof PATHS;
@@ -304,7 +382,7 @@ export function Icon({ name, className = "h-6 w-6" }: { name: IconName; classNam
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

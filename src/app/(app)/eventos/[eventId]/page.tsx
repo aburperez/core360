@@ -17,7 +17,7 @@ import { TopBar } from "@/components/top-bar";
 import { EventTabs } from "@/components/event-nav";
 import { EmptyState, PAGE, PriorityText, SectionTitle, SlaPill, Stat, cx } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { type TileData, Bars, MobileHero, PageHeading, Panel, Profile, ProgressRow, Ring, SquareTile, pct, serie } from "@/components/panel";
+import { type TileData, Bars, PageHeading, Panel, Profile, ProgressRow, Ring, SectionCard, SectionGrid, pct, serie } from "@/components/panel";
 import { OccurrenceCard, type OccurrenceRow } from "@/components/occurrence-card";
 import { ROLE_LABEL, formatDuration, formatTime } from "@/lib/format";
 import { EVENT_STATUS_LABEL } from "@/lib/event-stages";
@@ -133,14 +133,13 @@ export default async function DashboardPage({ params }: PageProps<"/eventos/[eve
       {header}
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Gestão de campo"]} title="Painel do campo" />
-        <MobileHero name={actor.name} role={role} detail={event.name} />
         {alerts}
+        {/* As seções do campo em cartões (como pastas); o painel com os números vem embaixo. */}
+        <SectionGrid className="mb-6">
+          {tiles.map((x, i) => <SectionCard key={x.href} href={x.href} icon={x.icon} title={x.title} line={x.line} tone={x.alert ? "alert" : undefined} i={i} />)}
+        </SectionGrid>
         <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-4">
-            <div className="grid grid-cols-2 gap-3 lg:hidden">
-              {tiles.map((x, i) => <SquareTile key={x.href} href={x.href} icon={x.icon} title={x.title} line={x.line} tone={x.alert ? "alert" : undefined} i={i} />)}
-            </div>
-
             {/* No celular os cartões e o quadro já mostram os números. */}
             <div className="hidden gap-3 lg:grid lg:grid-cols-3 xl:grid-cols-6">
               <Stat label="Urgentes" value={t.urgente} tone={t.urgente ? "text-red-400" : undefined} href={`${base}/ocorrencias?status=URGENTE`} />
@@ -326,7 +325,6 @@ async function ClientHome({ actor, eventId }: { actor: Actor; eventId: string })
       <TopBar title={event.name} subtitle={`Cliente · ${actor.name}`} back={multi ? "/eventos?todos=1" : undefined} />
       <main className={cx(PAGE, "py-4 lg:py-6")}>
         <PageHeading trail={[event.name]} title="Acompanhamento do evento" />
-        <MobileHero name={actor.name} role="Cliente" detail={event.name} />
         {nothing ? (
           <EmptyState title="Ainda não há nada liberado para você">
             A equipe do evento escolhe o que você acompanha por aqui: custos, equipe e andamento. Fale com o gestor do evento.
