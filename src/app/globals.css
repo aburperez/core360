@@ -73,3 +73,36 @@ body {
 @utility pb-nav {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }
+
+/*
+ * Moldura estilo Protheus (computador, dentro do evento): as tabelas que já
+ * existiam ganham cara de grade de ERP, com cabeçalho preenchido, linhas
+ * zebradas e divisórias. A grade nova (Browse) tem o próprio estilo.
+ */
+@media screen and (min-width: 1024px) {
+  .protheus main table:not([data-browse]) {
+    border-collapse: collapse;
+    font-size: 13px;
+    border: 1px solid var(--border);
+  }
+  .protheus main table:not([data-browse]) th {
+    background: #073447;
+    color: color-mix(in srgb, var(--foreground) 85%, transparent);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+    padding: 6px 8px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .protheus main table:not([data-browse]) td {
+    padding: 5px 8px;
+    border-right: 1px solid #0a3a4e;
+  }
+  .protheus main table:not([data-browse]) tbody tr:nth-child(even) td {
+    background: #062f42;
+  }
+  .protheus main table:not([data-browse]) tbody tr:hover td {
+    background: #0a3a50;
+  }
+}

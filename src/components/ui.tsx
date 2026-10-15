@@ -72,6 +72,8 @@ export function buttonClass(variant: keyof typeof buttonStyles = "primary", clas
   return cx(
     "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-base font-semibold",
     "active:scale-[0.98] transition hover:brightness-110 disabled:opacity-50 disabled:pointer-events-none",
+    // No computador, dentro do evento (moldura Protheus), botões menores e retos.
+    "lg:in-[.protheus]:min-h-8 lg:in-[.protheus]:rounded-sm lg:in-[.protheus]:px-3.5 lg:in-[.protheus]:text-[13px]",
     buttonStyles[variant],
     className,
   );

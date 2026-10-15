@@ -11,6 +11,18 @@ import { formatDateTime, slaText } from "@/lib/format";
 import { brl } from "@/lib/money";
 import { NewQuoteForm } from "./forms";
 import { STAGE } from "./stage";
+import { Browse } from "@/components/browse";
+
+/** Bolinha de cada situação na grade do computador. */
+const STAGE_DOT: Record<QuoteStage, string> = {
+  RASCUNHO: "bg-gray-400",
+  SEM_PRAZO: "bg-amber-400",
+  NO_PRAZO: "bg-brand-cyan",
+  ATRASADA: "bg-red-500",
+  DECIDIR: "bg-violet-400",
+  FECHADA: "bg-emerald-400",
+  CANCELADA: "bg-gray-600",
+};
 
 export const metadata = { title: "Cotações" };
 
@@ -63,11 +75,48 @@ export default async function QuotesPage({ params }: PageProps<"/eventos/[eventI
             Crie um pedido com o descritivo do que precisa. Ele vira o texto do e-mail para os fornecedores.
           </EmptyState>
         ) : (
-          <div className="space-y-4">
+          <>
+          {/* Computador: grade estilo Protheus. Celular: grupos em cartões. */}
+          <Browse
+            title="Cotações"
+            exportName="cotacoes"
+            columns={[
+              { key: "title", label: "Pedido", wrap: true },
+              { key: "stage", label: "Situação" },
+              { key: "responsible", label: "Quem cuida" },
+              { key: "item", label: "Item do orçamento", wrap: true },
+              { key: "count", label: "Orçamentos", align: "right" },
+              { key: "min", label: "Menor valor", align: "right" },
+              { key: "due", label: "Prazo" },
+              { key: "closed", label: "Fechada em" },
+            ]}
+            rows={[...mineFirst, ...open, ...done].map((q) => {
+              const sla = q.stage === "NO_PRAZO" || q.stage === "ATRASADA" ? slaText(q.dueAt) : null;
+              return {
+                id: q.id,
+                href: `${base}/${q.id}`,
+                dot: STAGE_DOT[q.stage],
+                text: {
+                  title: q.title,
+                  stage: STAGE[q.stage].label + (needsMe(q) ? " · precisa de você" : ""),
+                  responsible: q.responsible.name,
+                  item: q.costItemName ?? "—",
+                  count: `${q.count} de 3`,
+                  min: q.minValue !== null ? brl(q.minValue) : "—",
+                  due: sla ? sla.text : "—",
+                  closed: q.stage === "FECHADA" && q.closedAt ? formatDateTime(q.closedAt) : "—",
+                },
+                cells: { due: sla ? <span className={sla.tone === "late" ? "font-semibold text-red-300" : undefined}>{sla.text}</span> : "—" },
+              };
+            })}
+            legend={(Object.keys(STAGE_DOT) as QuoteStage[]).map((k) => ({ dot: STAGE_DOT[k], label: STAGE[k].label }))}
+          />
+          <div className="space-y-4 lg:hidden">
             {mineFirst.length > 0 && <Group title={`Precisa de você (${mineFirst.length})`} items={mineFirst} base={base} />}
             {open.length > 0 && <Group title={`Em andamento (${open.length})`} items={open} base={base} />}
             {done.length > 0 && <Group title={`Fechadas e canceladas (${done.length})`} items={done} base={base} />}
           </div>
+          </>
         )}
       </main>
     </>

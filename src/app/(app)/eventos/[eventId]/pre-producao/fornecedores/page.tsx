@@ -13,6 +13,7 @@ import { PageHeading, Panel } from "@/components/panel";
 import { EmptyState, PAGE, cx } from "@/components/ui";
 import { RatingBadge } from "@/components/rating";
 import { NewSupplier, SupplierFilters } from "./supplier-forms";
+import { Browse } from "@/components/browse";
 
 export const metadata = { title: "Fornecedores" };
 
@@ -55,45 +56,49 @@ export default async function SuppliersPage({ params, searchParams }: PageProps<
               : "Cadastre pelo botão Novo fornecedor ou registre um orçamento numa cotação."}
           </EmptyState>
         ) : (
-          <Panel title={`${data.items.length} ${data.items.length === 1 ? "fornecedor" : "fornecedores"}`}>
-            {/* Computador: tabela. Celular: cartões. */}
-            <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                    <th className="py-2 pr-3 font-semibold">Fornecedor</th>
-                    <th className="py-2 pr-3 font-semibold">Contato</th>
-                    <th className="py-2 pr-3 font-semibold">Cidade</th>
-                    <th className="py-2 pr-3 font-semibold">Categorias</th>
-                    <th className="py-2 pr-3 font-semibold">Nota</th>
-                    <th className="py-2 pr-3 text-right font-semibold">Orçamentos</th>
-                    {data.can.director && <th className="py-2 font-semibold">Bonificação</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((s) => (
-                    <tr key={s.id} className="border-b border-border/60 align-top last:border-0">
-                      <td className="py-2.5 pr-3">
-                        <Link href={`${base}/${s.id}`} className="font-semibold text-primary hover:underline">{s.tradeName || s.companyName}</Link>
-                        <p className="text-xs text-muted">{s.tradeName ? `${s.companyName} · ` : ""}{formatCnpj(s.cnpj)}</p>
-                      </td>
-                      <td className="py-2.5 pr-3">
-                        {s.contactName ?? "—"}
-                        <p className="text-xs text-muted">{[s.phone && formatPhone(s.phone), s.email].filter(Boolean).join(" · ")}</p>
-                      </td>
-                      <td className="py-2.5 pr-3">{[s.city, s.state].filter(Boolean).join("/") || "—"}</td>
-                      <td className="py-2.5 pr-3 text-muted">{s.categories.map((c) => CATEGORY[c].label).join(", ") || "—"}</td>
-                      <td className="py-2.5 pr-3">{s.rating ? <RatingBadge value={s.rating.overall} count={s.rating.ratings} /> : <span className="text-muted">—</span>}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">
-                        {s.quotes}
-                        {s.won > 0 && <p className="text-xs text-emerald-300">{s.won} {s.won === 1 ? "escolhido" : "escolhidos"}</p>}
-                      </td>
-                      {data.can.director && <td className="py-2.5">{s.bonus ? bonusText(s.bonus) : <span className="text-muted">—</span>}</td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <>
+          {/* Computador: grade estilo Protheus. Celular: cartões. */}
+          <Browse
+            title="Fornecedores"
+            exportName="fornecedores"
+            columns={[
+              { key: "name", label: "Nome fantasia" },
+              { key: "company", label: "Razão social" },
+              { key: "cnpj", label: "CNPJ" },
+              { key: "contact", label: "Contato" },
+              { key: "phone", label: "Telefone" },
+              { key: "city", label: "Cidade/UF" },
+              { key: "categories", label: "Categorias", wrap: true },
+              { key: "rating", label: "Nota", align: "right" },
+              { key: "quotes", label: "Orçamentos", align: "right" },
+              ...(data.can.director ? [{ key: "bonus", label: "Bonificação" }] : []),
+            ]}
+            rows={data.items.map((s) => ({
+              id: s.id,
+              href: `${base}/${s.id}`,
+              dot: !s.rating ? "bg-gray-400" : s.rating.overall >= 4 ? "bg-emerald-400" : s.rating.overall >= 3 ? "bg-amber-400" : "bg-red-500",
+              text: {
+                name: s.tradeName || s.companyName,
+                company: s.companyName,
+                cnpj: formatCnpj(s.cnpj),
+                contact: s.contactName ?? "—",
+                phone: s.phone ? formatPhone(s.phone) : "—",
+                city: [s.city, s.state].filter(Boolean).join("/") || "—",
+                categories: s.categories.map((c) => CATEGORY[c].label).join(", ") || "—",
+                rating: s.rating ? s.rating.overall.toFixed(1).replace(".", ",") : "—",
+                quotes: `${s.quotes}${s.won > 0 ? ` (${s.won} ${s.won === 1 ? "escolhido" : "escolhidos"})` : ""}`,
+                bonus: s.bonus ? bonusText(s.bonus) : "—",
+              },
+              cells: { rating: s.rating ? <RatingBadge value={s.rating.overall} count={s.rating.ratings} /> : "—" },
+            }))}
+            legend={[
+              { dot: "bg-emerald-400", label: "Nota 4 ou mais" },
+              { dot: "bg-amber-400", label: "Nota de 3 a 4" },
+              { dot: "bg-red-500", label: "Nota abaixo de 3" },
+              { dot: "bg-gray-400", label: "Ainda sem avaliação" },
+            ]}
+          />
+          <Panel title={`${data.items.length} ${data.items.length === 1 ? "fornecedor" : "fornecedores"}`} className="lg:hidden">
             <ul className="space-y-2 lg:hidden">
               {data.items.map((s) => (
                 <li key={s.id}>
@@ -114,6 +119,7 @@ export default async function SuppliersPage({ params, searchParams }: PageProps<
               ))}
             </ul>
           </Panel>
+          </>
         )}
       </main>
     </>

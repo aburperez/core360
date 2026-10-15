@@ -11,6 +11,15 @@ import { EmptyState, LinkButton, PAGE, cx } from "@/components/ui";
 import { RATING_OPEN_STATUSES } from "@/modules/suppliers/rating-meta";
 import { CreateContract } from "./forms";
 import { CONTRACT, formatDay } from "./status";
+import { Browse } from "@/components/browse";
+
+/** Bolinha de cada situação na grade do computador. */
+const CONTRACT_DOT: Record<keyof typeof CONTRACT, string> = {
+  RASCUNHO: "bg-gray-400",
+  ENVIADO: "bg-sky-400",
+  ASSINADO: "bg-emerald-400",
+  CANCELADO: "bg-red-500",
+};
 
 export const metadata = { title: "Contratos" };
 
@@ -81,7 +90,39 @@ export default async function ContractsPage({ params }: PageProps<"/eventos/[eve
             )}
           </EmptyState>
         ) : (
+          <>
+          {/* Computador: grade estilo Protheus. Celular: cartões. */}
+          <Browse
+            title="Contratos"
+            exportName="contratos"
+            columns={[
+              { key: "number", label: "Nº", width: "64px" },
+              { key: "supplier", label: "Fornecedor" },
+              { key: "status", label: "Situação" },
+              { key: "items", label: "Propostas", align: "right" },
+              { key: "signed", label: "Assinado em" },
+              { key: "file", label: "PDF" },
+              { key: "total", label: "Valor", align: "right" },
+            ]}
+            rows={data.items.map((c) => ({
+              id: c.id,
+              href: `${base}/${c.id}`,
+              dot: CONTRACT_DOT[c.status],
+              text: {
+                number: String(c.number).padStart(4, "0"),
+                supplier: c.supplier,
+                status: CONTRACT[c.status].label,
+                items: String(c.items),
+                signed: c.status === "ASSINADO" && c.signedOn ? formatDay(c.signedOn) : "—",
+                file: c.hasFile ? "Anexado" : c.status === "CANCELADO" ? "—" : "Sem PDF",
+                total: brl(c.total),
+              },
+              cells: { file: !c.hasFile && c.status !== "CANCELADO" ? <span className="text-amber-300">Sem PDF</span> : undefined },
+            }))}
+            legend={(Object.keys(CONTRACT_DOT) as (keyof typeof CONTRACT)[]).map((k) => ({ dot: CONTRACT_DOT[k], label: CONTRACT[k].label }))}
+          />
           <Panel
+            className="lg:hidden"
             title={`${data.items.length} ${data.items.length === 1 ? "contrato" : "contratos"}`}
             action={signed.length > 0 && <span className="text-sm text-muted">Assinados: <b className="tabular-nums text-foreground">{brl(signed.reduce((s, c) => s + c.total, 0))}</b></span>}
           >
@@ -106,6 +147,7 @@ export default async function ContractsPage({ params }: PageProps<"/eventos/[eve
               ))}
             </ul>
           </Panel>
+          </>
         )}
       </main>
     </>
