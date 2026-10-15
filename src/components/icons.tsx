@@ -154,7 +154,9 @@ const PATHS = {
     </>
   ),
   menu: <path d="M4 6.5h16M4 12h11M4 17.5h16" />,
+  filter: <path d="M4 5h16l-6 7.5V19l-4 1.5v-8L4 5Z" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
+  check: <path d="m5 12.5 4.5 4.5L19 7" />,
   // Mapa de itens: caixas empilhadas.
   items: (
     <>

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, ApiError } from "@/components/api-client";
 import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { Icon } from "@/components/icons";
+import { FormFolders, FormHeader, LookupMulti } from "@/components/protheus-form";
 import { Button, Card, cx } from "@/components/ui";
 import { CATEGORY, ITEM_CATEGORIES, type ItemCategory } from "@/modules/items/item-meta";
 
@@ -110,7 +111,7 @@ export function SupplierForm({ eventId, supplier, onDone }: { eventId: string; s
   );
   return (
     <form
-      className="grid gap-3 sm:grid-cols-2"
+      className="grid gap-3 sm:grid-cols-2 lg:min-h-[420px] lg:content-start"
       onSubmit={async (e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
@@ -126,59 +127,114 @@ export function SupplierForm({ eventId, supplier, onDone }: { eventId: string; s
         if (r) onDone?.(typeof r === "object" ? r.id : undefined);
       }}
     >
-      {supplier ? (
-        <div className="block">
-          <Label>CNPJ</Label>
-          <p className="py-2 tabular-nums">{cnpjMask(supplier.cnpj)}</p>
-        </div>
-      ) : (
-        <label className="block">
-          <Label>CNPJ</Label>
-          <Input value={cnpj} onChange={(e) => setCnpj(cnpjMask(e.target.value))} inputMode="numeric" required placeholder="00.000.000/0000-00" />
-        </label>
-      )}
-      {field("companyName", "Razão social", { required: true })}
-      {field("tradeName", "Nome fantasia")}
-      {field("contactName", "Contato", { max: 120 })}
-      {field("phone", "Telefone", { type: "tel", max: 30, placeholder: "(11) 98765-4321" })}
-      {field("whatsapp", "WhatsApp", { type: "tel", max: 30, placeholder: "(11) 98765-4321" })}
-      {field("email", "E-mail", { type: "email" })}
-      <div className="grid grid-cols-[1fr_5rem] gap-3">
-        {field("city", "Cidade", { max: 120 })}
-        <label className="block">
-          <Label hint="UF">Estado</Label>
-          <Input name="state" maxLength={2} defaultValue={supplier?.state ?? ""} placeholder="SP" className="uppercase" />
-        </label>
-      </div>
-      {field("region", "Região de atendimento", { max: 300, placeholder: "Ex.: Grande SP e interior", wide: true })}
-      <fieldset className="sm:col-span-2">
-        <Label hint="(o app sugere o fornecedor nas cotações destas categorias)">Categorias</Label>
-        <div className="flex flex-wrap gap-1.5">
-          {ITEM_CATEGORIES.map((c) => {
-            const on = cats.includes(c);
-            return (
-              <button
-                key={c} type="button" aria-pressed={on}
-                onClick={() => setCats(on ? cats.filter((x) => x !== c) : [...cats, c])}
-                className={cx("rounded-full border px-3 py-1 text-sm transition",
-                  on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary/60")}
-              >
-                {CATEGORY[c].label}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
-      {field("specialty", "Especialidade", { max: 300, placeholder: "Ex.: geradores de grande porte", wide: true })}
-      {area("team", "Equipe", "Quantas pessoas, operadores, técnicos")}
-      {area("equipment", "Equipamentos", "O que tem de equipamento próprio")}
-      {area("capacity", "Capacidade", "Ex.: atende até 3 eventos grandes no mesmo fim de semana")}
-      <label className="block">
-        <Label hint="(opcional)">Observações</Label>
-        <Textarea name="notes" rows={2} maxLength={2000} defaultValue={supplier?.notes ?? ""} />
-      </label>
+      <FormHeader className="sm:col-span-2" title="Fornecedores" mode={supplier ? "ALTERAR" : "INCLUIR"} busy={busy} onClose={onDone ? () => onDone() : undefined} />
+      <FormFolders
+        className="sm:col-span-2"
+        folders={[
+          {
+            key: "cad",
+            label: "Cadastrais",
+            content: (
+              <>
+              {supplier ? (
+                <div className="block">
+                  <Label>CNPJ</Label>
+                  <p className="py-2 tabular-nums">{cnpjMask(supplier.cnpj)}</p>
+                </div>
+              ) : (
+                <label className="block">
+                  <Label>CNPJ</Label>
+                  <Input value={cnpj} onChange={(e) => setCnpj(cnpjMask(e.target.value))} inputMode="numeric" required placeholder="00.000.000/0000-00" />
+                </label>
+              )}
+              {field("companyName", "Razão social", { required: true })}
+              {field("tradeName", "Nome fantasia")}
+              </>
+            ),
+          },
+          {
+            key: "contato",
+            label: "Contato",
+            content: (
+              <>
+              {field("contactName", "Contato", { max: 120 })}
+              {field("phone", "Telefone", { type: "tel", max: 30, placeholder: "(11) 98765-4321" })}
+              {field("whatsapp", "WhatsApp", { type: "tel", max: 30, placeholder: "(11) 98765-4321" })}
+              {field("email", "E-mail", { type: "email" })}
+              <div className="grid grid-cols-[1fr_5rem] gap-3">
+                {field("city", "Cidade", { max: 120 })}
+                <label className="block">
+                  <Label hint="UF">Estado</Label>
+                  <Input name="state" maxLength={2} defaultValue={supplier?.state ?? ""} placeholder="SP" className="uppercase" />
+                </label>
+              </div>
+              </>
+            ),
+          },
+          {
+            key: "atend",
+            label: "Atendimento",
+            content: (
+              <>
+              {field("region", "Região de atendimento", { max: 300, placeholder: "Ex.: Grande SP e interior", wide: true })}
+              <fieldset className="sm:col-span-2 lg:hidden">
+                <Label hint="(o app sugere o fornecedor nas cotações destas categorias)">Categorias</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ITEM_CATEGORIES.map((c) => {
+                    const on = cats.includes(c);
+                    return (
+                      <button
+                        key={c} type="button" aria-pressed={on}
+                        onClick={() => setCats(on ? cats.filter((x) => x !== c) : [...cats, c])}
+                        className={cx("rounded-full border px-3 py-1 text-sm transition",
+                          on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary/60")}
+                      >
+                        {CATEGORY[c].label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+              <LookupMulti
+                className="sm:col-span-2"
+                label="Categorias"
+                title="Categorias"
+                hint="(o app sugere o fornecedor nas cotações destas categorias)"
+                options={ITEM_CATEGORIES.map((c, i) => ({ value: c, label: CATEGORY[c].label, code: String(i + 1).padStart(2, "0") }))}
+                value={cats}
+                onChange={setCats}
+              />
+              {field("specialty", "Especialidade", { max: 300, placeholder: "Ex.: geradores de grande porte", wide: true })}
+              </>
+            ),
+          },
+          {
+            key: "estrutura",
+            label: "Estrutura",
+            content: (
+              <>
+              {area("team", "Equipe", "Quantas pessoas, operadores, técnicos")}
+              {area("equipment", "Equipamentos", "O que tem de equipamento próprio")}
+              {area("capacity", "Capacidade", "Ex.: atende até 3 eventos grandes no mesmo fim de semana")}
+              </>
+            ),
+          },
+          {
+            key: "obs",
+            label: "Observações",
+            content: (
+              <>
+              <label className="block">
+                <Label hint="(opcional)">Observações</Label>
+                <Textarea name="notes" rows={2} maxLength={2000} defaultValue={supplier?.notes ?? ""} />
+              </label>
+              </>
+            ),
+          },
+        ]}
+      />
       <div className="sm:col-span-2"><FormError message={error} /></div>
-      <div className="flex gap-2 sm:col-span-2">
+      <div className="flex gap-2 sm:col-span-2 lg:hidden">
         <Button type="submit" disabled={busy}>{supplier ? "Salvar" : "Cadastrar fornecedor"}</Button>
         {onDone && <Button type="button" variant="secondary" onClick={() => onDone()}>Cancelar</Button>}
       </div>
@@ -193,8 +249,8 @@ export function NewSupplier({ eventId }: { eventId: string }) {
   if (!open) return <Button onClick={() => setOpen(true)}><Icon name="plus" className="mr-1 h-4 w-4" />Novo fornecedor</Button>;
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center" role="dialog" aria-label="Novo fornecedor">
-      <Card className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto">
-        <p className="mb-3 font-semibold">Novo fornecedor</p>
+      <Card className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto lg:max-w-4xl lg:rounded-sm">
+        <p className="mb-3 font-semibold lg:hidden">Novo fornecedor</p>
         <SupplierForm
           eventId={eventId}
           onDone={(id) => {
@@ -213,8 +269,8 @@ export function EditSupplier({ eventId, supplier }: { eventId: string; supplier:
   if (!open) return <Button variant="secondary" onClick={() => setOpen(true)}>Editar dados</Button>;
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center" role="dialog" aria-label="Editar fornecedor">
-      <Card className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto">
-        <p className="mb-3 font-semibold">Editar {supplier.companyName}</p>
+      <Card className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto lg:max-w-4xl lg:rounded-sm">
+        <p className="mb-3 font-semibold lg:hidden">Editar {supplier.companyName}</p>
         <SupplierForm eventId={eventId} supplier={supplier} onDone={() => setOpen(false)} />
       </Card>
     </div>

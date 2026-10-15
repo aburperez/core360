@@ -6,6 +6,7 @@ import { buildReport } from "@/modules/reports/build.service";
 import { brl, decimal } from "@/lib/money";
 import { TopBar } from "@/components/top-bar";
 import { PrintButton } from "@/components/print-button";
+import { ReportParams } from "@/components/report-params";
 
 export async function generateMetadata({ params }: PageProps<"/eventos/[eventId]/pre-producao/relatorios/[report]">) {
   const { report } = await params;
@@ -30,36 +31,44 @@ export default async function ReportSheetPage({ params }: PageProps<"/eventos/[e
     <>
       <TopBar title={r.title} subtitle={r.eventName} back={`/eventos/${eventId}/pre-producao/relatorios`} />
       <main className={`mx-auto w-full px-4 py-4 lg:px-8 lg:py-6 print:max-w-none print:p-0 ${wide ? "max-w-7xl" : "max-w-5xl"}`}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
-          <p className="text-sm text-muted">Para PDF, toque em Salvar em PDF e escolha &quot;Salvar como PDF&quot;.{wide && " Tabelas largas saem melhor com o papel deitado."}</p>
-          <div className="flex gap-2">
-            <a href={`/api/events/${eventId}/reports/${report}`} className="inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold transition hover:border-primary/60">
-              Baixar Excel
-            </a>
-            <PrintButton />
-          </div>
-        </div>
-
-        <article className="rounded-2xl bg-white p-5 text-slate-900 shadow-xl sm:p-8 print:rounded-none print:p-0 print:shadow-none">
-          <header className="flex flex-col gap-2 border-b-2 border-[#043246] pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 print:flex-row print:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wide text-[#043246]">{r.title}</p>
-              <h1 className="mt-1 text-2xl font-bold">{r.eventName}</h1>
+        <ReportParams
+          title={r.title}
+          sections={r.blocks.map((b) => b.title)}
+          excelHref={`/api/events/${eventId}/reports/${report}`}
+          wide={wide}
+          toolbar={
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden lg:mb-0 lg:ml-auto">
+              <p className="text-sm text-muted lg:hidden">Para PDF, toque em Salvar em PDF e escolha &quot;Salvar como PDF&quot;.{wide && " Tabelas largas saem melhor com o papel deitado."}</p>
+              <div className="flex gap-2">
+                <a href={`/api/events/${eventId}/reports/${report}`} className="inline-flex min-h-11 items-center rounded-xl border border-border bg-surface px-4 text-sm font-semibold transition hover:border-primary/60 lg:in-[.protheus]:min-h-8 lg:in-[.protheus]:rounded-sm lg:in-[.protheus]:px-3.5 lg:in-[.protheus]:text-[13px]">
+                  Baixar Excel
+                </a>
+                <PrintButton />
+              </div>
             </div>
-            <p className="shrink-0 text-xs text-slate-500 sm:text-right print:text-right">
-              CORE 360
-              <br />
-              {r.generated}
-              {r.values && (
-                <>
-                  <br />
-                  <span className="font-semibold text-[#043246]">Confidencial: tem valores</span>
-                </>
-              )}
-            </p>
-          </header>
+          }
+          header={
+            <header className="flex flex-col gap-2 border-b-2 border-[#043246] pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 print:flex-row print:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold uppercase tracking-wide text-[#043246]">{r.title}</p>
+                <h1 className="mt-1 text-2xl font-bold">{r.eventName}</h1>
+              </div>
+              <p className="shrink-0 text-xs text-slate-500 sm:text-right print:text-right">
+                CORE 360
+                <br />
+                {r.generated}
+                {r.values && (
+                  <>
+                    <br />
+                    <span className="font-semibold text-[#043246]">Confidencial: tem valores</span>
+                  </>
+                )}
+              </p>
+            </header>
+          }
+        >
           {r.blocks.map((b, i) => <BlockView key={i} b={b} />)}
-        </article>
+        </ReportParams>
       </main>
     </>
   );
