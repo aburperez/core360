@@ -102,7 +102,7 @@ export function Browse({
             </option>
           ))}
         </select>
-        <label className="flex h-8 w-80 items-center gap-2 rounded-sm border border-border bg-background px-2 text-[13px] focus-within:border-primary">
+        <label className="flex h-8 min-w-40 max-w-80 flex-1 items-center gap-2 rounded-sm border border-border bg-background px-2 text-[13px] focus-within:border-primary">
           <Icon name="search" className="h-3.5 w-3.5 shrink-0 text-muted" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Pesquisar" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted" />
         </label>
