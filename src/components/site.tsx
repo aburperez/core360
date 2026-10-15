@@ -264,6 +264,17 @@ export const TOOLS: Tool[] = [
     ],
     img: "/site/documentos.webp", alt: "Documentos do evento em miniaturas, com o painel de detalhes à direita",
   },
+  {
+    id: "menu-arvore", part: "pre", title: "No computador, jeito de ERP",
+    serve: "Quem vem do Protheus ou de outro ERP se acha na hora: menu em árvore, abas das telas abertas e barra de status, nas cores da CORE 360.",
+    quem: "Quem trabalha no computador (no celular fica o layout de pastas)",
+    passos: [
+      "À esquerda, o menu em árvore: Atualizações (Cadastros e Movimentos), Consultas, Relatórios e Miscelânea, com pesquisa (Ctrl+M), favoritos e recentes.",
+      "No topo, clique no nome do módulo para trocar entre Gestão de campo e Pré-produção, ou trocar de evento. Cliente, evento e data base ficam sempre à vista.",
+      "Cada tela abre numa aba, como as rotinas do Protheus, e a barra de status embaixo mostra evento, usuário, módulo e perfil.",
+    ],
+    img: "/site/menu-arvore.webp", alt: "Chamados no computador com o menu em árvore à esquerda, abas e barra de status",
+  },
 ];
 
 const PARTS = {
