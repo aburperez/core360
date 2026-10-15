@@ -56,6 +56,16 @@ export async function getEvent(actor: Actor, eventId: string) {
   return { ...event, managers, myRole: myRole(actor, eventId) };
 }
 
+/** Só o nome do evento e do cliente, para o topo e a barra de status do computador. */
+export async function getEventHeader(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  const event = await actor.run((tx) =>
+    tx.event.findFirst({ where: { id: eventId, deletedAt: null }, select: { name: true, client: { select: { name: true } } } }),
+  );
+  if (!event) throw new NotFoundError("Evento");
+  return { name: event.name, clientName: event.client.name };
+}
+
 /**
  * Data e hora: instante ISO, ou "2027-04-10T12:00" (campo da tela, sem fuso),
  * que vale no fuso do evento.

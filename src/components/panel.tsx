@@ -199,13 +199,15 @@ export const SquareTile = SectionCard;
  * linha de navegação embaixo da barra do topo; aqui ele vira a descrição.
  */
 export function PageHeading({ trail, title, children }: { trail: string[]; title: string; children?: ReactNode }) {
+  // Dentro do evento (moldura estilo Protheus) o título e o caminho já estão no
+  // topo: aqui sobram só os botões, alinhados à direita na linha do título.
   return (
-    <div className="mb-5 hidden lg:block">
-      <div className="flex items-end justify-between gap-4">
-        <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
-        {children}
+    <div className="mb-5 hidden lg:block in-[.protheus]:pointer-events-none in-[.protheus]:-mt-[68px] in-[.protheus]:mb-4">
+      <div className="flex items-end justify-between gap-4 in-[.protheus]:min-h-11 in-[.protheus]:items-center in-[.protheus]:justify-end">
+        <h2 className="text-3xl font-bold tracking-tight in-[.protheus]:hidden">{title}</h2>
+        <div className="pointer-events-auto">{children}</div>
       </div>
-      <p className="mt-1 text-muted">{trail.join(" › ")}</p>
+      <p className="mt-1 text-muted in-[.protheus]:hidden">{trail.join(" › ")}</p>
     </div>
   );
 }
