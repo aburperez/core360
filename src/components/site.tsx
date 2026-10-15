@@ -272,8 +272,9 @@ export const TOOLS: Tool[] = [
       "À esquerda, o menu em árvore: Atualizações (Cadastros e Movimentos), Consultas, Relatórios e Miscelânea, com pesquisa (Ctrl+M), favoritos e recentes.",
       "No topo, clique no nome do módulo para trocar entre Gestão de campo e Pré-produção, ou trocar de evento. Cliente, evento e data base ficam sempre à vista.",
       "Cada tela abre numa aba, como as rotinas do Protheus, e a barra de status embaixo mostra evento, usuário, módulo e perfil.",
+      "Chamados, fornecedores, cotações e contratos aparecem em grade: bolinha de legenda, pesquisa pelo campo escolhido, ordenar pela coluna, duplo clique abre e exportar para planilha.",
     ],
-    img: "/site/menu-arvore.webp", alt: "Chamados no computador com o menu em árvore à esquerda, abas e barra de status",
+    img: "/site/grade.webp", alt: "Chamados em grade no computador, com legenda, pesquisa e menu em árvore à esquerda",
   },
 ];
 
