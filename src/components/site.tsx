@@ -475,8 +475,8 @@ export function Landing({ contactUrl }: { contactUrl?: string | null }) {
               <p className="mt-3 text-lg text-muted">Sem instalar nada: funciona no navegador do computador e do celular.</p>
               <ol className="mt-8 space-y-4">
                 {[
-                  "Criamos o espaço da agência e convidamos o diretor de produção.",
-                  "O diretor cadastra os clientes, os eventos e os outros diretores.",
+                  "Abrimos o espaço da agência e mandamos o convite do contato pelo WhatsApp.",
+                  "O contato vira o Admin da agência e cadastra os diretores, os produtores, os clientes e os eventos.",
                   "Montamos juntos a pré-produção do primeiro evento.",
                   "A equipe recebe o convite e usa no celular no dia.",
                 ].map((p, i) => (
