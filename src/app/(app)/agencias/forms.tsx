@@ -30,12 +30,12 @@ function useGuard() {
 export function NewAgencyForm() {
   const { error, guard } = useGuard();
   const [open, setOpen] = useState(false);
-  const [invite, setInvite] = useState<{ url: string; name: string } | null>(null);
+  const [invite, setInvite] = useState<{ url: string; name: string; phone: string | null } | null>(null);
   if (!open) {
     return (
       <div>
-        <Button className="w-full sm:w-auto" onClick={() => { setOpen(true); setInvite(null); }}>+ Nova agência</Button>
-        {invite && <InviteShare url={invite.url} name={invite.name} as="diretor de produção" />}
+        <Button className="w-full sm:w-auto" onClick={() => { setOpen(true); setInvite(null); }}>+ Abrir agência</Button>
+        {invite && <InviteShare url={invite.url} name={invite.name} as="diretor de produção" phone={invite.phone} />}
       </div>
     );
   }
@@ -48,26 +48,30 @@ export function NewAgencyForm() {
           const f = new FormData(e.currentTarget);
           const adminName = String(f.get("adminName") ?? "");
           let path = "";
+          let phone: string | null = null;
           const ok = await guard(async () => {
-            const r = await api<{ invite: { path: string } }>("/api/agencies", {
-              body: { name: f.get("name"), adminName, adminEmail: f.get("adminEmail") },
+            const r = await api<{ phone: string | null; invite: { path: string } }>("/api/agencies", {
+              body: { name: f.get("name"), adminName, adminEmail: f.get("adminEmail"), adminPhone: f.get("adminPhone") || null },
             });
             path = r.invite.path;
+            phone = r.phone;
           });
           if (ok) {
-            setInvite({ url: `${location.origin}${path}`, name: adminName });
+            setInvite({ url: `${location.origin}${path}`, name: adminName, phone });
             setOpen(false);
           }
         }}
       >
         <label className="block"><Label>Nome da agência</Label><Input name="name" required maxLength={120} autoFocus /></label>
-        <p className="pt-1 text-sm font-semibold">Primeiro diretor de produção da agência</p>
+        <p className="pt-1 text-sm font-semibold">Contato da agência</p>
+        <p className="text-xs text-muted">É o Admin da agência: entra como diretor de produção e cadastra os outros diretores e os produtores.</p>
         <label className="block"><Label>Nome</Label><Input name="adminName" required maxLength={120} /></label>
         <label className="block"><Label>E-mail</Label><Input name="adminEmail" type="email" inputMode="email" required /></label>
+        <label className="block"><Label hint="opcional">Celular (WhatsApp)</Label><Input name="adminPhone" type="tel" inputMode="tel" placeholder="(11) 98765-4321" /></label>
         <FormError message={error} />
         <div className="grid grid-cols-2 gap-2">
           <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button type="submit">Criar e convidar</Button>
+          <Button type="submit">Abrir e convidar</Button>
         </div>
       </form>
     </Card>

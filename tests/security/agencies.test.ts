@@ -172,6 +172,28 @@ describe("agências separadas", () => {
     expect(all).toEqual(expect.arrayContaining([beta.id, d.agency.id]));
   });
 
+  it("painel de convites: celular do contato vai para o diretor e a situação do convite aparece", async () => {
+    const platform = await actorFor(app, "admin");
+    await expectStatus(createAgency(platform, { name: "Gama", adminName: "G", adminEmail: `g-${uniq()}@g.dev`, adminPhone: "123" }), 422);
+    const g = await createAgency(platform, { name: `Gama ${uniq()}`, adminName: "Gabi Gama", adminEmail: `gabi-${uniq()}@g.dev`, adminPhone: "(11) 98765-4321" });
+    expect(g.phone).toBe("+5511987654321");
+    const director = await owner.director.findFirstOrThrow({ where: { agencyId: g.id } });
+    expect(director.phone).toBe("+5511987654321");
+    const contact = () => getAgency(platform, g.id).then((a) => a.admins[0]!);
+    expect((await contact()).invite).toBe("SENT");
+    await owner.agencyInvitation.updateMany({ where: { agencyId: g.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    expect((await contact()).invite).toBe("EXPIRED");
+    const c = await contact();
+    await updateAgencyAdmin(platform, c.id, { phone: "+55 21 99999-0000" });
+    expect((await contact()).phone).toBe("+5521999990000");
+    const inv = await createAgencyAdminInvitation(platform, c.id);
+    expect((await contact()).invite).toBe("SENT");
+    await acceptInvitation(auth$, { token: inv.token, password: "senha-gama-1" });
+    expect((await contact()).invite).toBe("ACCEPTED");
+    // Outra agência não muda o celular do contato.
+    await expectStatus(updateAgencyAdmin(await actorOf(beta.adminUserId), c.id, { phone: "11911112222" }), 404);
+  });
+
   it("o Admin cadastra outro Admin da agência, mas não liga conta nem se desativa", async () => {
     const betaAdmin = await actorOf(beta.adminUserId);
     const other = await addAgencyAdmin(betaAdmin, beta.id, { name: "Beto", email: `beto-${uniq()}@beta.dev` });

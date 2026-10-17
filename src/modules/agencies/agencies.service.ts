@@ -7,6 +7,7 @@ import { isUniqueViolation } from "../../server/db/errors";
 import { hashToken, newToken } from "../../lib/tokens";
 import { parse, text, uuid } from "../../lib/validation";
 import { INVITE_TTL_DAYS } from "../participants/participants.service";
+import { normalizePhone } from "../../lib/phone";
 
 /**
  * Agências que alugam o CORE 360. O Admin da plataforma cria a agência e o
@@ -47,12 +48,36 @@ function requireTeamManager(actor: Actor, agencyId: string, role: AgencyAdminRol
 
 const email = z.email({ message: "E-mail inválido" }).trim().toLowerCase();
 
-const adminSelect = { id: true, name: true, email: true, role: true, active: true, userId: true, createdAt: true } as const;
+const adminSelect = {
+  id: true, name: true, email: true, phone: true, role: true, active: true, userId: true, createdAt: true,
+  invitations: { select: { expiresAt: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
+} as const;
 
-function adminView(a: { id: string; name: string; email: string; role: AgencyAdminRole; active: boolean; userId: string | null; createdAt: Date }) {
-  const { userId, ...rest } = a;
-  return { ...rest, linked: !!userId };
+type AdminRow = {
+  id: string; name: string; email: string; phone: string | null; role: AgencyAdminRole; active: boolean; userId: string | null;
+  createdAt: Date; invitations: { expiresAt: Date; createdAt: Date }[];
+};
+
+/** Situação do convite: falta convidar, enviado (até quando vale), vencido ou já entrou. */
+function adminView(a: AdminRow) {
+  const { userId, invitations, ...rest } = a;
+  const last = invitations[0] ?? null;
+  const invite = userId ? "ACCEPTED" : !last ? "NONE" : last.expiresAt < new Date() ? "EXPIRED" : "SENT";
+  return { ...rest, linked: !!userId, invite, invitedAt: last?.createdAt ?? null, inviteExpiresAt: last?.expiresAt ?? null } as const;
 }
+
+/** Celular opcional; quando vem, precisa ser válido (DDD + número). */
+const phone = z
+  .string()
+  .trim()
+  .max(30)
+  .nullish()
+  .transform((v, ctx) => {
+    if (!v) return null;
+    const p = normalizePhone(v);
+    if (!p) ctx.addIssue({ code: "custom", message: "Celular inválido. Use DDD + número, ex.: (11) 98765-4321" });
+    return p;
+  });
 
 export async function listAgencies(actor: Actor) {
   requirePlatform(actor);
@@ -82,6 +107,7 @@ const createSchema = z.object({
   name: text(120),
   adminName: text(120),
   adminEmail: email,
+  adminPhone: phone,
 });
 
 /** Nova agência já com o primeiro Admin e o link de convite dele. */
@@ -92,14 +118,16 @@ export async function createAgency(actor: Actor, input: unknown) {
   const expiresAt = inviteExpiry();
   const agency = await actor.run(async (tx) => {
     const g = await tx.agency.create({ data: { name: data.name }, select: { id: true, name: true } });
-    const a = await tx.agencyAdmin.create({ data: { agencyId: g.id, name: data.adminName, email: data.adminEmail }, select: { id: true } });
+    const a = await tx.agencyAdmin.create({
+      data: { agencyId: g.id, name: data.adminName, email: data.adminEmail, phone: data.adminPhone }, select: { id: true },
+    });
     await tx.agencyInvitation.create({
       data: { agencyId: g.id, agencyAdminId: a.id, tokenHash: hashToken(token), expiresAt, createdById: actor.userId },
     });
     await audit(tx, actor, { entity: "agency", entityId: g.id, action: "CREATE", after: { name: data.name, admin: data.adminEmail } });
     return g;
   });
-  return { ...agency, invite: { token, expiresAt, path: `/convite/${token}` } };
+  return { ...agency, phone: data.adminPhone, invite: { token, expiresAt, path: `/convite/${token}` } };
 }
 
 const updateSchema = z.object({
@@ -142,17 +170,17 @@ export async function addAgencyAdmin(actor: Actor, agencyId: string, input: unkn
   }
 }
 
-const adminUpdateSchema = z.object({ name: text(120).optional(), active: z.boolean().optional() });
+const adminUpdateSchema = z.object({ name: text(120).optional(), active: z.boolean().optional(), phone: phone.optional() });
 
 export async function updateAgencyAdmin(actor: Actor, adminId: string, input: unknown) {
   if (!uuid.safeParse(adminId).success) throw new NotFoundError("Admin");
   const data = parse(adminUpdateSchema, input);
   return actor.run(async (tx) => {
-    const before = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, role: true, name: true, active: true, userId: true } });
+    const before = await tx.agencyAdmin.findUnique({ where: { id: adminId }, select: { agencyId: true, role: true, name: true, active: true, phone: true, userId: true } });
     if (!before) throw new NotFoundError("Admin");
     requireTeamManager(actor, before.agencyId, before.role);
     if (data.active === false && before.userId === actor.userId) throw new ValidationError("Você não pode desativar o seu próprio acesso");
-    const changes = diff({ name: before.name, active: before.active }, data);
+    const changes = diff({ name: before.name, active: before.active, phone: before.phone }, data);
     if (!Object.keys(changes.after).length) return { id: adminId };
     await tx.agencyAdmin.update({ where: { id: adminId }, data });
     const action = "active" in changes.after ? (data.active ? "ACTIVATE" : "DEACTIVATE") : "UPDATE";
