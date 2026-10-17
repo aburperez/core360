@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, cx } from "@/components/ui";
 import { FormError, Input, Label } from "@/components/field";
 import { api } from "@/components/api-client";
+import { InviteShare } from "@/components/invite-share";
 
 type Guard = (fn: () => Promise<unknown>) => Promise<boolean>;
 
@@ -25,35 +26,16 @@ function useGuard() {
   return { error, guard, router };
 }
 
-/** Abre o compartilhar do celular (ou copia) e devolve o link completo. */
-async function shareInvite(path: string, name: string, as = "diretor de produção") {
-  const url = `${location.origin}${path}`;
-  if (navigator.share) {
-    await navigator.share({ title: "Acesso CORE 360", text: `${name}, este é seu acesso de ${as} ao CORE 360:`, url }).catch(() => {});
-  } else {
-    await navigator.clipboard?.writeText(url).catch(() => {});
-  }
-  return url;
-}
-
-function InviteLink({ url }: { url: string }) {
-  return (
-    <p className="mt-2 break-all rounded-lg bg-background p-2 text-xs">
-      Link copiado (vale 7 dias e só pode ser usado uma vez): {url}
-    </p>
-  );
-}
-
 /** Nova agência com o primeiro diretor de produção. Mostra o link do convite uma vez. */
 export function NewAgencyForm() {
   const { error, guard } = useGuard();
   const [open, setOpen] = useState(false);
-  const [link, setLink] = useState<string | null>(null);
+  const [invite, setInvite] = useState<{ url: string; name: string } | null>(null);
   if (!open) {
     return (
       <div>
-        <Button className="w-full sm:w-auto" onClick={() => { setOpen(true); setLink(null); }}>+ Nova agência</Button>
-        {link && <InviteLink url={link} />}
+        <Button className="w-full sm:w-auto" onClick={() => { setOpen(true); setInvite(null); }}>+ Nova agência</Button>
+        {invite && <InviteShare url={invite.url} name={invite.name} as="diretor de produção" />}
       </div>
     );
   }
@@ -73,7 +55,7 @@ export function NewAgencyForm() {
             path = r.invite.path;
           });
           if (ok) {
-            setLink(await shareInvite(path, adminName));
+            setInvite({ url: `${location.origin}${path}`, name: adminName });
             setOpen(false);
           }
         }}
@@ -200,7 +182,7 @@ function AdminRow({ a, guard, isMe, canManage, label }: { a: Admin; guard: Guard
               onClick={() =>
                 guard(async () => {
                   const r = await api<{ path: string }>(`/api/agency-admins/${a.id}/invitation`, { body: {} });
-                  setLink(await shareInvite(r.path, a.name, label));
+                  setLink(`${location.origin}${r.path}`);
                 })
               }
             >
@@ -218,7 +200,7 @@ function AdminRow({ a, guard, isMe, canManage, label }: { a: Admin; guard: Guard
           )}
         </div>
       )}
-      {link && <InviteLink url={link} />}
+      {link && <InviteShare url={link} name={a.name} as={label} />}
     </div>
   );
 }

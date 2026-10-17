@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, SectionTitle, cx } from "@/components/ui";
 import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { api } from "@/components/api-client";
+import { InviteShare } from "@/components/invite-share";
 import { ROLE_LABEL } from "@/lib/format";
 
 type Role = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
@@ -187,11 +188,6 @@ function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
       const r = await api<{ path: string }>(`/api/participants/${p.id}/invitation`, { body: {} });
       const url = `${location.origin}${r.path}`;
       setLink(url);
-      if (navigator.share) {
-        await navigator.share({ title: "Acesso CORE 360", text: `${p.name}, este é seu acesso ao CORE 360:`, url }).catch(() => {});
-      } else {
-        await navigator.clipboard?.writeText(url).catch(() => {});
-      }
     });
   }
 
@@ -260,11 +256,7 @@ function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
       )}
       {fn && <FunctionSelect participantId={p.id} name={p.name} pick={fn} guard={guard} />}
       {clientView && p.active && <ClientViewSwitches participantId={p.id} view={clientView} guard={guard} />}
-      {link && (
-        <p className="mt-2 break-all rounded-lg bg-background p-2 text-xs">
-          Link copiado (vale 7 dias, uso único): {link}
-        </p>
-      )}
+      {link && <InviteShare url={link} name={p.name} note="vale 7 dias, uso único" />}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, EmptyState, SectionTitle, cx } from "@/components/ui";
 import { FormError, Input, Label } from "@/components/field";
 import { api } from "@/components/api-client";
+import { InviteShare } from "@/components/invite-share";
 
 type Director = {
   id: string; name: string; email: string; phone: string | null; jobTitle: string | null; active: boolean;
@@ -51,11 +52,6 @@ function DirectorRow({ d, guard, canManage }: { d: Director; guard: (fn: () => P
       const r = await api<{ path: string }>(`/api/directors/${d.id}/invitation`, { body: {} });
       const url = `${location.origin}${r.path}`;
       setLink(url);
-      if (navigator.share) {
-        await navigator.share({ title: "Acesso CORE 360", text: `${d.name}, este é seu acesso ao CORE 360:`, url }).catch(() => {});
-      } else {
-        await navigator.clipboard?.writeText(url).catch(() => {});
-      }
     });
   }
 
@@ -92,11 +88,7 @@ function DirectorRow({ d, guard, canManage }: { d: Director; guard: (fn: () => P
           </button>
         )}
       </div>
-      {link && (
-        <p className="mt-2 break-all rounded-lg bg-background p-2 text-xs">
-          Link copiado (vale 7 dias, uso único, serve para a agência e todos os eventos): {link}
-        </p>
-      )}
+      {link && <InviteShare url={link} name={d.name} note="vale 7 dias, uso único, serve para a agência e todos os eventos" />}
     </div>
   );
 }
