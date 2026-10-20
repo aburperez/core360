@@ -276,6 +276,18 @@ export const TOOLS: Tool[] = [
     ],
     img: "/site/grade.webp", alt: "Chamados em grade no computador, com legenda, pesquisa e menu em árvore à esquerda",
   },
+  {
+    id: "acessos", part: "pre", title: "Hierarquia de acessos",
+    serve: "Cada pessoa da produção abre só as partes que precisa: o Gerente de produção marca, por caixas, o que cada pré-produtor vê, e o Produtor executivo já entra com as partes dele.",
+    quem: "Diretor e Gerente de produção marcam; pré-produtores e Produtor executivo usam",
+    passos: [
+      "Em Montar equipe, abaixo de cada pré-produtor, marque as partes da Pré-produção que ele abre: cotações, cronograma, mapa de itens, orçamento e as demais, 15 partes no total.",
+      "O pré-produtor vê no painel e no menu só o que foi marcado. Desmarcou, a parte sai na hora, e a regra vale também no banco de dados.",
+      "O Produtor executivo cuida de produtores e funções, orçamento, fechamento financeiro, painel executivo, briefing, documentos e atendimento ao cliente, e vê o mapa de itens e a montagem de estrutura e cenografia.",
+      "Em Atendimento, ele escolhe o que o Cliente acompanha do evento, sempre só olhando.",
+    ],
+    img: "/site/acessos.webp", alt: "Montar equipe com as caixas do que o pré-produtor abre na Pré-produção",
+  },
 ];
 
 const PARTS = {
@@ -348,9 +360,11 @@ function ToolBlock({ tool, n }: { tool: Tool; n: number }) {
 
 const ROLES = [
   { title: "Diretor de produção", text: "Vê todos os eventos da agência, escolhe os fornecedores e acompanha a preparação, os prazos e os custos no painel executivo." },
-  { title: "Gerente do evento", text: "Coordena áreas, equipes e chamados e fecha o relatório do dia." },
+  { title: "Gerente de produção", text: "Cuida dos seus eventos: coordena áreas, equipes e chamados, marca o que cada pré-produtor abre e fecha o relatório do dia." },
+  { title: "Produtor executivo", text: "Produtores e funções, orçamento, financeiro, briefing, estrutura e cenografia e o atendimento ao cliente." },
   { title: "Head de área", text: "Recebe os urgentes da área, confirma a montagem, valida a entrega e avalia os fornecedores." },
-  { title: "Produtor operacional", text: "Lê o briefing e abre e resolve chamados com foto, pelo celular." },
+  { title: "Pré-produtor", text: "Recebe a sua função e abre só as partes da Pré-produção marcadas para ele." },
+  { title: "Produtor operacional", text: "Só a gestão de campo: lê o briefing e abre e resolve chamados com foto, pelo celular." },
 ];
 
 const SECURITY = [
@@ -430,7 +444,7 @@ export function Landing({ contactUrl }: { contactUrl?: string | null }) {
         <Section id="quem-usa">
           <Eyebrow>Quem usa</Eyebrow>
           <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Cada pessoa vê só o que precisa</h2>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {ROLES.map((r) => (
               <div key={r.title} className="rounded-2xl border border-border bg-surface p-6">
                 <h3 className="text-xl font-bold">{r.title}</h3>
