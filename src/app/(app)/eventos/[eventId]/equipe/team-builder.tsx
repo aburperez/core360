@@ -7,11 +7,12 @@ import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { api } from "@/components/api-client";
 import { InviteShare } from "@/components/invite-share";
 import { ROLE_LABEL } from "@/lib/format";
+import type { Section } from "@/server/authz/sections";
+import { ClientViewSwitches, SectionBoxes, type ClientView } from "./access-switches";
 
-type Role = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
-const EVENT_LEVEL: Role[] = ["GERENTE", "CLIENTE", "PRE_PRODUTOR"];
+type Role = "GERENTE" | "PRODUTOR_EXECUTIVO" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
+const EVENT_LEVEL: Role[] = ["GERENTE", "PRODUTOR_EXECUTIVO", "CLIENTE", "PRE_PRODUTOR"];
 type Area = { id: string; name: string; canAddTeam: boolean; roles: Role[] };
-type ClientView = { costs: boolean; team: boolean; progress: boolean };
 type Team = { id: string; name: string; areaId: string };
 type Person = {
   id: string; name: string; email: string; phone: string | null; jobTitle: string | null; role: Role;
@@ -34,6 +35,8 @@ export function TeamBuilder(props: {
   people: Person[];
   canGrantClientView: boolean;
   clientViews: Record<string, ClientView>;
+  /** Caixas de acesso dos Pré-produtores, para quem pode marcar (senão null). */
+  producerAccess: Record<string, Section[]> | null;
   functionChoices: FunctionChoices;
 }) {
   const router = useRouter();
@@ -69,7 +72,8 @@ export function TeamBuilder(props: {
             {coordination.map((p) => (
               <PersonRow key={p.id} p={p} areaName={props.areas.find((a) => a.id === p.areaId)?.name} guard={guard}
                 canManage={canManagePerson(p, props)} fn={fnFor(p)}
-                clientView={p.role === "CLIENTE" && props.canGrantClientView ? (props.clientViews[p.id] ?? NO_VIEW) : undefined} />
+                clientView={p.role === "CLIENTE" && props.canGrantClientView ? (props.clientViews[p.id] ?? NO_VIEW) : undefined}
+                sections={p.role === "PRE_PRODUTOR" && props.producerAccess ? (props.producerAccess[p.id] ?? []) : undefined} />
             ))}
           </Card>
         </>
@@ -121,11 +125,11 @@ export function TeamBuilder(props: {
 
       {props.eventRoles.some((r) => EVENT_LEVEL.includes(r)) && (
         <>
-          <SectionTitle>Gerentes, cliente e pré-produção</SectionTitle>
+          <SectionTitle>Gerentes, executivo, cliente e pré-produção</SectionTitle>
           <AddPerson
             eventId={props.eventId}
             roles={props.eventRoles.filter((r) => EVENT_LEVEL.includes(r))}
-            label={props.eventRoles.includes("PRE_PRODUTOR") ? "+ Gerente, cliente ou pré-produtor" : "+ Gerente ou cliente"}
+            label={props.eventRoles.includes("PRE_PRODUTOR") ? "+ Gerente, executivo, cliente ou pré-produtor" : "+ Gerente ou cliente"}
             guard={guard}
           />
         </>
@@ -172,10 +176,12 @@ function TeamBlock({ team, area, eventId, people, guard, canManage, fnFor }: {
 
 type FunctionPick = { eventId: string; options: Fn[]; value: string | null };
 
-function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
+function PersonRow({ p, areaName, guard, canManage, clientView, sections, fn }: {
   p: Person; areaName?: string; guard: (fn: () => Promise<unknown>) => Promise<boolean>; canManage: boolean;
   /** Só para o Cliente, quando quem vê a tela pode liberar a visão dele. */
   clientView?: ClientView;
+  /** Só para o Pré-produtor, quando quem vê a tela marca as caixas dele. */
+  sections?: Section[];
   /** Escolher a função desta pessoa (Pré-produção e o Head da área). */
   fn?: FunctionPick;
 }) {
@@ -256,6 +262,7 @@ function PersonRow({ p, areaName, guard, canManage, clientView, fn }: {
       )}
       {fn && <FunctionSelect participantId={p.id} name={p.name} pick={fn} guard={guard} />}
       {clientView && p.active && <ClientViewSwitches participantId={p.id} view={clientView} guard={guard} />}
+      {sections && p.active && <SectionBoxes participantId={p.id} sections={sections} guard={guard} />}
       {link && <InviteShare url={link} name={p.name} note="vale 7 dias, uso único" />}
     </div>
   );
@@ -288,55 +295,6 @@ function FunctionSelect({ participantId, name, pick, guard }: {
   );
 }
 
-const VIEW_OPTIONS: { key: keyof ClientView; label: string; hint: string }[] = [
-  { key: "progress", label: "Andamento", hint: "chamados e planta" },
-  { key: "team", label: "Equipe", hint: "áreas, equipes e pessoas" },
-  { key: "costs", label: "Custos", hint: "planilha com valores" },
-];
-
-/** O que o Cliente acompanha: ele só olha, e só o que estiver ligado aqui. */
-function ClientViewSwitches({ participantId, view, guard }: {
-  participantId: string; view: ClientView; guard: (fn: () => Promise<unknown>) => Promise<boolean>;
-}) {
-  const [busy, setBusy] = useState<keyof ClientView | null>(null);
-  return (
-    <div className="mt-3 rounded-xl border border-border bg-background p-3">
-      <p className="text-sm font-semibold">O que este cliente vê</p>
-      <p className="text-xs text-muted">Ele só olha, não muda nada.</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {VIEW_OPTIONS.map((o) => {
-          const on = view[o.key];
-          return (
-            <button
-              key={o.key}
-              type="button"
-              role="switch"
-              aria-checked={on}
-              disabled={!!busy}
-              onClick={async () => {
-                setBusy(o.key);
-                await guard(() => api(`/api/participants/${participantId}/client-view`, { method: "PATCH", body: { [o.key]: !on } }));
-                setBusy(null);
-              }}
-              className={cx(
-                "flex min-h-11 items-center gap-2 rounded-xl border px-3 text-left text-sm transition",
-                on ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted hover:border-primary/60",
-              )}
-            >
-              <span aria-hidden className={cx("relative h-5 w-9 shrink-0 rounded-full transition", on ? "bg-primary" : "bg-border")}>
-                <span className={cx("absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all", on ? "left-[18px]" : "left-0.5")} />
-              </span>
-              <span>
-                <span className="block font-medium">{o.label}</span>
-                <span className="block text-xs text-muted">{o.hint}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function AddPerson({ eventId, roles, teamId, areaId, label, guard }: {
   eventId: string; roles: Role[]; teamId?: string; areaId?: string; label: string;

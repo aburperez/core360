@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canSendToField, canUsePreProduction, clientCan } from "../../server/authz/policy";
+import { canHandleFinance, canReviewSla, canSendToField, canUseSection, clientCan } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -24,8 +24,11 @@ import { canSetItemStatus, COST_CENTERS, ITEM_CATEGORIES, ITEM_STATUS_LABEL, ITE
 
 function requirePreProduction(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "ITENS", "ORCAMENTO")) throw new NotFoundError("Pré-produção");
 }
+
+/** Quem lê a planilha (sem mudar): as partes que se apoiam nos itens. */
+const SHEET_READERS = ["ITENS", "ORCAMENTO", "COTACOES", "MONTAGEM", "CRONOGRAMA", "FINANCEIRO", "EXECUTIVO", "RELATORIOS", "PENDENCIAS"] as const;
 
 /** Seções que a matriz da equipe usa; "Começar com as seções da matriz" cria estas. */
 export const MATRIX_SECTIONS = [
@@ -171,7 +174,9 @@ export async function getClientCosts(actor: Actor, eventId: string) {
 
 /** A planilha inteira do evento: cabeçalho, percentuais, seções, itens e totais. */
 export async function getCostSheet(actor: Actor, eventId: string) {
-  requirePreProduction(actor, eventId);
+  requireEventAccess(actor, eventId);
+  // Os itens servem de apoio a outras partes (cotação, montagem, cronograma, relatórios).
+  if (!canUseSection(actor, eventId, ...SHEET_READERS)) throw new NotFoundError("Pré-produção");
   const sheet = await actor.run((tx) => loadSheet(tx, eventId));
   return { ...sheet, can: { sendToField: canSendToField(actor, eventId) } };
 }
@@ -237,7 +242,7 @@ export async function startFromMatrixSections(actor: Actor, eventId: string) {
 
 async function loadSection(actor: Actor, tx: Tx, id: string) {
   const s = uuid.safeParse(id).success ? await tx.costSection.findUnique({ where: { id } }) : null;
-  if (!s || !canUsePreProduction(actor, s.eventId)) throw new NotFoundError("Seção");
+  if (!s || !canUseSection(actor, s.eventId, "ITENS", "ORCAMENTO")) throw new NotFoundError("Seção");
   return s;
 }
 
@@ -337,8 +342,8 @@ const itemUpdateSchema = itemCreateSchema.partial().extend({
  */
 async function checkItemFields(actor: Actor, tx: Tx, i: { id?: string; eventId: string; status: ItemStatus; costCenter: string | null }, patch: Record<string, unknown>) {
   const director = canReviewSla(actor, i.eventId);
-  if (("contractedValue" in patch || "actualValue" in patch) && !director) {
-    throw new ForbiddenError("Só o diretor de produção preenche o Contratado e o Realizado");
+  if (("contractedValue" in patch || "actualValue" in patch) && !director && !canHandleFinance(actor, i.eventId)) {
+    throw new ForbiddenError("Só o diretor e o Produtor executivo preenchem o Contratado e o Realizado");
   }
   if ("costCenter" in patch && patch.costCenter !== i.costCenter && !director) {
     throw new ForbiddenError("Só o diretor de produção muda o centro de custo");
@@ -397,7 +402,7 @@ export async function createCostItem(actor: Actor, sectionId: string, input: unk
 
 async function loadItem(actor: Actor, tx: Tx, id: string) {
   const i = uuid.safeParse(id).success ? await tx.costItem.findUnique({ where: { id } }) : null;
-  if (!i || !canUsePreProduction(actor, i.eventId)) throw new NotFoundError("Item");
+  if (!i || !canUseSection(actor, i.eventId, "ITENS", "ORCAMENTO")) throw new NotFoundError("Item");
   return i;
 }
 
@@ -568,7 +573,7 @@ export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint
 export async function exportCostSheet(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
   // Baixar Excel: a Pré-produção e o Cliente com os custos liberados.
-  if (!canUsePreProduction(actor, eventId) && !clientCan(actor, eventId, "costs")) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "ITENS", "ORCAMENTO") && !clientCan(actor, eventId, "costs")) throw new NotFoundError("Pré-produção");
   const { sheet, event } = await actor.run(async (tx) => ({
     sheet: await loadSheet(tx, eventId),
     event: await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true } }),

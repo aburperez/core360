@@ -1,5 +1,5 @@
 import { isEventAdmin, type Actor } from "../../server/authz/actor";
-import { canAssignRole, canGrantClientView, canManageAreas, canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canAssignRole, canGrantClientView, canManageAreas, canReviewSla, canUseSection } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
 import { ConflictError, NotFoundError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -25,7 +25,7 @@ import {
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "FUNCOES")) throw new NotFoundError("Pré-produção");
 }
 
 const toDate = (day: string | null) => (day ? new Date(`${day}T00:00:00.000Z`) : null);
@@ -93,7 +93,7 @@ export async function exportFunctionsSheet(actor: Actor, eventId: string) {
 
 const NO_VIEW: SheetView = { costs: false, team: false, progress: false };
 const FIELD: SheetRole[] = ["GERENTE", "HEAD", "OPERACIONAL"];
-const EVENT_LEVEL: SheetRole[] = ["GERENTE", "CLIENTE", "PRE_PRODUTOR"];
+const EVENT_LEVEL: SheetRole[] = ["GERENTE", "CLIENTE", "PRE_PRODUTOR", "PRODUTOR_EXECUTIVO"];
 /** Perfil, área e equipe pela planilha: quem monta a equipe do evento inteiro (Gerente). */
 const canEditPeople = (actor: Actor, eventId: string) => canManageAreas(actor, eventId);
 const sameView = (a: SheetView, b: SheetView) => a.costs === b.costs && a.team === b.team && a.progress === b.progress;

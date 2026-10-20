@@ -34,7 +34,8 @@ export const PRIORITY_STYLE: Record<Priority, string> = {
 
 export const ROLE_LABEL: Record<ParticipantRole | "ADMIN", string> = {
   ADMIN: "Diretor de produção",
-  GERENTE: "Gerente",
+  GERENTE: "Gerente de produção",
+  PRODUTOR_EXECUTIVO: "Produtor executivo",
   HEAD: "Head",
   OPERACIONAL: "Operacional",
   CLIENTE: "Cliente",

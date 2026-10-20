@@ -4,7 +4,7 @@ import { audit } from "../../server/audit/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../../server/errors";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
-import { canCloseEvent } from "../closure/closure.service";
+import { canHandleFinance, canUseSection } from "../../server/authz/policy";
 import { money } from "../costs/costs.service";
 import { itemCode, type ItemCategory } from "../items/item-meta";
 import { closingTotals, closingLine, type ClosingLine } from "./closing";
@@ -18,8 +18,8 @@ import { assertFinancialOpen, financialClosed } from "./lock";
  * financeiro fechado. A migration *_fechamento_financeiro repete as regras.
  */
 
-/** Quem faz: o mesmo de encerrar o evento (Gerente ou Admin de verdade; o Suporte não). */
-export const canCloseFinancial = canCloseEvent;
+/** Quem faz: o diretor (não o Suporte), o Gerente de produção e o Produtor executivo. */
+export const canCloseFinancial = canHandleFinance;
 
 function requireCloser(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
@@ -29,8 +29,11 @@ function requireCloser(actor: Actor, eventId: string) {
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
+/** Ver o fechamento: quem tem a parte Financeiro. Mexer: só quem cuida do financeiro (canCloseFinancial). */
 export async function getFinancialClosing(actor: Actor, eventId: string) {
-  requireCloser(actor, eventId);
+  requireEventAccess(actor, eventId);
+  if (!canUseSection(actor, eventId, "FINANCEIRO")) throw new NotFoundError("Fechamento financeiro");
+  const handles = canCloseFinancial(actor, eventId);
   const data = await actor.run(async (tx) => {
     const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { number: true, status: true } });
     const finances = await tx.eventFinances.findUnique({
@@ -71,9 +74,9 @@ export async function getFinancialClosing(actor: Actor, eventId: string) {
     leftOut: data.items.length - rows.length,
     closed,
     can: {
-      edit: !closed,
-      close: !closed && inStage && totals.pending === 0,
-      reopen: !!closed && data.event.status !== "CONCLUIDO",
+      edit: handles && !closed,
+      close: handles && !closed && inStage && totals.pending === 0,
+      reopen: handles && !!closed && data.event.status !== "CONCLUIDO",
     },
   };
 }
@@ -179,7 +182,7 @@ export async function reopenFinancial(actor: Actor, eventId: string, input: unkn
 
 /** Para o painel e a Central de pendências: precisa fechar? já fechou? */
 export async function financialSummary(actor: Actor, eventId: string) {
-  if (!canCloseFinancial(actor, eventId)) return null;
+  if (!canUseSection(actor, eventId, "FINANCEIRO")) return null;
   const c = await getFinancialClosing(actor, eventId);
   return { needed: c.items.length > 0, closed: c.closed, pending: c.totals.pending, toPay: c.totals.toPay, status: c.status, ready: c.can.close };
 }

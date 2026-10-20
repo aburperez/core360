@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listContracts } from "@/modules/contracts/contracts.service";
 import { brl } from "@/lib/money";
@@ -30,7 +30,7 @@ export const metadata = { title: "Contratos" };
 export default async function ContractsPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/contratos">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "COTACOES")) notFound();
   const [event, data] = await Promise.all([getEvent(actor, eventId), listContracts(actor, eventId)]);
   const base = `/eventos/${eventId}/pre-producao/contratos`;
   const signed = data.items.filter((c) => c.status === "ASSINADO");

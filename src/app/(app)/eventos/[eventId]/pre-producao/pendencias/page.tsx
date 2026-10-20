@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { listPendencies, type Pendency } from "@/modules/pendencies/pendencies.service";
 import { GROUPS, KIND_LABEL } from "@/modules/pendencies/pendency-meta";
 import { dayText, weekday } from "@/modules/schedule/schedule-meta";
@@ -23,7 +23,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 export default async function PendenciesPage({ params, searchParams }: PageProps<"/eventos/[eventId]/pre-producao/pendencias">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "PENDENCIAS")) notFound();
   const q = await searchParams;
   const data = await listPendencies(actor, eventId, { areaId: one(q.area), responsibleId: one(q.responsavel) });
   const filtered = !!(data.filters.areaId || data.filters.responsibleId);

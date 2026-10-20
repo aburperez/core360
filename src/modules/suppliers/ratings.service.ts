@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { membershipFor, type Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -38,7 +38,7 @@ const average = (r: Record<RatingKey, number>) => Math.round((RATING_CRITERIA.re
 
 function requireDirector(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "COTACOES")) throw new NotFoundError("Pré-produção");
   if (!isSupplierDirector(actor, eventId)) throw new ForbiddenError("Só o diretor avalia os fornecedores");
 }
 
@@ -129,7 +129,7 @@ const ratingSchema = z.object({
 /** Dar ou corrigir a própria nota de um fornecedor no evento (o diretor ou o Head da área). */
 export async function rateSupplier(actor: Actor, eventId: string, supplierId: string, input: unknown) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId) && membershipFor(actor, eventId)?.role !== "HEAD") throw new NotFoundError("Fornecedor");
+  if (!canUseSection(actor, eventId, "COTACOES") && membershipFor(actor, eventId)?.role !== "HEAD") throw new NotFoundError("Fornecedor");
   if (!uuid.safeParse(supplierId).success) throw new NotFoundError("Fornecedor");
   const data = parse(ratingSchema, input);
   return actor.run(async (tx) => {

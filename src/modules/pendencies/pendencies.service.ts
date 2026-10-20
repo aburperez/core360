@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -26,7 +26,7 @@ import { financialState } from "../finance/lock";
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "PENDENCIAS")) throw new NotFoundError("Pré-produção");
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -259,7 +259,7 @@ const auditable = (t: { title: string; dueOn: Date | null; areaId: string | null
 
 async function loadTask(actor: Actor, tx: Tx, id: string) {
   const t = uuid.safeParse(id).success ? await tx.eventTask.findUnique({ where: { id } }) : null;
-  if (!t || !canUsePreProduction(actor, t.eventId)) throw new NotFoundError("Pendência");
+  if (!t || !canUseSection(actor, t.eventId, "PENDENCIAS")) throw new NotFoundError("Pendência");
   return t;
 }
 

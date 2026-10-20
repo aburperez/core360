@@ -3,7 +3,7 @@ import { assertFinancialOpen } from "../finance/lock";
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -33,7 +33,7 @@ export const MAX_QUOTE_FILE_BYTES = 10 * 1024 * 1024;
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "COTACOES")) throw new NotFoundError("Pré-produção");
 }
 
 function requireManager(actor: Actor, eventId: string, what: string) {
@@ -42,7 +42,7 @@ function requireManager(actor: Actor, eventId: string, what: string) {
 
 async function load(actor: Actor, tx: Tx, id: string) {
   const r = uuid.safeParse(id).success ? await tx.quoteRequest.findUnique({ where: { id } }) : null;
-  if (!r || !canUsePreProduction(actor, r.eventId)) throw new NotFoundError("Cotação");
+  if (!r || !canUseSection(actor, r.eventId, "COTACOES")) throw new NotFoundError("Cotação");
   return r;
 }
 
@@ -93,7 +93,7 @@ export function openStatus(q: { totalValue: unknown; negotiatedValue: unknown })
 /** Quem pode cuidar de uma cotação: Gerente ou Pré-produtor ativo do evento. */
 async function pickers(tx: Tx, eventId: string) {
   return tx.participant.findMany({
-    where: { eventId, deletedAt: null, active: true, role: { in: ["GERENTE", "PRE_PRODUTOR"] } },
+    where: { eventId, deletedAt: null, active: true, role: { in: ["GERENTE", "PRE_PRODUTOR", "PRODUTOR_EXECUTIVO"] } },
     orderBy: { name: "asc" },
     select: { id: true, name: true, role: true },
   });
@@ -536,7 +536,7 @@ export async function addSupplierQuote(actor: Actor, requestId: string, input: u
 
 async function loadQuote(actor: Actor, tx: Tx, quoteId: string) {
   const q = uuid.safeParse(quoteId).success ? await tx.supplierQuote.findUnique({ where: { id: quoteId } }) : null;
-  if (!q || !canUsePreProduction(actor, q.eventId)) throw new NotFoundError("Orçamento");
+  if (!q || !canUseSection(actor, q.eventId, "COTACOES")) throw new NotFoundError("Orçamento");
   return q;
 }
 

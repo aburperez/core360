@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assertFinancialOpen, financialMissing } from "../finance/lock";
 import type { Actor, EventRole } from "../../server/authz/actor";
 import { isAgencyAdmin, isEventAdmin, membershipFor } from "../../server/authz/actor";
-import { canReviewSla, canSeeEvent, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canSeeEvent, canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
@@ -154,7 +154,7 @@ function budget(v: string | number | null | undefined): number | null | undefine
 /** Valores da ficha (orçamento aprovado e centro de custo): só a Pré-produção e o Admin. */
 export async function getEventFinances(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) return null;
+  if (!canUseSection(actor, eventId, "ORCAMENTO", "FINANCEIRO", "EXECUTIVO", "ITENS")) return null;
   const f = await actor.run((tx) => tx.eventFinances.findUnique({ where: { eventId } }));
   return { approvedBudget: f?.approvedBudget == null ? null : Number(f.approvedBudget), costCenter: f?.costCenter ?? null };
 }
@@ -164,7 +164,7 @@ export async function eventLeaders(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
   return actor.run((tx) =>
     tx.participant.findMany({
-      where: { eventId, active: true, deletedAt: null, role: { in: ["GERENTE", "PRE_PRODUTOR"] } },
+      where: { eventId, active: true, deletedAt: null, role: { in: ["GERENTE", "PRE_PRODUTOR", "PRODUTOR_EXECUTIVO"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, role: true },
     }),
@@ -208,7 +208,7 @@ export async function updateEvent(actor: Actor, eventId: string, input: unknown)
       const id = fields[k];
       if (!id || id === before[k]) continue;
       const ok = await tx.participant.findFirst({
-        where: { id, eventId, active: true, deletedAt: null, role: { in: ["GERENTE", "PRE_PRODUTOR"] } },
+        where: { id, eventId, active: true, deletedAt: null, role: { in: ["GERENTE", "PRE_PRODUTOR", "PRODUTOR_EXECUTIVO"] } },
         select: { id: true },
       });
       if (!ok) throw new ValidationError("O responsável geral e o produtor precisam ser Gerente ou Pré-produtor do evento");

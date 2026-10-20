@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
-import { canCloseFinancial, getFinancialClosing } from "@/modules/finance/closing.service";
+import { getFinancialClosing } from "@/modules/finance/closing.service";
 import { brl } from "@/lib/money";
 import { formatDateTime } from "@/lib/format";
 import { TopBar } from "@/components/top-bar";
@@ -22,7 +22,7 @@ export const metadata = { title: "Fechamento financeiro" };
 export default async function FinancialPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/financeiro">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canCloseFinancial(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "FINANCEIRO")) notFound();
   const [event, c] = await Promise.all([getEvent(actor, eventId), getFinancialClosing(actor, eventId)]);
   const t = c.totals;
   const inStage = c.status === "FECHAMENTO";

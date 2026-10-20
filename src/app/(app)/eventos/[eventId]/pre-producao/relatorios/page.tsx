@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { REPORT_KEYS, REPORTS } from "@/modules/reports/catalog";
 import { canOpenReport } from "@/modules/reports/build.service";
@@ -20,7 +20,7 @@ export const metadata = { title: "Relatórios" };
 export default async function ReportsPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/relatorios">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "RELATORIOS")) notFound();
   const event = await getEvent(actor, eventId);
   const base = `/eventos/${eventId}/pre-producao`;
   const keys = REPORT_KEYS.filter((k) => canOpenReport(actor, eventId, k));

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { withUser, type Tx } from "@/server/db/with-user";
 import { memoryStorage, setStorageForTests } from "@/server/storage/storage";
 import { createEvent } from "@/modules/events/events.service";
@@ -46,6 +46,7 @@ beforeAll(async () => {
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-cf@rockfestival.dev`, role, areaId, teamId, joinedAt: new Date() } });
   await join("marina", "GERENTE");
   await join("sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, ev);
   await join("rafael", "HEAD", infra);
   await join("beatriz", "HEAD", bar);
   pedroP = (await join("pedro", "OPERACIONAL", infra, team)).id;

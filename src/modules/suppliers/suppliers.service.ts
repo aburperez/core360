@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -27,7 +27,7 @@ import { ratingSummaries } from "./ratings.service";
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "COTACOES")) throw new NotFoundError("Pré-produção");
 }
 
 async function agencyOf(tx: Tx, eventId: string) {

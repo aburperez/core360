@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/server/http/session";
 import { notFound } from "next/navigation";
-import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canReviewSla, canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
@@ -17,7 +17,7 @@ export const metadata = { title: "Tipos e SLA" };
 export default async function ServiceTypesPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/tipos">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "TIPOS")) notFound();
   const [event, types, teams] = await Promise.all([getEvent(actor, eventId), listServiceTypes(actor, eventId), listTeams(actor, eventId)]);
   const base = `/eventos/${eventId}/pre-producao`;
   const creatable = teams;

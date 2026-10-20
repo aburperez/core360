@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canManageAreas, canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canManageAreas, canReviewSla, canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getFunctionsPanel } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
@@ -27,7 +27,7 @@ type Person = Panel["people"][number];
 export default async function FunctionsPanelPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/funcoes">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "FUNCOES")) notFound();
   const [event, panel] = await Promise.all([getEvent(actor, eventId), getFunctionsPanel(actor, eventId)]);
   const director = canReviewSla(actor, eventId);
   const base = `/eventos/${eventId}/pre-producao`;

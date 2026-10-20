@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, authDb, demo, expectPgError, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, authDb, demo, expectPgError, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { loadActor } from "@/server/authz/actor";
 import { withUser, type Tx } from "@/server/db/with-user";
 import { acceptInvitation } from "@/server/auth/invitations";
@@ -66,6 +66,7 @@ beforeAll(async () => {
     });
   await join("marina", "GERENTE");
   await join("sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, ev);
   await join("rafael", "HEAD", infra);
   await join("beatriz", "HEAD", ab);
   await join("pedro", "OPERACIONAL", infra);

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction, isClient, canReviewSla } from "@/server/authz/policy";
+import { canSeeEvent, canBuildTeam, canUseField, canUsePreProduction, canUseSection, isClient } from "@/server/authz/policy";
+import { SECTIONS } from "@/server/authz/sections";
 import { isAgencyAdmin, isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { EventNav, type NavProps } from "@/components/event-nav";
 import { DesktopMenu, StatusBar } from "@/components/desktop-shell";
@@ -25,8 +26,8 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
   ]);
   const nav: NavProps = {
     eventId,
-    canCreate: role !== "CLIENTE" && role !== "PRE_PRODUTOR",
-    canSeeTickets: role !== "CLIENTE" && role !== "PRE_PRODUTOR",
+    canCreate: canUseField(actor, eventId),
+    canSeeTickets: canUseField(actor, eventId),
     canUseField: canUseField(actor, eventId),
     canUsePre: canUsePreProduction(actor, eventId),
     canBuildTeam: canBuildTeam(actor, eventId),
@@ -35,7 +36,7 @@ export default async function EventLayout({ children, params }: LayoutProps<"/ev
     hasDocuments: docs > 0,
     canSeeSuppliers: canUseField(actor, eventId) && canSeeContractedSuppliers(actor, eventId),
     canSeeArrivals: canUseField(actor, eventId) && canSeeArrivals(actor, eventId),
-    canSeeExecutive: canUsePreProduction(actor, eventId) && canReviewSla(actor, eventId),
+    preSections: canUsePreProduction(actor, eventId) ? SECTIONS.filter((s) => canUseSection(actor, eventId, s)) : [],
     client: isClient(actor, eventId) ? (membershipFor(actor, eventId)?.clientView ?? null) : null,
     canSwitchEvent: actor.memberships.length > 1 || isAgencyAdmin(actor) || actor.isPlatformAdmin,
   };

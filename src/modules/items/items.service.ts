@@ -1,12 +1,12 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canUseSection, isExecutive } from "../../server/authz/policy";
 import { NotFoundError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
 import { uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
 import {
-  canSetItemStatus, effectiveCostCenter, ITEM_CATEGORIES, ITEM_STATUSES, itemCode,
+  canSetItemStatus, effectiveCostCenter, ITEM_CATEGORIES, ITEM_STATUSES, itemCode, STRUCTURE_CATEGORIES, STRUCTURE_CENTERS,
   type CostCenter, type ItemCategory, type ItemStatus,
 } from "./item-meta";
 
@@ -21,7 +21,7 @@ import {
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "ITENS", "ORCAMENTO", "COTACOES")) throw new NotFoundError("Pré-produção");
 }
 
 const itemSelect = {
@@ -106,12 +106,24 @@ function cleanFilters(f: ItemFilters) {
   };
 }
 
-/** Mapa de itens: todos os itens do evento, sem valores, com filtros. */
+/**
+ * Estrutura e cenografia (a área do Produtor executivo): centros 01 INFRA e
+ * 02 CENO, pelo centro escolhido ou, sem ele, pela categoria.
+ */
+export const structureItemWhere = {
+  OR: [
+    { costCenter: { in: [...STRUCTURE_CENTERS] } },
+    { costCenter: null, category: { in: [...STRUCTURE_CATEGORIES] } },
+  ],
+} satisfies Prisma.CostItemWhereInput;
+
+/** Mapa de itens: todos os itens do evento, sem valores, com filtros. O Produtor executivo vê os de estrutura e cenografia. */
 export async function listItemMap(actor: Actor, eventId: string, filters: ItemFilters = {}) {
   requirePre(actor, eventId);
   const f = cleanFilters(filters);
+  const scope: Prisma.CostItemWhereInput = isExecutive(actor, eventId) ? { eventId, ...structureItemWhere } : { eventId };
   const where: Prisma.CostItemWhereInput = {
-    eventId,
+    ...scope,
     ...(f.area && { areaId: f.area === "none" ? null : f.area }),
     ...(f.responsible && { responsibleId: f.responsible === "none" ? null : f.responsible }),
     ...(f.status && { status: f.status }),
@@ -121,13 +133,15 @@ export async function listItemMap(actor: Actor, eventId: string, filters: ItemFi
     const { number } = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { number: true } });
     const rows = await tx.costItem.findMany({ where, orderBy: { number: "asc" }, select: itemSelect });
     const supplierOf = await suppliers(tx, eventId);
-    const counts = await tx.costItem.groupBy({ by: ["status"], where: { eventId }, _count: { _all: true } });
+    const counts = await tx.costItem.groupBy({ by: ["status"], where: scope, _count: { _all: true } });
     const total = counts.reduce((a, c) => a + c._count._all, 0);
     return {
       items: rows.map((r) => toItem(r, number, supplierOf.get(r.id))),
       total,
       byStatus: Object.fromEntries(counts.map((c) => [c.status, c._count._all])) as Partial<Record<ItemStatus, number>>,
       filters: f,
+      /** Só estrutura e cenografia (Produtor executivo). */
+      structureOnly: isExecutive(actor, eventId),
       ...(await options(tx, eventId)),
     };
   });
@@ -137,7 +151,7 @@ export async function listItemMap(actor: Actor, eventId: string, filters: ItemFi
 export async function getItem(actor: Actor, itemId: string) {
   return actor.run(async (tx) => {
     const r = uuid.safeParse(itemId).success ? await tx.costItem.findUnique({ where: { id: itemId }, select: itemSelect }) : null;
-    if (!r || !canUsePreProduction(actor, r.eventId)) throw new NotFoundError("Item");
+    if (!r || !canUseSection(actor, r.eventId, "ITENS", "ORCAMENTO", "COTACOES")) throw new NotFoundError("Item");
     const { number } = await tx.event.findUniqueOrThrow({ where: { id: r.eventId }, select: { number: true } });
     const supplier = (await suppliers(tx, r.eventId, [r.id])).get(r.id);
     const director = canReviewSla(actor, r.eventId);

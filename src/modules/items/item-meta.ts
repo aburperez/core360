@@ -112,5 +112,13 @@ export function effectiveCostCenter(category: ItemCategory | null, override: Cos
   return override ?? (category ? CATEGORY[category].center : null);
 }
 
+/**
+ * Estrutura e cenografia (a área do Produtor executivo): itens dos centros de
+ * custo 01 INFRA e 02 CENO, pelo centro escolhido ou, sem ele, pela categoria.
+ */
+export const STRUCTURE_CENTERS: readonly CostCenter[] = ["INFRA", "CENO"];
+/** Categorias que caem em Estrutura e cenografia quando o item não tem centro escolhido. */
+export const STRUCTURE_CATEGORIES: readonly ItemCategory[] = ITEM_CATEGORIES.filter((c) => STRUCTURE_CENTERS.includes(CATEGORY[c].center));
+
 /** Unidades mais usadas (a pessoa pode digitar outra). */
 export const COMMON_UNITS = ["UN", "m²", "m", "diária", "hora", "pessoa", "kit", "lote", "verba"];

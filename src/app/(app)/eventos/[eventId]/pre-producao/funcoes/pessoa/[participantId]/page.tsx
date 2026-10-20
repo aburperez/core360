@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getPersonPlan } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
@@ -17,7 +17,7 @@ export const metadata = { title: "Pessoa" };
 export default async function PersonPlanPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/funcoes/pessoa/[participantId]">) {
   const actor = await requireUser();
   const { eventId, participantId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "FUNCOES")) notFound();
   const [event, plan] = await Promise.all([getEvent(actor, eventId), getPersonPlan(actor, eventId, participantId)]);
   const { person, profile } = plan;
   const base = `/eventos/${eventId}/pre-producao`;

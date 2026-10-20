@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { memoryStorage, setStorageForTests } from "@/server/storage/storage";
 import { createEvent } from "@/modules/events/events.service";
 import { createCostItem, createCostSection, updateCostItem } from "@/modules/costs/costs.service";
@@ -38,6 +38,7 @@ beforeAll(async () => {
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-rl@rockfestival.dev`, role, areaId, teamId, joinedAt: new Date() } });
   await join("marina", "GERENTE");
   await join("sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, ev);
   await join("rafael", "HEAD", infra);
   await join("pedro", "OPERACIONAL", infra, team);
 

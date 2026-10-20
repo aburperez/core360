@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { z } from "zod";
 import { isEventAdmin, type Actor } from "../../server/authz/actor";
 import type { OccurrenceStatus, OccurrenceType, Priority } from "../../generated/prisma/enums";
-import { canUsePreProduction, canWriteReport } from "../../server/authz/policy";
+import { canUseSection, canWriteReport } from "../../server/authz/policy";
 import { audit } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { parse } from "../../lib/validation";
@@ -20,7 +20,7 @@ import { DAY, buildDayReport, defaultDay, localDay, reportDays, type DayReport, 
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "RELATORIOS")) throw new NotFoundError("Pré-produção");
 }
 
 function checkDay(day: string) {

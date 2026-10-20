@@ -1,5 +1,5 @@
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canUseSection } from "../../server/authz/policy";
 import { NotFoundError } from "../../server/errors";
 import { ROLE_LABEL, STATUS_LABEL, formatPeriod } from "../../lib/format";
 import { EVENT_STATUS_LABEL } from "../../lib/event-stages";
@@ -33,7 +33,7 @@ import { REPORTS, type Block, type Cell, type Column, type Report, type ReportKe
 const isDirector = (actor: Actor, eventId: string) => canReviewSla(actor, eventId);
 
 export function canOpenReport(actor: Actor, eventId: string, key: ReportKey) {
-  if (!canUsePreProduction(actor, eventId)) return false;
+  if (!canUseSection(actor, eventId, "RELATORIOS")) return false;
   return !REPORTS[key].director || isDirector(actor, eventId);
 }
 
@@ -377,9 +377,9 @@ async function executiveBlocks({ actor, eventId, now }: Ctx): Promise<Block[]> {
       kind: "facts",
       title: "Andamento",
       rows: [
-        ["Cronograma", `${x.schedule.done} de ${x.schedule.total} marcos (${x.schedule.pct}%)`],
-        ["Pendências atrasadas", `${x.pendencies.late}`],
-        ["Vencem hoje", `${x.pendencies.today}`],
+        ["Cronograma", x.schedule ? `${x.schedule.done} de ${x.schedule.total} marcos (${x.schedule.pct}%)` : "—"],
+        ["Pendências atrasadas", x.pendencies ? `${x.pendencies.late}` : "—"],
+        ["Vencem hoje", x.pendencies ? `${x.pendencies.today}` : "—"],
       ],
     },
     table("Maiores riscos", [col("Risco", 50), col("Gravidade", 12)], x.risks.map((r) => [r.text, r.tone === "red" ? "Alta" : "Atenção"]), "Nada atrasado nem esperando decisão."),

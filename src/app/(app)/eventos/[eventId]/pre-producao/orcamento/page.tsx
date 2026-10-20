@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getBudget } from "@/modules/items/budget.service";
 import { CATEGORY, COST_CENTER_LABEL, type CostCenter, type ItemCategory } from "@/modules/items/item-meta";
@@ -12,7 +12,6 @@ import { EventTabs } from "@/components/event-nav";
 import { PageHeading, Panel } from "@/components/panel";
 import { EmptyState, LinkButton, PAGE, cx } from "@/components/ui";
 import { BudgetItems } from "./budget-items";
-import { canCloseFinancial } from "@/modules/finance/closing.service";
 import { BudgetTabs } from "./tabs";
 
 export const metadata = { title: "Orçamento" };
@@ -24,7 +23,7 @@ export const metadata = { title: "Orçamento" };
 export default async function BudgetPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/orcamento">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "ORCAMENTO")) notFound();
   const [event, b] = await Promise.all([getEvent(actor, eventId), getBudget(actor, eventId)]);
   const t = b.totals;
 
@@ -32,7 +31,7 @@ export default async function BudgetPage({ params }: PageProps<"/eventos/[eventI
     <>
       <TopBar title="Orçamento" subtitle={event.name} back={`/eventos/${eventId}/pre-producao`} />
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
-      <BudgetTabs eventId={eventId} active="orcamento" financial={canCloseFinancial(actor, eventId)} />
+      <BudgetTabs eventId={eventId} active="orcamento" financial={canUseSection(actor, eventId, "FINANCEIRO")} />
       <main className={cx(PAGE, "space-y-4 py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Orçamento" />
         {b.items.length === 0 ? (

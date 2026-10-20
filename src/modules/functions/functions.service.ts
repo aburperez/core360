@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
 import type { Tx } from "../../server/db/with-user";
-import { canGiveFunction, canGiveFunctions, canReviewSla, canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canGiveFunction, canGiveFunctions, canReviewSla, canUseField, canUseSection } from "../../server/authz/policy";
 import { membershipFor } from "../../server/authz/actor";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
@@ -43,7 +43,7 @@ const PROFILE_FIELDS = ["document", "uniformSize", "dietary", "emergencyName", "
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "FUNCOES")) throw new NotFoundError("Pré-produção");
 }
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "pt-BR");
@@ -211,7 +211,7 @@ async function loadFunction(actor: Actor, functionId: string) {
   const f = uuid.safeParse(functionId).success
     ? await actor.run((tx) => tx.eventFunction.findUnique({ where: { id: functionId }, select: { id: true, eventId: true, name: true, description: true } }))
     : null;
-  if (!f || !canUsePreProduction(actor, f.eventId)) throw new NotFoundError("Função");
+  if (!f || !canUseSection(actor, f.eventId, "FUNCOES")) throw new NotFoundError("Função");
   return f;
 }
 
@@ -389,7 +389,7 @@ async function loadActivity(actor: Actor, activityId: string) {
   const a = uuid.safeParse(activityId).success
     ? await actor.run((tx) => tx.activity.findUnique({ where: { id: activityId }, select: { ...activitySelect, eventId: true } }))
     : null;
-  if (!a || !canUsePreProduction(actor, a.eventId)) throw new NotFoundError("Atividade");
+  if (!a || !canUseSection(actor, a.eventId, "FUNCOES")) throw new NotFoundError("Atividade");
   return a;
 }
 

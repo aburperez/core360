@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { createEvent, updateEvent } from "@/modules/events/events.service";
 import { createCostItem, createCostSection, updateCostItem } from "@/modules/costs/costs.service";
 import { eventComparison, priceBank, similarPrices, supplierRanking } from "@/modules/intelligence/intelligence.service";
@@ -45,6 +45,7 @@ beforeAll(async () => {
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-intel@rockfestival.dev`, role, joinedAt: new Date() } });
   await join(atual, "marina", "GERENTE");
   await join(atual, "sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, atual);
 
   const admin = await actorFor(db, "admin"); // de novo, já com os eventos novos
   // O evento anterior: palco, som e um opcional, com 2.000 pessoas previstas.

@@ -1,13 +1,14 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
 import { isEventAdmin, membershipFor } from "../../server/authz/actor";
-import { canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canUseField, canUseSection, isExecutive } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
 import { optionalText, parse, text, uuid } from "../../lib/validation";
 import { fromLocalInput } from "../../lib/tz";
 import { requireEventAccess } from "../events/events.service";
+import { structureItemWhere } from "../items/items.service";
 import { itemCode, type ItemCategory } from "../items/item-meta";
 import { todayIn } from "../schedule/schedule-meta";
 import { ARRIVAL_STATUSES, arrivalLate, type ArrivalStatus } from "./arrival-meta";
@@ -23,7 +24,7 @@ import { ARRIVAL_STATUSES, arrivalLate, type ArrivalStatus } from "./arrival-met
 
 /** Quem abre o mapa no campo: o Gerente/Admin, o Head e o Operacional (este vê só o que é dele). */
 export function canSeeArrivals(actor: Actor, eventId: string) {
-  if (canUsePreProduction(actor, eventId)) return true;
+  if (canUseSection(actor, eventId, "MONTAGEM")) return true;
   if (!canUseField(actor, eventId)) return false;
   if (isEventAdmin(actor, eventId)) return true;
   const role = membershipFor(actor, eventId)?.role;
@@ -37,7 +38,7 @@ function requireSee(actor: Actor, eventId: string) {
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "MONTAGEM")) throw new NotFoundError("Pré-produção");
 }
 
 const select = {
@@ -52,10 +53,14 @@ const select = {
 /** As chegadas do evento que a pessoa vê (a RLS filtra por área e responsável), por dia. */
 export async function listArrivals(actor: Actor, eventId: string, now = new Date()) {
   requireSee(actor, eventId);
-  const edit = canUsePreProduction(actor, eventId);
+  const edit = canUseSection(actor, eventId, "MONTAGEM");
   return actor.run(async (tx) => {
     const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, number: true, timezone: true } });
-    const rows = await tx.arrival.findMany({ where: { eventId }, orderBy: [{ scheduledAt: { sort: "asc", nulls: "last" } }, { supplierName: "asc" }], select });
+    // O Produtor executivo vê as chegadas com itens de estrutura e cenografia.
+    const structureOnly = isExecutive(actor, eventId);
+    const rows = await tx.arrival.findMany({
+      where: { eventId, ...(structureOnly && { items: { some: { costItem: structureItemWhere } } }) },
+      orderBy: [{ scheduledAt: { sort: "asc", nulls: "last" } }, { supplierName: "asc" }], select });
     const dayOf = (d: Date | null) => (d ? todayIn(event.timezone, d) : null);
     const items = rows.map((r) => ({
       ...r,
@@ -82,6 +87,7 @@ export async function listArrivals(actor: Actor, eventId: string, now = new Date
         late: items.filter((i) => i.late).length,
       },
       can: { edit },
+      structureOnly,
       // Para o formulário da Pré-produção: áreas, pessoas do campo e itens do evento.
       ...(edit ? await pickers(tx, eventId, event.number) : { areas: [], people: [], costItems: [] }),
     };
@@ -208,7 +214,7 @@ export async function updateArrival(actor: Actor, id: string, input: unknown) {
   const d = parse(arrivalSchema.partial(), input);
   return actor.run(async (tx) => {
     const a = await loadArrival(actor, tx, id);
-    if (!canUsePreProduction(actor, a.eventId)) throw new NotFoundError("Chegada");
+    if (!canUseSection(actor, a.eventId, "MONTAGEM")) throw new NotFoundError("Chegada");
     const data = await toData(tx, a.eventId, d);
     checkPeriod("scheduledAt" in data ? data.scheduledAt : a.scheduledAt, "endsAt" in data ? data.endsAt : a.endsAt);
     const updated = await tx.arrival.update({ where: { id: a.id }, data });
@@ -221,7 +227,7 @@ export async function updateArrival(actor: Actor, id: string, input: unknown) {
 export async function deleteArrival(actor: Actor, id: string) {
   return actor.run(async (tx) => {
     const a = await loadArrival(actor, tx, id);
-    if (!canUsePreProduction(actor, a.eventId)) throw new NotFoundError("Chegada");
+    if (!canUseSection(actor, a.eventId, "MONTAGEM")) throw new NotFoundError("Chegada");
     await tx.arrival.delete({ where: { id: a.id } });
     await audit(tx, actor, { eventId: a.eventId, entity: "arrival", entityId: a.id, action: "DELETE", before: auditable(a) });
     return { ok: true };

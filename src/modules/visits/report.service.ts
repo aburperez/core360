@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation, pgErrorCode } from "../../server/db/errors";
@@ -45,7 +45,7 @@ const visitSelect = {
 
 async function loadVisit(actor: Actor, tx: Tx, visitId: string) {
   const v = uuid.safeParse(visitId).success ? await tx.technicalVisit.findUnique({ where: { id: visitId }, select: visitSelect }) : null;
-  if (!v || !canUsePreProduction(actor, v.eventId)) throw new NotFoundError("Visita técnica");
+  if (!v || !canUseSection(actor, v.eventId, "VISITAS")) throw new NotFoundError("Visita técnica");
   return v;
 }
 
@@ -192,7 +192,7 @@ async function loadPhoto(actor: Actor, tx: Tx, photoId: string) {
         include: { visit: { select: { eventId: true, status: true, createdById: true, responsibleId: true } } },
       })
     : null;
-  if (!p || !canUsePreProduction(actor, p.eventId)) throw new NotFoundError("Foto");
+  if (!p || !canUseSection(actor, p.eventId, "VISITAS")) throw new NotFoundError("Foto");
   return p;
 }
 

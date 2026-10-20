@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canUseField, canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -33,7 +33,7 @@ const docSelect = { ...listSelect, storageKey: true } as const;
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "DOCUMENTOS")) throw new NotFoundError("Pré-produção");
 }
 
 /** Pode apagar: quem enviou ou o gestor. */
@@ -137,7 +137,7 @@ export async function addDocument(actor: Actor, eventId: string, input: unknown,
 async function loadDocument(actor: Actor, tx: Tx, docId: string) {
   const d = uuid.safeParse(docId).success ? await tx.eventDocument.findUnique({ where: { id: docId }, select: docSelect }) : null;
   // A RLS já esconde o que a pessoa não pode ler; a checagem aqui repete a regra.
-  if (!d || !(canUsePreProduction(actor, d.eventId) || (d.visibleToField && canUseField(actor, d.eventId)))) throw new NotFoundError("Documento");
+  if (!d || !(canUseSection(actor, d.eventId, "DOCUMENTOS") || (d.visibleToField && canUseField(actor, d.eventId)))) throw new NotFoundError("Documento");
   return d;
 }
 
@@ -148,7 +148,7 @@ export async function updateDocument(actor: Actor, docId: string, input: unknown
   const data = parse(updateSchema, input);
   return actor.run(async (tx) => {
     const d = await loadDocument(actor, tx, docId);
-    if (!canUsePreProduction(actor, d.eventId)) throw new ForbiddenError("Só a pré-produção muda documentos");
+    if (!canUseSection(actor, d.eventId, "DOCUMENTOS")) throw new ForbiddenError("Só a pré-produção muda documentos");
     if (data.visibleToField !== undefined && data.visibleToField !== d.visibleToField && !canReviewSla(actor, d.eventId)) {
       throw new ForbiddenError("Só o gestor libera documentos para o campo");
     }
@@ -165,7 +165,7 @@ export async function updateDocument(actor: Actor, docId: string, input: unknown
 export async function deleteDocument(actor: Actor, docId: string) {
   return actor.run(async (tx) => {
     const d = await loadDocument(actor, tx, docId);
-    if (!canUsePreProduction(actor, d.eventId) || !canDelete(actor, d)) throw new ForbiddenError("Só quem enviou ou o gestor apaga o documento");
+    if (!canUseSection(actor, d.eventId, "DOCUMENTOS") || !canDelete(actor, d)) throw new ForbiddenError("Só quem enviou ou o gestor apaga o documento");
     if (await tx.contract.count({ where: { documentId: d.id, status: { in: ["ENVIADO", "ASSINADO"] } } })) {
       throw new ConflictError("Este é o PDF de um contrato enviado ou assinado e não pode ser apagado");
     }

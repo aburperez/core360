@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getExecutivePanel } from "@/modules/panels/panels.service";
 import { CATEGORY, type ItemCategory } from "@/modules/items/item-meta";
@@ -16,12 +16,12 @@ export const metadata = { title: "Painel executivo" };
 /**
  * Painel executivo (fase 6A): numa tela, quanto o evento custa nos 4 valores,
  * onde economizou ou estourou, o orçamento aprovado e os maiores riscos.
- * Só o diretor de produção; o serviço e a RLS repetem a regra.
+ * Diretor, Gerente de produção e Produtor executivo (parte EXECUTIVO).
  */
 export default async function ExecutivePage({ params }: PageProps<"/eventos/[eventId]/pre-producao/executivo">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId) || !canReviewSla(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "EXECUTIVO")) notFound();
   const [event, x] = await Promise.all([getEvent(actor, eventId), getExecutivePanel(actor, eventId)]);
   const t = x.totals;
   const base = `/eventos/${eventId}/pre-producao`;
@@ -32,7 +32,7 @@ export default async function ExecutivePage({ params }: PageProps<"/eventos/[eve
       {canUseField(actor, eventId) && <EventTabs eventId={eventId} active="pre" />}
       <main className={cx(PAGE, "space-y-4 py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Painel executivo" />
-        <p className="-mt-2 text-sm text-muted">Só o diretor de produção vê esta tela.</p>
+        <p className="-mt-2 text-sm text-muted">Só o diretor, o Gerente de produção e o Produtor executivo veem esta tela.</p>
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Os 4 valores">
           <Value label="Estimado" value={t.estimated} hint={`${t.items} itens na planilha`} />
@@ -120,15 +120,15 @@ export default async function ExecutivePage({ params }: PageProps<"/eventos/[eve
           <aside className="space-y-4">
             <Panel title="Andamento">
               <div className="grid grid-cols-2 gap-2">
-                <Ring value={x.schedule.total ? x.schedule.pct : null} label="Cronograma" i={1} />
+                <Ring value={x.schedule?.total ? x.schedule.pct : null} label="Cronograma" i={1} />
                 <Ring value={t.items ? Math.round((t.withContracted / t.items) * 100) : null} label="Contratado" i={0} />
               </div>
-              <p className="mt-3 text-sm">
+              {x.pendencies && <p className="mt-3 text-sm">
                 <Link href={`${base}/pendencias`} className={cx("font-semibold hover:underline", x.pendencies.late ? "text-red-300" : "text-emerald-300")}>
                   {x.pendencies.late ? `${x.pendencies.late} pendências atrasadas` : "Nenhuma pendência atrasada"}
                 </Link>
                 <span className="text-muted"> · {x.pendencies.today} vencem hoje</span>
-              </p>
+              </p>}
             </Panel>
             <ItemList title="Maiores estouros" empty="Nenhum item pago acima do contratado." rows={x.overruns} base={base} />
             <ItemList title="Contratados acima do estimado" empty="Nenhum item contratado acima do estimado." rows={x.aboveEstimate} base={base} />

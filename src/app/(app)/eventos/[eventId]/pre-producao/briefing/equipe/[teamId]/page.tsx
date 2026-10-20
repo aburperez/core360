@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getTeam } from "@/modules/teams/teams.service";
 import { listBriefings } from "@/modules/briefings/briefings.service";
 import { TopBar } from "@/components/top-bar";
@@ -14,7 +14,7 @@ export const metadata = { title: "Briefing da equipe" };
 export default async function TeamBriefingPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/briefing/equipe/[teamId]">) {
   const actor = await requireUser();
   const { eventId, teamId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "FUNCOES")) notFound();
   const team = await getTeam(actor, teamId);
   if (team.eventId !== eventId) notFound();
   const people = (await listBriefings(actor, eventId)).filter((p) => p.teamId === team.id);

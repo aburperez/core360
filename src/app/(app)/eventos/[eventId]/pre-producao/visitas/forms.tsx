@@ -14,7 +14,7 @@ export type VisitInitial = {
   ppe: string[]; ppeOther: string | null; notes: string | null;
 };
 
-const ROLE = { GERENTE: "Gerente", PRE_PRODUTOR: "Pré-produtor" } as Record<string, string>;
+const ROLE = { GERENTE: "Gerente", PRE_PRODUTOR: "Pré-produtor", PRODUTOR_EXECUTIVO: "Produtor executivo" } as Record<string, string>;
 
 function useAction() {
   const router = useRouter();

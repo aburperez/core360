@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectPgError, ownerDb, workerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectPgError, ownerDb, workerDb, type Person, grantAllSections } from "../helpers";
 import { memoryStorage, setStorageForTests } from "@/server/storage/storage";
 import { createEvent } from "@/modules/events/events.service";
 import { createCostItem, createCostSection, updateCostItem } from "@/modules/costs/costs.service";
@@ -40,6 +40,7 @@ beforeAll(async () => {
   };
   await join("marina", "GERENTE");
   await join("sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, ev);
   await join("rafael", "HEAD", infra);
   await join("pedro", "OPERACIONAL", infra, team);
 

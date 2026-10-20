@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listSuppliers } from "@/modules/suppliers/suppliers.service";
 import { bonusText } from "@/modules/suppliers/supplier-meta";
@@ -26,7 +26,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 export default async function SuppliersPage({ params, searchParams }: PageProps<"/eventos/[eventId]/pre-producao/fornecedores">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "COTACOES")) notFound();
   const q = await searchParams;
   const [event, data] = await Promise.all([
     getEvent(actor, eventId),

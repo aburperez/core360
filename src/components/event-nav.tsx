@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { BrandWordmark } from "./brand";
 import { Icon, type IconName } from "./icons";
 import { PAGE, cx } from "./ui";
+import type { Section } from "@/server/authz/sections";
 
 export type NavProps = {
   eventId: string; canCreate: boolean; canSeeTickets: boolean; canBuildTeam: boolean; canSwitchEvent: boolean;
@@ -21,8 +22,8 @@ export type NavProps = {
   canSeeSuppliers: boolean;
   /** Chegadas da montagem (o gestor, o Head e o Operacional responsável). */
   canSeeArrivals: boolean;
-  /** Painel executivo da Pré-produção: só o diretor de produção. */
-  canSeeExecutive: boolean;
+  /** As partes da Pré-produção que a pessoa abre (todas para o diretor e o Gerente de produção). */
+  preSections: Section[];
   /** Cliente: o que o Gerente liberou para ele acompanhar (null para os outros). */
   client: { costs: boolean; team: boolean; progress: boolean } | null;
 };
@@ -47,24 +48,26 @@ export function buildNav(props: NavProps, path: string) {
   const base = `/eventos/${props.eventId}`;
   const pre = `${base}/pre-producao`;
   const inPre = path.startsWith(pre);
-  const preItems: Item[] = [
+  const preItems: Item[] = ([
     { href: pre, label: "Painel", icon: "overview", active: path === pre, bar: true, group: "con" as const },
-    ...(props.canSeeExecutive ? [{ href: `${pre}/executivo`, label: "Painel executivo", short: "Executivo", icon: "chart" as const, active: path.startsWith(`${pre}/executivo`), group: "con" as const }] : []),
-    { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`), group: "mov" as const },
-    { href: `${pre}/cronograma`, label: "Cronograma", icon: "calendar", active: path.startsWith(`${pre}/cronograma`), group: "mov" as const },
-    { href: `${pre}/pendencias`, label: "Pendências", icon: "pending", active: path.startsWith(`${pre}/pendencias`), group: "mov" as const },
-    { href: `${pre}/montagem`, label: "Mapa de montagem", short: "Montagem", icon: "truck", active: path.startsWith(`${pre}/montagem`), group: "mov" as const },
-    { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true, group: "cad" as const },
-    { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`), group: "mov" as const },
-    { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`) || path.startsWith(`${pre}/financeiro`), bar: true, group: "mov" as const },
-    { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`), group: "mov" as const },
-    { href: `${pre}/fornecedores`, label: "Fornecedores", icon: "suppliers", active: path.startsWith(`${pre}/fornecedores`), group: "cad" as const },
-    { href: `${pre}/contratos`, label: "Contratos", icon: "contract", active: path.startsWith(`${pre}/contratos`), group: "mov" as const },
-    { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`), group: "mov" as const },
-    { href: `${pre}/documentos`, label: "Documentos", short: "Docs", icon: "docs", active: path.startsWith(`${pre}/documentos`), group: "mov" as const },
-    { href: `${pre}/funcoes`, label: "Produtores e Funções", short: "Produtores", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || path.startsWith(`${pre}/quem-faz`) || (path.startsWith(`${pre}/briefing`) && !path.startsWith(`${pre}/briefing-evento`)), bar: true, group: "cad" as const },
-    { href: `${pre}/relatorios`, label: "Relatórios", short: "Relatórios", icon: "report", active: path.startsWith(`${pre}/relatorio`), group: "rel" as const },
-  ];
+    { href: `${pre}/executivo`, label: "Painel executivo", short: "Executivo", icon: "chart" as const, active: path.startsWith(`${pre}/executivo`), group: "con" as const, section: "EXECUTIVO" },
+    { href: `${pre}/briefing-evento`, label: "Briefing do evento", short: "Briefing", icon: "briefing", active: path.startsWith(`${pre}/briefing-evento`), group: "mov" as const, section: "BRIEFING" },
+    { href: `${pre}/cronograma`, label: "Cronograma", icon: "calendar", active: path.startsWith(`${pre}/cronograma`), group: "mov" as const, section: "CRONOGRAMA" },
+    { href: `${pre}/pendencias`, label: "Pendências", icon: "pending", active: path.startsWith(`${pre}/pendencias`), group: "mov" as const, section: "PENDENCIAS" },
+    { href: `${pre}/montagem`, label: "Mapa de montagem", short: "Montagem", icon: "truck", active: path.startsWith(`${pre}/montagem`), group: "mov" as const, section: "MONTAGEM" },
+    { href: `${pre}/tipos`, label: "Tipos e SLA", short: "Tipos", icon: "sla", active: path.startsWith(`${pre}/tipos`), bar: true, group: "cad" as const, section: "TIPOS" },
+    { href: `${pre}/itens`, label: "Mapa de itens", short: "Itens", icon: "items", active: path.startsWith(`${pre}/itens`), group: "mov" as const, section: "ITENS" },
+    { href: `${pre}/orcamento`, label: "Orçamento", icon: "costs", active: path.startsWith(`${pre}/orcamento`) || path.startsWith(`${pre}/custos`), bar: true, group: "mov" as const, section: "ORCAMENTO" },
+    { href: `${pre}/financeiro`, label: "Fechamento financeiro", short: "Financeiro", icon: "costs", active: path.startsWith(`${pre}/financeiro`), group: "mov" as const, section: "FINANCEIRO" },
+    { href: `${pre}/cotacoes`, label: "Cotações", icon: "quotes", active: path.startsWith(`${pre}/cotacoes`), group: "mov" as const, section: "COTACOES" },
+    { href: `${pre}/fornecedores`, label: "Fornecedores", icon: "suppliers", active: path.startsWith(`${pre}/fornecedores`), group: "cad" as const, section: "COTACOES" },
+    { href: `${pre}/contratos`, label: "Contratos", icon: "contract", active: path.startsWith(`${pre}/contratos`), group: "mov" as const, section: "COTACOES" },
+    { href: `${pre}/visitas`, label: "Visitas técnicas", short: "Visitas", icon: "visit", active: path.startsWith(`${pre}/visitas`), group: "mov" as const, section: "VISITAS" },
+    { href: `${pre}/documentos`, label: "Documentos", short: "Docs", icon: "docs", active: path.startsWith(`${pre}/documentos`), group: "mov" as const, section: "DOCUMENTOS" },
+    { href: `${pre}/funcoes`, label: "Produtores e Funções", short: "Produtores", icon: "functions", active: path.startsWith(`${pre}/funcoes`) || path.startsWith(`${pre}/quem-faz`) || (path.startsWith(`${pre}/briefing`) && !path.startsWith(`${pre}/briefing-evento`)), bar: true, group: "cad" as const, section: "FUNCOES" },
+    { href: `${pre}/atendimento`, label: "Atendimento", icon: "team", active: path.startsWith(`${pre}/atendimento`), group: "cad" as const, section: "ATENDIMENTO" },
+    { href: `${pre}/relatorios`, label: "Relatórios", short: "Relatórios", icon: "report", active: path.startsWith(`${pre}/relatorio`), group: "rel" as const, section: "RELATORIOS" },
+  ] as (Item & { section?: Section })[]).filter((it) => !it.section || props.preSections.includes(it.section));
   const items: Item[] = [
     { href: base, label: "Painel", icon: "overview", active: path === base, group: "con" as const },
     // O Cliente não vê chamados (padrão da proposta), então o atalho some para ele.

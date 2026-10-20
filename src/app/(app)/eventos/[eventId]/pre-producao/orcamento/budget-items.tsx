@@ -28,7 +28,7 @@ export function BudgetItems({ items, eventId, director }: { items: Item[]; event
     <section className="rounded-2xl border border-border bg-surface" aria-label="Itens">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Itens ({items.length})</h2>
-        <p className="text-xs text-muted">{director ? "Toque em Valores para preencher o cotado, o contratado e o realizado." : "Contratado e Realizado: só o diretor de produção preenche."}</p>
+        <p className="text-xs text-muted">{director ? "Toque em Valores para preencher o cotado, o contratado e o realizado." : "Contratado e Realizado: só o diretor e o Produtor executivo preenchem."}</p>
       </div>
 
       {/* Tela larga: tabela. */}
@@ -147,11 +147,11 @@ function ValuesForm({ item, director, onDone }: { item: Item; director: boolean;
             : <Input value={field(item.quoted)} disabled readOnly className="text-right tabular-nums" />}
         </label>
         <label className="block">
-          <Label hint={director ? "(R$)" : "(só o diretor)"}>Contratado</Label>
+          <Label hint={director ? "(R$)" : "(só diretor ou executivo)"}>Contratado</Label>
           <Input name="contractedValue" inputMode="decimal" defaultValue={field(item.contracted)} placeholder="0,00" disabled={!director} className="text-right tabular-nums" />
         </label>
         <label className="block">
-          <Label hint={director ? "(R$, quando pago)" : "(só o diretor)"}>Realizado</Label>
+          <Label hint={director ? "(R$, quando pago)" : "(só diretor ou executivo)"}>Realizado</Label>
           <Input name="actualValue" inputMode="decimal" defaultValue={field(item.actual)} placeholder="0,00" disabled={!director} className="text-right tabular-nums" />
         </label>
       </div>

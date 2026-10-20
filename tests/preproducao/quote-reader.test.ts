@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { withUser, type Tx } from "@/server/db/with-user";
 import { memoryStorage, setStorageForTests } from "@/server/storage/storage";
 import { createEvent } from "@/modules/events/events.service";
@@ -52,6 +52,7 @@ beforeAll(async () => {
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-ia@rockfestival.dev`, role, joinedAt: new Date() } });
   await join("marina", "GERENTE");
   await join("sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, ev);
   await join("claudia", "CLIENTE");
   const area = (await owner.area.create({ data: { eventId: ev, name: "Infra" } })).id;
   await owner.participant.create({ data: { eventId: ev, userId: d.users.rafael!, name: "rafael", email: "rafael-ia@rockfestival.dev", role: "HEAD", areaId: area, joinedAt: new Date() } });

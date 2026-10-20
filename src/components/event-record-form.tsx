@@ -15,7 +15,7 @@ export type EventRecord = {
   expectedAudience: number | null; leadId: string | null; producerId: string | null; notes: string | null;
 };
 type Leader = { id: string; name: string; role: string };
-const ROLE = { GERENTE: "Gerente", PRE_PRODUTOR: "Pré-produtor" } as Record<string, string>;
+const ROLE = { GERENTE: "Gerente", PRE_PRODUTOR: "Pré-produtor", PRODUTOR_EXECUTIVO: "Produtor executivo" } as Record<string, string>;
 
 const TEXT_KEYS = [
   "name", "project", "eventType", "description", "status", "startsAt", "endsAt", "setupStartsAt", "setupEndsAt", "teardownStartsAt",

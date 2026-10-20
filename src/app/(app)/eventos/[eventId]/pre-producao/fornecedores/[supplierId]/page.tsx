@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getSupplier } from "@/modules/suppliers/suppliers.service";
 import { bonusText } from "@/modules/suppliers/supplier-meta";
@@ -31,7 +31,7 @@ const date = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month:
 export default async function SupplierPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/fornecedores/[supplierId]">) {
   const actor = await requireUser();
   const { eventId, supplierId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "COTACOES")) notFound();
   const [event, data] = await Promise.all([getEvent(actor, eventId), getSupplier(actor, eventId, supplierId).catch(() => null)]);
   if (!data) notFound();
   const s = data.supplier;

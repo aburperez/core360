@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listQuotes, type QuoteStage } from "@/modules/quotes/quotes.service";
 import { TopBar } from "@/components/top-bar";
@@ -35,7 +35,7 @@ type Item = Awaited<ReturnType<typeof listQuotes>>["items"][number];
 export default async function QuotesPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/cotacoes">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "COTACOES")) notFound();
   const [event, data] = await Promise.all([getEvent(actor, eventId), listQuotes(actor, eventId)]);
   const base = `/eventos/${eventId}/pre-producao/cotacoes`;
 

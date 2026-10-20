@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -25,7 +25,7 @@ import { isSupplierDirector } from "../suppliers/supplier-meta";
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "COTACOES")) throw new NotFoundError("Pré-produção");
 }
 
 function requireDirector(actor: Actor, eventId: string, what: string) {
@@ -97,7 +97,7 @@ export async function listContracts(actor: Actor, eventId: string) {
 
 async function load(actor: Actor, tx: Tx, id: string) {
   const c = uuid.safeParse(id).success ? await tx.contract.findUnique({ where: { id } }) : null;
-  if (!c || !canUsePreProduction(actor, c.eventId)) throw new NotFoundError("Contrato");
+  if (!c || !canUseSection(actor, c.eventId, "COTACOES")) throw new NotFoundError("Contrato");
   return c;
 }
 

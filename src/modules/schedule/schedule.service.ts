@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -19,7 +19,7 @@ import { assemblyDeadlines, itemAssembled } from "../arrivals/assembly";
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "CRONOGRAMA")) throw new NotFoundError("Pré-produção");
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -131,7 +131,7 @@ const auditable = (m: { title: string; dueOn: Date; responsibleId: string | null
 
 async function loadMilestone(actor: Actor, tx: Tx, id: string) {
   const m = uuid.safeParse(id).success ? await tx.eventMilestone.findUnique({ where: { id } }) : null;
-  if (!m || !canUsePreProduction(actor, m.eventId)) throw new NotFoundError("Marco");
+  if (!m || !canUseSection(actor, m.eventId, "CRONOGRAMA")) throw new NotFoundError("Marco");
   return m;
 }
 

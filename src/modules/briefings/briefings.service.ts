@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
 import type { Tx } from "../../server/db/with-user";
-import { canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canUseField, canUseSection } from "../../server/authz/policy";
 import { membershipFor } from "../../server/authz/actor";
 import { audit } from "../../server/audit/audit";
 import { NotFoundError, ValidationError } from "../../server/errors";
@@ -44,7 +44,7 @@ type BriefingText = z.output<typeof briefingSchema>;
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "FUNCOES")) throw new NotFoundError("Pré-produção");
 }
 
 const personSelect = {
@@ -170,7 +170,7 @@ export async function applyBriefingToTeam(actor: Actor, teamId: string, input: u
   const team = uuid.safeParse(teamId).success
     ? await actor.run((tx) => tx.team.findFirst({ where: { id: teamId, deletedAt: null }, select: { id: true, eventId: true, name: true } }))
     : null;
-  if (!team || !canUsePreProduction(actor, team.eventId)) throw new NotFoundError("Equipe");
+  if (!team || !canUseSection(actor, team.eventId, "FUNCOES")) throw new NotFoundError("Equipe");
   return actor.run(async (tx) => {
     const people = await tx.participant.findMany({
       where: { eventId: team.eventId, teamId: team.id, active: true, deletedAt: null, role: { in: [...FIELD_ROLES] } },
@@ -184,7 +184,7 @@ export async function applyBriefingToTeam(actor: Actor, teamId: string, input: u
 
 export async function deleteBriefing(actor: Actor, briefingId: string) {
   const b = uuid.safeParse(briefingId).success ? await actor.run((tx) => tx.briefing.findUnique({ where: { id: briefingId } })) : null;
-  if (!b || !canUsePreProduction(actor, b.eventId)) throw new NotFoundError("Briefing");
+  if (!b || !canUseSection(actor, b.eventId, "FUNCOES")) throw new NotFoundError("Briefing");
   return actor.run(async (tx) => {
     await tx.briefing.delete({ where: { id: b.id } });
     await audit(tx, actor, { eventId: b.eventId, entity: "briefing", entityId: b.id, action: "DELETE", before: { participantId: b.participantId, version: b.version } });

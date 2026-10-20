@@ -35,7 +35,7 @@ function useAction() {
   return { busy, error, run, router };
 }
 
-const ROLE = { GERENTE: "Gerente", PRE_PRODUTOR: "Pré-produtor" } as Record<string, string>;
+const ROLE = { GERENTE: "Gerente", PRE_PRODUTOR: "Pré-produtor", PRODUTOR_EXECUTIVO: "Produtor executivo" } as Record<string, string>;
 
 function RequestFields({ people, costItems, me, initial }: {
   people: Person[]; costItems: Option[]; me: string | null;

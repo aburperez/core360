@@ -1,5 +1,6 @@
 import type { OccurrenceStatus } from "../../generated/prisma/enums";
-import { isEventAdmin, membershipFor, type Actor, type ClientView, type EventRole } from "./actor";
+import { isEventAdmin, isEventSupport, membershipFor, type Actor, type ClientView, type EventRole } from "./actor";
+import type { Section } from "./sections";
 
 /**
  * Matriz de permissões do backend. Espelha as funções app.* da migration de RLS
@@ -29,10 +30,9 @@ export function clientCan(a: Actor, eventId: string, view: keyof ClientView): bo
   return m?.role === "CLIENTE" && !!m.clientView?.[view];
 }
 
-/** Liberar ou fechar o que o Cliente vê: o Gerente do evento ou o Admin. */
+/** Liberar ou fechar o que o Cliente vê (Atendimento): Gerente, diretor, Produtor executivo ou quem tem a caixa. */
 export function canGrantClientView(a: Actor, eventId: string): boolean {
-  if (isEventAdmin(a, eventId)) return true;
-  return membershipFor(a, eventId)?.role === "GERENTE";
+  return canUseSection(a, eventId, "ATENDIMENTO");
 }
 
 const clientSeesStructure = (a: Actor, eventId: string) => clientCan(a, eventId, "team") || clientCan(a, eventId, "progress");
@@ -42,7 +42,7 @@ export function canSeeArea(a: Actor, s: Scope): boolean {
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
   if (m.role === "CLIENTE") return clientSeesStructure(a, s.eventId);
-  return m.role === "GERENTE" || m.role === "HEAD" || m.role === "PRE_PRODUTOR" || m.areaId === s.areaId;
+  return m.role === "GERENTE" || m.role === "HEAD" || m.role === "PRE_PRODUTOR" || m.role === "PRODUTOR_EXECUTIVO" || m.areaId === s.areaId;
 }
 
 export function canManageAreas(a: Actor, eventId: string): boolean {
@@ -58,6 +58,7 @@ export function canSeeTeam(a: Actor, s: Scope): boolean {
   switch (m.role) {
     case "GERENTE":
     case "PRE_PRODUTOR":
+    case "PRODUTOR_EXECUTIVO":
       return true;
     case "CLIENTE":
       return clientSeesStructure(a, s.eventId);
@@ -77,11 +78,11 @@ export function canManageTeams(a: Actor, s: Scope): boolean {
 
 /** Anti-escalada: quem pode atribuir qual papel (seção 7.4 da proposta). */
 export function assignableRoles(a: Actor, eventId: string, areaId?: string | null): EventRole[] {
-  if (isEventAdmin(a, eventId)) return ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
+  if (isEventAdmin(a, eventId)) return ["GERENTE", "PRODUTOR_EXECUTIVO", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
   const m = membershipFor(a, eventId);
   switch (m?.role) {
     case "GERENTE":
-      return ["HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
+      return ["PRODUTOR_EXECUTIVO", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
     case "HEAD":
       return areaId && areaId === m.areaId ? ["OPERACIONAL"] : [];
     default:
@@ -114,6 +115,7 @@ export function canSeeOccurrence(a: Actor, o: OccScope): boolean {
     case "CLIENTE":
       return clientCan(a, o.eventId, "progress");
     case "PRE_PRODUTOR":
+    case "PRODUTOR_EXECUTIVO":
       return false;
   }
 }
@@ -132,6 +134,7 @@ export function canCreateOccurrence(a: Actor, s: Scope): boolean {
       return m.teamId === s.teamId;
     case "CLIENTE":
     case "PRE_PRODUTOR":
+    case "PRODUTOR_EXECUTIVO":
       return false;
   }
 }
@@ -164,20 +167,51 @@ export function canClaimOccurrence(a: Actor, o: OccScope & { status?: Occurrence
 }
 
 // ─────────────────────── Pré-produção ───────────────────────
-// Separada do campo: só o Pré-produtor e o gestor (Gerente do evento) entram.
+// Separada do campo. O diretor e o Gerente de produção entram em todas as
+// partes; o Produtor executivo, nas fixas dele; o Pré-produtor, nas caixas
+// marcadas para ele. Espelha app.can_use_pre_production e app.has_section.
 
-/** Ver e trabalhar na Pré-produção: tipos, quem faz o quê, propor SLA. */
+/** Entrar na Pré-produção (o painel e a estrutura do evento). Cada página pede a sua parte (canUseSection). */
 export function canUsePreProduction(a: Actor, eventId: string): boolean {
   if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
-  return m?.role === "GERENTE" || m?.role === "PRE_PRODUTOR";
+  return m?.role === "GERENTE" || m?.role === "PRE_PRODUTOR" || m?.role === "PRODUTOR_EXECUTIVO";
+}
+
+/** Abre esta parte da Pré-produção (ou alguma destas). */
+export function canUseSection(a: Actor, eventId: string, ...sections: Section[]): boolean {
+  if (isEventAdmin(a, eventId)) return true;
+  const m = membershipFor(a, eventId);
+  if (m?.role === "GERENTE") return true;
+  return !!m?.sections && sections.some((s) => m.sections!.includes(s));
+}
+
+/** Marcar as caixas de acesso dos Pré-produtores: o Gerente ou o diretor. Espelha app.can_grant_sections. */
+export function canGrantSections(a: Actor, eventId: string): boolean {
+  if (isEventAdmin(a, eventId)) return true;
+  return membershipFor(a, eventId)?.role === "GERENTE";
+}
+
+/**
+ * Pagar, lançar Contratado e Realizado e fechar o financeiro: o diretor (não o
+ * Suporte), o Gerente de produção e o Produtor executivo. Espelha app.can_handle_finance.
+ */
+export function canHandleFinance(a: Actor, eventId: string): boolean {
+  if (isEventAdmin(a, eventId)) return !isEventSupport(a, eventId);
+  const role = membershipFor(a, eventId)?.role;
+  return role === "GERENTE" || role === "PRODUTOR_EXECUTIVO";
+}
+
+/** É Produtor executivo neste evento (e não diretor dele). */
+export function isExecutive(a: Actor, eventId: string): boolean {
+  return !isEventAdmin(a, eventId) && membershipFor(a, eventId)?.role === "PRODUTOR_EXECUTIVO";
 }
 
 const FIELD_ROLES: readonly EventRole[] = ["GERENTE", "HEAD", "OPERACIONAL"];
 
-/** Dá função a alguém neste evento: a Pré-produção (a qualquer um do campo) e o Head (aos Operacionais da área dele). */
+/** Dá função a alguém neste evento: Produtores e Funções (a qualquer um do campo) e o Head (aos Operacionais da área dele). */
 export function canGiveFunctions(a: Actor, eventId: string): boolean {
-  return canUsePreProduction(a, eventId) || membershipFor(a, eventId)?.role === "HEAD";
+  return canUseSection(a, eventId, "FUNCOES") || membershipFor(a, eventId)?.role === "HEAD";
 }
 
 /** Pode dar função a esta pessoa? Espelha app.can_give_function. */
@@ -187,7 +221,7 @@ export function canGiveFunction(
   p: { role: EventRole; areaId: string | null; active: boolean },
 ): boolean {
   if (!p.active || !FIELD_ROLES.includes(p.role)) return false;
-  if (canUsePreProduction(a, eventId)) return true;
+  if (canUseSection(a, eventId, "FUNCOES")) return true;
   const m = membershipFor(a, eventId);
   return m?.role === "HEAD" && !!m.areaId && p.role === "OPERACIONAL" && p.areaId === m.areaId;
 }
@@ -196,7 +230,7 @@ export function canGiveFunction(
 export function canUseField(a: Actor, eventId: string): boolean {
   if (isEventAdmin(a, eventId)) return true;
   const m = membershipFor(a, eventId);
-  return !!m && m.role !== "PRE_PRODUTOR" && m.role !== "CLIENTE";
+  return !!m && m.role !== "PRE_PRODUTOR" && m.role !== "PRODUTOR_EXECUTIVO" && m.role !== "CLIENTE";
 }
 
 /** Aprovar, ajustar, recusar ou definir o SLA: só o gestor. */

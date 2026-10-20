@@ -16,7 +16,12 @@ import {
   canSeeArea,
   canSeeOccurrence,
   canSeeTeam,
+  canUseSection,
+  canGrantSections,
+  canGrantClientView,
+  canHandleFinance,
 } from "@/server/authz/policy";
+import { SECTIONS } from "@/server/authz/sections";
 
 /**
  * A matriz do backend (src/server/authz/policy.ts) e a do banco (funções app.*
@@ -29,7 +34,7 @@ const d = demo();
 afterAll(() => db.$disconnect());
 
 const PEOPLE: Person[] = ["admin", "marina", "paulo", "rafael", "beatriz", "claudia", "joao", "carlos", "ana", "sofia"];
-const ROLES = ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"] as const;
+const ROLES = ["GERENTE", "PRODUTOR_EXECUTIVO", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"] as const;
 const rock = d.events.rock.id;
 const areas = [d.areas.infra.id, d.areas.ab.id];
 const teams = [d.teams.eletrica, d.teams.cenografia, d.teams.bar];
@@ -83,6 +88,16 @@ describe("paridade backend × banco", () => {
             await q(`SELECT app.can_use_field($1::uuid) AS r`, ev));
           check(`gerir plantas em ${ev}`, canManagePlans(actor, ev),
             await q(`SELECT app.can_manage_plans($1::uuid) AS r`, ev));
+          for (const sec of SECTIONS) {
+            check(`abrir ${sec} em ${ev}`, canUseSection(actor, ev, sec),
+              await q(`SELECT app.has_section($1::uuid, ARRAY[$2]::text[]) AS r`, ev, sec));
+          }
+          check(`marcar caixas em ${ev}`, canGrantSections(actor, ev),
+            await q(`SELECT app.can_grant_sections($1::uuid) AS r`, ev));
+          check(`liberar a visão do cliente em ${ev}`, canGrantClientView(actor, ev),
+            await q(`SELECT app.can_grant_client_view($1::uuid) AS r`, ev));
+          check(`cuidar do financeiro em ${ev}`, canHandleFinance(actor, ev),
+            await q(`SELECT app.can_handle_finance($1::uuid) AS r`, ev));
         }
 
         // Etapas da planta: com e sem área, equipe e responsável.

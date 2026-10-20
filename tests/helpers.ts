@@ -51,3 +51,16 @@ export async function expectStatus(p: Promise<unknown>, status: number | number[
   }
   throw new Error(`esperava erro ${ok.join(" ou ")}, mas a operação foi aceita`);
 }
+
+/**
+ * Hierarquia de acessos: o Pré-produtor só abre as partes marcadas para ele.
+ * Os testes de cada parte liberam o que o Pré-produtor tinha antes das caixas
+ * (tudo menos Painel executivo, Fechamento financeiro e Atendimento).
+ */
+export async function grantAllSections(owner: ReturnType<typeof ownerDb>, eventId: string) {
+  await owner.$executeRaw`
+    INSERT INTO producer_access (participant_id, event_id, sections, updated_at)
+    SELECT id, event_id, app.legacy_producer_sections(), now() FROM participants
+     WHERE event_id = ${eventId}::uuid AND role = 'PRE_PRODUTOR'
+    ON CONFLICT (participant_id) DO NOTHING`;
+}

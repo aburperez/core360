@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getBriefingFor } from "@/modules/briefings/briefings.service";
 import { TopBar } from "@/components/top-bar";
 import { BriefingAutoView, BriefingPill } from "@/components/briefing-view";
@@ -14,7 +14,7 @@ export const metadata = { title: "Briefing" };
 export default async function BriefingEditPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/briefing/[participantId]">) {
   const actor = await requireUser();
   const { eventId, participantId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "FUNCOES")) notFound();
   const { person, briefing, state, auto } = await getBriefingFor(actor, eventId, participantId);
   const where = person.team ? `${person.area?.name} › ${person.team.name}` : (person.area?.name ?? "Gestão do evento");
 

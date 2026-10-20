@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { getFunction } from "@/modules/functions/functions.service";
 import { TopBar } from "@/components/top-bar";
@@ -15,7 +15,7 @@ export const metadata = { title: "Função" };
 export default async function FunctionPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/funcoes/[functionId]">) {
   const actor = await requireUser();
   const { eventId, functionId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "FUNCOES")) notFound();
   const [event, fn] = await Promise.all([getEvent(actor, eventId), getFunction(actor, functionId)]);
   if (fn.eventId !== eventId) notFound();
   const back = `/eventos/${eventId}/pre-producao/funcoes`;

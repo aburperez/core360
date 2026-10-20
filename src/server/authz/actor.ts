@@ -1,5 +1,6 @@
 import type { ParticipantRole } from "../../generated/prisma/enums";
 import { withUser, type Db, type Tx } from "../db/with-user";
+import { EXECUTIVE_SECTIONS, isSection, type Section } from "./sections";
 
 export type EventRole = ParticipantRole;
 
@@ -12,6 +13,8 @@ export interface Membership {
   teamId: string | null;
   /** Só do Cliente: o que o Gerente liberou para ele ver. */
   clientView: ClientView | null;
+  /** Pré-produtor e Produtor executivo: as partes da Pré-produção que ele abre. */
+  sections: readonly Section[] | null;
 }
 
 export interface ClientView {
@@ -70,6 +73,7 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
       select: {
         id: true, eventId: true, role: true, areaId: true, teamId: true, event: { select: { clientId: true } },
         clientView: { select: { costs: true, team: true, progress: true } },
+        producerAccess: { select: { sections: true } },
       },
     });
     const admin = await tx.agencyAdmin.findMany({
@@ -108,6 +112,9 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
       areaId: p.areaId,
       teamId: p.teamId,
       clientView: p.role === "CLIENTE" ? (p.clientView ?? { costs: false, team: false, progress: false }) : null,
+      sections: p.role === "PRODUTOR_EXECUTIVO" ? EXECUTIVE_SECTIONS
+        : p.role === "PRE_PRODUTOR" ? (p.producerAccess?.sections ?? []).filter(isSection)
+        : null,
     })),
     meta,
     run: (fn) => withUser(db, userId, fn),

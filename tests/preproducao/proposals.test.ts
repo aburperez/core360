@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { withUser, type Tx } from "@/server/db/with-user";
 import { createEvent } from "@/modules/events/events.service";
 import { createCostItem, createCostSection } from "@/modules/costs/costs.service";
@@ -48,6 +48,7 @@ beforeAll(async () => {
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-prop@rockfestival.dev`, role, joinedAt: new Date() } });
   await join("marina", "GERENTE");
   const s = await join("sofia", "PRE_PRODUTOR");
+  await grantAllSections(owner, ev);
   const section = await createCostSection(await marina(), ev, { name: "Palco" });
   item = (await createCostItem(await marina(), section.id, { name: "Gerador 500 kVA", quantity: 1, frequency: 1 })).id;
   req = (await createQuote(await sofia(), ev, { title: "Gerador", briefing: "Gerador 500 kVA, 2 diárias.", responsibleId: s.id, costItemId: item })).id;

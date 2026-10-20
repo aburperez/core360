@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canSeeTeam, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canSeeTeam, canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -21,11 +21,11 @@ import { getTeam } from "../teams/teams.service";
 /** Fora da Pré-produção, ela simplesmente não existe (404, como recurso alheio). */
 function requirePreProduction(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "TIPOS")) throw new NotFoundError("Pré-produção");
 }
 
 const can = (actor: Actor, eventId: string) => ({
-  manage: canUsePreProduction(actor, eventId),
+  manage: canUseSection(actor, eventId, "TIPOS"),
   review: canReviewSla(actor, eventId),
 });
 
@@ -36,7 +36,7 @@ type TypeScope = { eventId: string; areaId: string; teamId: string };
 
 async function load(actor: Actor, tx: Tx, id: string) {
   const t = uuid.safeParse(id).success ? await tx.serviceType.findFirst({ where: { id, deletedAt: null } }) : null;
-  if (!t || !canUsePreProduction(actor, t.eventId)) throw new NotFoundError("Tipo de atendimento");
+  if (!t || !canUseSection(actor, t.eventId, "TIPOS")) throw new NotFoundError("Tipo de atendimento");
   return t;
 }
 
@@ -236,7 +236,7 @@ export async function reviewSla(actor: Actor, proposalId: string, input: unknown
   const data = parse(reviewSchema, input);
   return actor.run(async (tx) => {
     const p = uuid.safeParse(proposalId).success ? await tx.slaProposal.findUnique({ where: { id: proposalId } }) : null;
-    if (!p || !canUsePreProduction(actor, p.eventId)) throw new NotFoundError("Proposta de SLA");
+    if (!p || !canUseSection(actor, p.eventId, "TIPOS")) throw new NotFoundError("Proposta de SLA");
     await load(actor, tx, p.serviceTypeId);
     if (!canReviewSla(actor, p.eventId)) throw new ForbiddenError("Só o gerente aprova, ajusta ou recusa o SLA");
     if (p.status !== "PENDENTE") throw new ConflictError("Esta proposta já foi revista");

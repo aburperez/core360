@@ -2,6 +2,7 @@ import { hashPassword } from "better-auth/crypto";
 import type { PrismaClient } from "../src/generated/prisma/client";
 import type { ParticipantRole, Priority } from "../src/generated/prisma/enums";
 import { DEFAULT_SLA_MINUTES } from "../src/modules/occurrences/sla";
+import { LEGACY_PRODUCER_SECTIONS } from "../src/server/authz/sections";
 
 export { DEFAULT_SLA_MINUTES };
 
@@ -169,6 +170,9 @@ export async function seedDemo(db: PrismaClient) {
     paulo: await participant(congresso.id, "paulo", "GERENTE", { jobTitle: "Gerente de projeto" }),
     joaoCongresso: await participant(congresso.id, "joao", "HEAD", { areaId: congressoInfra.id, jobTitle: "Head de Infra" }),
   };
+
+  // A Pré-produtora da demonstração abre o que o Pré-produtor abria antes das caixas.
+  await db.producerAccess.create({ data: { eventId: rock.id, participantId: parts.sofia.id, sections: [...LEGACY_PRODUCER_SECTIONS] } });
 
   await db.team.update({ where: { id: cenografia.id }, data: { leaderParticipantId: parts.ana.id } });
 

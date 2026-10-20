@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { isSupplierDirector } from "@/modules/suppliers/supplier-meta";
 import { listEventRatings } from "@/modules/suppliers/ratings.service";
 import { EVENT_STATUS_LABEL } from "@/lib/event-stages";
@@ -24,7 +24,7 @@ export const metadata = { title: "Avaliar fornecedores" };
 export default async function RatingsPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/avaliacao">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId) || !isSupplierDirector(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "COTACOES") || !isSupplierDirector(actor, eventId)) notFound();
   const data = await listEventRatings(actor, eventId);
   const suppliers = `/eventos/${eventId}/pre-producao/fornecedores`;
 

@@ -1,5 +1,6 @@
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUseField, canUsePreProduction } from "../../server/authz/policy";
+import { canUseField, canUseSection } from "../../server/authz/policy";
+import type { Section } from "../../server/authz/sections";
 import { NotFoundError } from "../../server/errors";
 import { requireEventAccess } from "../events/events.service";
 import { pendenciesSummary, listPendencies } from "../pendencies/pendencies.service";
@@ -36,7 +37,7 @@ export async function homePriorities(actor: Actor, events: { id: string; status:
 
 async function eventPriorities(actor: Actor, eventId: string, now: Date): Promise<Priority[]> {
   const base = `/eventos/${eventId}`;
-  const pre = canUsePreProduction(actor, eventId);
+  const pre = canUseSection(actor, eventId, "PENDENCIAS");
   const field = canUseField(actor, eventId);
   const [pending, arrivals, tickets] = await Promise.all([
     pre ? pendenciesSummary(actor, eventId, now) : null,
@@ -99,26 +100,29 @@ export function itemStages(statuses: ItemStatus[]) {
  */
 export async function getExecutivePanel(actor: Actor, eventId: string, now = new Date()) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId) || !canReviewSla(actor, eventId)) throw new NotFoundError("Painel executivo");
+  if (!canUseSection(actor, eventId, "EXECUTIVO")) throw new NotFoundError("Painel executivo");
+  // Os riscos vêm das partes que a pessoa abre (o Produtor executivo não tem
+  // pendências, cronograma nem cotações; o diretor e o Gerente têm tudo).
+  const can = (s: Section) => canUseSection(actor, eventId, s);
   const [budget, pend, schedule, quotes, contracts] = await Promise.all([
     getBudget(actor, eventId),
-    listPendencies(actor, eventId, {}, now),
-    getSchedule(actor, eventId, now),
-    quotesSummary(actor, eventId, now),
-    actor.run((tx) => tx.contract.count({ where: { eventId, status: { in: ["RASCUNHO", "ENVIADO"] } } })),
+    can("PENDENCIAS") ? listPendencies(actor, eventId, {}, now) : null,
+    can("CRONOGRAMA") ? getSchedule(actor, eventId, now) : null,
+    can("COTACOES") ? quotesSummary(actor, eventId, now) : null,
+    can("COTACOES") ? actor.run((tx) => tx.contract.count({ where: { eventId, status: { in: ["RASCUNHO", "ENVIADO"] } } })) : 0,
   ]);
   const base = `/eventos/${eventId}/pre-producao`;
-  const late = pend.items.filter((p) => p.group === "ATRASADO");
+  const late = pend?.items.filter((p) => p.group === "ATRASADO") ?? [];
   const risks: { tone: "red" | "amber"; text: string; href: string }[] = [];
   const add = (n: number, tone: "red" | "amber", one: string, many: string, href: string) => {
     if (n > 0) risks.push({ tone, text: `${n} ${n === 1 ? one : many}`, href });
   };
   add(late.filter((p) => p.kind === "MONTAGEM").length, "red", "item com montagem atrasada", "itens com montagem atrasada", `${base}/montagem`);
   add(late.filter((p) => p.kind === "ITEM").length, "red", "item atrasado para ficar pronto", "itens atrasados para ficar prontos", `${base}/cronograma`);
-  add(quotes.late, "red", "cotação atrasada", "cotações atrasadas", `${base}/cotacoes`);
+  add(quotes?.late ?? 0, "red", "cotação atrasada", "cotações atrasadas", `${base}/cotacoes`);
   add(late.filter((p) => p.kind === "MARCO").length, "red", "marco do cronograma atrasado", "marcos do cronograma atrasados", `${base}/cronograma`);
   add(contracts, "amber", "contrato sem assinatura", "contratos sem assinatura", `${base}/contratos`);
-  add(quotes.toDecide, "amber", "cotação esperando sua escolha", "cotações esperando sua escolha", `${base}/cotacoes`);
+  add(quotes?.toDecide ?? 0, "amber", "cotação esperando sua escolha", "cotações esperando sua escolha", `${base}/cotacoes`);
   add(budget.items.filter((i) => !i.optional && i.contracted === null && i.status !== "A_DEFINIR" && i.estimated !== null).length, "amber",
     "item ainda sem valor contratado", "itens ainda sem valor contratado", `${base}/orcamento`);
 
@@ -141,7 +145,8 @@ export async function getExecutivePanel(actor: Actor, eventId: string, now = new
     risks,
     overruns,
     aboveEstimate,
-    schedule: { ...schedule.progress, late: schedule.late },
-    pendencies: pend.totals,
+    /** null: a pessoa não abre o cronograma ou as pendências. */
+    schedule: schedule ? { ...schedule.progress, late: schedule.late } : null,
+    pendencies: pend?.totals ?? null,
   };
 }

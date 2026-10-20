@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listItemMap, type MapItem } from "@/modules/items/items.service";
 import { CATEGORY, ITEM_STATUS_LABEL, ITEM_STATUSES } from "@/modules/items/item-meta";
@@ -24,7 +24,7 @@ const br = (day: string | null) => (day ? `${day.slice(8, 10)}/${day.slice(5, 7)
 export default async function ItemMapPage({ params, searchParams }: PageProps<"/eventos/[eventId]/pre-producao/itens">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "ITENS")) notFound();
   const q = await searchParams;
   const [event, data] = await Promise.all([
     getEvent(actor, eventId),
@@ -41,6 +41,9 @@ export default async function ItemMapPage({ params, searchParams }: PageProps<"/
         <PageHeading trail={[event.name, "Pré-produção"]} title="Mapa de itens">
           <LinkButton href={costs} variant="secondary">Novo item na planilha</LinkButton>
         </PageHeading>
+        {data.structureOnly && (
+          <p className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-sm">Mostrando só <b>Estrutura e cenografia</b> (infra, locação, cenografia, mobiliário e comunicação visual), a sua área como Produtor executivo.</p>
+        )}
         <p className="text-sm text-muted">
           Cada item da planilha Padrão CORE 360, com quem cuida, quando precisa, onde fica e em que pé está. Aqui não aparecem valores (eles ficam no Orçamento).
           Toque num item para mudar a área, a categoria, o responsável, a data, o local ou o status.

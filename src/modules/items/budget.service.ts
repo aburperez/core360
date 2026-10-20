@@ -1,5 +1,5 @@
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canHandleFinance, canReviewSla, canUseSection } from "../../server/authz/policy";
 import { NotFoundError } from "../../server/errors";
 import { requireEventAccess } from "../events/events.service";
 import { lineSubtotal } from "../costs/totals";
@@ -14,7 +14,7 @@ import { effectiveCostCenter, itemCode, ITEM_CATEGORIES, COST_CENTERS, type Cost
  */
 export async function getBudget(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "ORCAMENTO")) throw new NotFoundError("Pré-produção");
   const data = await actor.run(async (tx) => {
     const event = await tx.event.findUniqueOrThrow({ where: { id: eventId }, select: { number: true } });
     const finances = await tx.eventFinances.findUnique({ where: { eventId }, select: { approvedBudget: true, financialClosedAt: true } });
@@ -102,6 +102,6 @@ export async function getBudget(actor: Actor, eventId: string) {
     /** Fase 7B: pago e a pagar (itens com contratado ou realizado) e se o financeiro já fechou. */
     payments: paymentTotals(rows),
     financialClosedAt: data.finances?.financialClosedAt ?? null,
-    can: { director: canReviewSla(actor, eventId) },
+    can: { director: canReviewSla(actor, eventId) || canHandleFinance(actor, eventId) },
   };
 }

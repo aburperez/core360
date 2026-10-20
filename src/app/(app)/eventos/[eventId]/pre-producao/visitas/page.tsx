@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listVisits } from "@/modules/visits/visits.service";
 import { MIN_VISIT_PHOTOS } from "@/modules/visits/report.service";
@@ -24,7 +24,7 @@ type Person = Awaited<ReturnType<typeof listVisits>>["people"][number];
 export default async function VisitsPage({ params }: PageProps<"/eventos/[eventId]/pre-producao/visitas">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "VISITAS")) notFound();
   const [event, data] = await Promise.all([getEvent(actor, eventId), listVisits(actor, eventId)]);
   const tz = event.timezone;
   const base = `/eventos/${eventId}/pre-producao/visitas`;

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canAssemble, canSendToField, canUseField, canUsePreProduction, isMe } from "../../server/authz/policy";
+import { canAssemble, canSendToField, canUseField, canUseSection, isMe } from "../../server/authz/policy";
 import { membershipFor } from "../../server/authz/actor";
 import { audit } from "../../server/audit/audit";
 import { ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
@@ -27,7 +27,7 @@ const RECEIVER_ROLES = ["GERENTE", "HEAD", "OPERACIONAL"] as const;
 
 function requireSender(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "ITENS", "ORCAMENTO")) throw new NotFoundError("Pré-produção");
   if (!canSendToField(actor, eventId)) throw new ForbiddenError("Só o gerente escolhe quem recebe e envia para o campo");
 }
 
@@ -62,7 +62,7 @@ const receiverSchema = z.object({ participantId: uuid.nullable() });
 export async function setItemReceiver(actor: Actor, itemId: string, input: unknown) {
   const data = parse(receiverSchema, input);
   const item = uuid.safeParse(itemId).success ? await actor.run((tx) => tx.costItem.findUnique({ where: { id: itemId } })) : null;
-  if (!item || !canUsePreProduction(actor, item.eventId)) throw new NotFoundError("Item");
+  if (!item || !canUseSection(actor, item.eventId, "ITENS", "ORCAMENTO")) throw new NotFoundError("Item");
   requireSender(actor, item.eventId);
   await checkReceiver(actor, item.eventId, data.participantId);
   return actor.run(async (tx) => {
@@ -79,7 +79,7 @@ export async function setItemReceiver(actor: Actor, itemId: string, input: unkno
 export async function setSectionReceiver(actor: Actor, sectionId: string, input: unknown) {
   const data = parse(receiverSchema, input);
   const section = uuid.safeParse(sectionId).success ? await actor.run((tx) => tx.costSection.findUnique({ where: { id: sectionId } })) : null;
-  if (!section || !canUsePreProduction(actor, section.eventId)) throw new NotFoundError("Seção");
+  if (!section || !canUseSection(actor, section.eventId, "ITENS", "ORCAMENTO")) throw new NotFoundError("Seção");
   requireSender(actor, section.eventId);
   await checkReceiver(actor, section.eventId, data.participantId);
   return actor.run(async (tx) => {
@@ -384,7 +384,7 @@ async function loadPhoto(actor: Actor, photoId: string) {
   const p = uuid.safeParse(photoId).success
     ? await actor.run((tx) => tx.receiptPhoto.findUnique({ where: { id: photoId }, include: { receipt: true } }))
     : null;
-  const ok = p && (isMe(actor, p.eventId, p.receipt.receiverId) || canUsePreProduction(actor, p.eventId) || canAssemble(actor, p.eventId, p.receipt.areaId));
+  const ok = p && (isMe(actor, p.eventId, p.receipt.receiverId) || canUseSection(actor, p.eventId, "ITENS", "ORCAMENTO") || canAssemble(actor, p.eventId, p.receipt.areaId));
   if (!p || !ok) throw new NotFoundError("Foto");
   return p;
 }

@@ -12,7 +12,7 @@ import { getTeam } from "../teams/teams.service";
 import { getArea } from "../areas/areas.service";
 import { hashToken, newToken } from "../../lib/tokens";
 
-const ROLES = ["GERENTE", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"] as const;
+const ROLES = ["GERENTE", "PRODUTOR_EXECUTIVO", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"] as const;
 export const INVITE_TTL_DAYS = 7;
 
 const publicFields = {
@@ -29,6 +29,7 @@ function scopeWhere(actor: Actor, eventId: string): Prisma.ParticipantWhereInput
   switch (m?.role) {
     case "GERENTE":
     case "PRE_PRODUTOR":
+    case "PRODUTOR_EXECUTIVO":
       return { eventId };
     case "CLIENTE":
       // O Cliente vê a equipe só quando o Gerente libera; senão, só a si mesmo.

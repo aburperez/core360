@@ -17,9 +17,10 @@ const READY_ROWS = 500;
 
 export const TAB = { help: "Como preencher", people: "Pessoas", areas: "Áreas e equipes", functions: "Funções", activities: "Atividades" } as const;
 
-export type SheetRole = "GERENTE" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
+export type SheetRole = "GERENTE" | "PRODUTOR_EXECUTIVO" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
 export const ROLE_NAMES: Record<SheetRole, string> = {
-  GERENTE: "Gerente", HEAD: "Head", OPERACIONAL: "Operacional", CLIENTE: "Cliente", PRE_PRODUTOR: "Pré-produtor",
+  GERENTE: "Gerente de produção", PRODUTOR_EXECUTIVO: "Produtor executivo", HEAD: "Head", OPERACIONAL: "Operacional",
+  CLIENTE: "Cliente", PRE_PRODUTOR: "Pré-produtor",
 };
 export interface SheetView { progress: boolean; team: boolean; costs: boolean }
 const VIEW_NAMES: [keyof SheetView, string][] = [["progress", "Andamento"], ["team", "Equipe"], ["costs", "Custos"]];
@@ -480,7 +481,7 @@ export async function readFunctionsSheet(bytes: Uint8Array): Promise<ParsedFunct
 
 const ROLE_BY_NAME = new Map<string, SheetRole>([
   ...(Object.entries(ROLE_NAMES) as [SheetRole, string][]).map(([k, v]) => [norm(v), k] as [string, SheetRole]),
-  ["pre produtor", "PRE_PRODUTOR"], ["preprodutor", "PRE_PRODUTOR"], ["pre-produtora", "PRE_PRODUTOR"], ["gerente de producao", "GERENTE"],
+  ["pre produtor", "PRE_PRODUTOR"], ["preprodutor", "PRE_PRODUTOR"], ["pre-produtora", "PRE_PRODUTOR"], ["gerente", "GERENTE"], ["executivo", "PRODUTOR_EXECUTIVO"],
 ]);
 
 function readRole(t: string): SheetRole | undefined {

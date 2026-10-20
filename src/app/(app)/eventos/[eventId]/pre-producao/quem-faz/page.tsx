@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/server/http/session";
 import { notFound } from "next/navigation";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { listTeams } from "@/modules/teams/teams.service";
 import { listParticipants } from "@/modules/participants/participants.service";
 import { listServiceTypes } from "@/modules/service-types/service-types.service";
@@ -18,7 +18,7 @@ export default async function WhoDoesWhatPage({ params, searchParams }: PageProp
   const actor = await requireUser();
   const { eventId } = await params;
   const { equipe } = await searchParams;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "TIPOS")) notFound();
   const [teams, types] = await Promise.all([listTeams(actor, eventId), listServiceTypes(actor, eventId)]);
   const withTypes = new Set(types.map((t) => t.teamId));
   const team = teams.find((t) => t.id === equipe) ?? teams.find((t) => withTypes.has(t.id)) ?? teams[0];

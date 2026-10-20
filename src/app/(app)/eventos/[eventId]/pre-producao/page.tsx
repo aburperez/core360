@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canReviewSla, canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canReviewSla, canUseField, canUsePreProduction, canUseSection, isExecutive } from "@/server/authz/policy";
+import { SECTIONS, type Section } from "@/server/authz/sections";
 import { isEventAdmin, isEventSupport, membershipFor } from "@/server/authz/actor";
 import { getEvent, getEventFinances } from "@/modules/events/events.service";
 import { getEventBriefing } from "@/modules/events/briefing.service";
@@ -38,84 +39,101 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
   const actor = await requireUser();
   const { eventId } = await params;
   if (!canUsePreProduction(actor, eventId)) notFound();
+  // Cada parte só carrega para quem a abre (hierarquia de acessos). Quem abre
+  // todas (o diretor e o Gerente de produção) vê o painel completo.
+  const can = (s: Section) => canUseSection(actor, eventId, s);
+  const full = SECTIONS.every(can);
+  const when = <T,>(ok: boolean, load: () => Promise<T>) => (ok ? load() : Promise.resolve(null));
   const [event, types, sheet, fn, quotes, visits, finances, brief, docs, pending, schedule, arrivals, money] = await Promise.all([
-    getEvent(actor, eventId), listServiceTypes(actor, eventId), getCostSheet(actor, eventId), getFunctionsPanel(actor, eventId),
-    quotesSummary(actor, eventId), visitsSummary(actor, eventId), getEventFinances(actor, eventId), getEventBriefing(actor, eventId),
-    listDocuments(actor, eventId), pendenciesSummary(actor, eventId), getSchedule(actor, eventId), arrivalsSummary(actor, eventId),
+    getEvent(actor, eventId),
+    when(can("TIPOS"), () => listServiceTypes(actor, eventId)),
+    when(can("ITENS") || can("ORCAMENTO"), () => getCostSheet(actor, eventId)),
+    when(can("FUNCOES"), () => getFunctionsPanel(actor, eventId)),
+    when(can("COTACOES"), () => quotesSummary(actor, eventId)),
+    when(can("VISITAS"), () => visitsSummary(actor, eventId)),
+    getEventFinances(actor, eventId),
+    when(can("BRIEFING"), () => getEventBriefing(actor, eventId)),
+    when(can("DOCUMENTOS"), () => listDocuments(actor, eventId)),
+    when(can("PENDENCIAS"), () => pendenciesSummary(actor, eventId)),
+    when(can("CRONOGRAMA"), () => getSchedule(actor, eventId)),
+    when(can("MONTAGEM"), () => arrivalsSummary(actor, eventId)),
     financialSummary(actor, eventId),
   ]);
   const manager = canReviewSla(actor, eventId);
-  const quoteAlert = manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
-  const quoteLine = quotes.total === 0 ? "Nenhuma cotação ainda"
+  const quoteAlert = !quotes ? 0 : manager ? quotes.noDeadline + quotes.toDecide + quotes.late : quotes.late;
+  const quoteLine = !quotes ? "" : quotes.total === 0 ? "Nenhuma cotação ainda"
     : [
         quotes.late && `${quotes.late} atrasada${quotes.late > 1 ? "s" : ""}`,
         manager && quotes.noDeadline && `${quotes.noDeadline} sem prazo`,
         manager && quotes.toDecide && `${quotes.toDecide} para escolher`,
       ].filter(Boolean).join(" · ") || `${quotes.closed} de ${quotes.total} fechadas`;
   const base = `/eventos/${eventId}/pre-producao`;
-  const toReview = canReviewSla(actor, eventId) ? types.filter((t) => t.pending) : [];
-  const proposed = types.filter((t) => t.pending).length;
-  const approved = types.filter((t) => t.slaMinutes).length;
-  const withPeople = types.filter((t) => t.peopleIds.length).length;
-  const people = fn.people.length;
-  const withFunction = fn.people.filter((p) => p.functionId).length;
-  const fullProfile = fn.people.filter((p) => p.profileFilled === 5).length;
-  const briefed = fn.people.filter((p) => p.briefingState !== "SEM");
+  const typeList = types ?? [];
+  const toReview = canReviewSla(actor, eventId) ? typeList.filter((t) => t.pending) : [];
+  const proposed = typeList.filter((t) => t.pending).length;
+  const approved = typeList.filter((t) => t.slaMinutes).length;
+  const withPeople = typeList.filter((t) => t.peopleIds.length).length;
+  const peopleList = fn?.people ?? [];
+  const people = peopleList.length;
+  const withFunction = peopleList.filter((p) => p.functionId).length;
+  const fullProfile = peopleList.filter((p) => p.profileFilled === 5).length;
+  const briefed = peopleList.filter((p) => p.briefingState !== "SEM");
   const read = briefed.filter((p) => p.briefingState === "LIDO").length;
-  const priced = sheet.itemCount - sheet.totals.undefinedCount;
-  const allItems = sheet.sections.flatMap((s) => s.items);
+  const priced = sheet ? sheet.itemCount - sheet.totals.undefinedCount : 0;
+  const allItems = sheet?.sections.flatMap((s) => s.items) ?? [];
   const toDefine = allItems.filter((i) => i.status === "A_DEFINIR").length;
   const noOwner = allItems.filter((i) => !i.responsibleId).length;
   const stages = itemStages(allItems.map((i) => i.status));
   const role = isEventSupport(actor, eventId) ? "Suporte" : isEventAdmin(actor, eventId) ? ROLE_LABEL.ADMIN : ROLE_LABEL[membershipFor(actor, eventId)!.role];
 
-  const tiles: TileData[] = [
-    ...(manager ? [{ href: `${base}/executivo`, icon: "chart" as const, title: "Painel executivo", line: "Os 4 valores, economia, estouro e riscos" }] : []),
-    {
+  const tiles: (TileData | null | false)[] = [
+    can("EXECUTIVO") && { href: `${base}/executivo`, icon: "chart", title: "Painel executivo", line: "Os 4 valores, economia, estouro e riscos" },
+    !!brief && {
       href: `${base}/briefing-evento`, icon: "briefing", title: "Briefing do evento",
       line: brief.updatedAt ? `${brief.progress.answered} de 13 frentes · ${brief.progress.needed} precisam` : "Ainda não preenchido",
     },
-    {
+    !!pending && {
       href: `${base}/pendencias`, icon: "pending", title: "Pendências", alert: pending.late > 0,
       line: pending.late ? `${pending.late} atrasada${pending.late > 1 ? "s" : ""} · ${pending.today} vence${pending.today === 1 ? "" : "m"} hoje`
         : pending.today ? `${pending.today} vence${pending.today === 1 ? "" : "m"} hoje · ${pending.week} na semana` : `Nada atrasado · ${pending.week} na semana`,
     },
-    {
+    !!schedule && {
       href: `${base}/cronograma`, icon: "calendar", title: "Cronograma", alert: schedule.late > 0,
       line: `${schedule.progress.done} de ${schedule.progress.total} marcos feitos${schedule.late ? ` · ${schedule.late} atrasado${schedule.late > 1 ? "s" : ""}` : ""}`,
     },
-    {
+    can("MONTAGEM") && {
       href: `${base}/montagem`, icon: "truck", title: "Mapa de montagem", alert: !!arrivals?.late,
       line: arrivals?.total ? `${arrivals.total} chegadas · ${arrivals.arrived} chegaram${arrivals.late ? ` · ${arrivals.late} atrasada${arrivals.late > 1 ? "s" : ""}` : ""}` : "Chegadas dos fornecedores na montagem",
     },
-    { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${types.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
-    {
+    !!types && { href: `${base}/tipos`, icon: "sla", title: "Tipos e SLA", line: proposed ? `${proposed} aguardando revisão` : `${typeList.length} tipos · ${approved} com SLA`, alert: toReview.length > 0 },
+    can("ITENS") && !!sheet && {
       href: `${base}/itens`, icon: "items", title: "Mapa de itens",
-      line: sheet.itemCount ? `${sheet.itemCount} itens · ${toDefine} a definir · ${noOwner} sem responsável` : "Nenhum item ainda",
+      line: isExecutive(actor, eventId) ? "Estrutura e cenografia"
+        : sheet.itemCount ? `${sheet.itemCount} itens · ${toDefine} a definir · ${noOwner} sem responsável` : "Nenhum item ainda",
     },
-    { href: `${base}/orcamento`, icon: "costs", title: "Orçamento", line: sheet.itemCount ? `Planilha ${brl(sheet.totals.total)}` : "Planilha vazia" },
-    ...(money
-      ? [{
-          href: `${base}/financeiro`, icon: "costs" as const, title: "Fechamento financeiro",
-          alert: money.status === "FECHAMENTO" && money.needed && !money.closed,
-          line: money.closed ? `Fechado em ${formatDate(money.closed.at)}`
-            : !money.needed ? "Nenhum item contratado ainda"
-            : money.pending ? `${money.pending} ${money.pending === 1 ? "item falta" : "itens faltam"} · a pagar ${brl(money.toPay)}`
-            : money.status === "FECHAMENTO" ? "Tudo pago: pode fechar" : "Tudo pago · fecha na etapa Fechamento",
-        }]
-      : []),
-    { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
-    {
+    can("ORCAMENTO") && !!sheet && { href: `${base}/orcamento`, icon: "costs", title: "Orçamento", line: sheet.itemCount ? `Planilha ${brl(sheet.totals.total)}` : "Planilha vazia" },
+    !!money && {
+      href: `${base}/financeiro`, icon: "costs", title: "Fechamento financeiro",
+      alert: money.status === "FECHAMENTO" && money.needed && !money.closed,
+      line: money.closed ? `Fechado em ${formatDate(money.closed.at)}`
+        : !money.needed ? "Nenhum item contratado ainda"
+        : money.pending ? `${money.pending} ${money.pending === 1 ? "item falta" : "itens faltam"} · a pagar ${brl(money.toPay)}`
+        : money.status === "FECHAMENTO" ? "Tudo pago: pode fechar" : "Tudo pago · fecha na etapa Fechamento",
+    },
+    !!quotes && { href: `${base}/cotacoes`, icon: "quotes", title: "Cotações", line: quoteLine, alert: quoteAlert > 0 },
+    !!visits && {
       href: `${base}/visitas`, icon: "visit", title: "Visitas técnicas",
       line: visits.next ? `Próxima: ${formatDateTime(visits.next.scheduledAt)} · ${visits.next.responsible.name}` : visits.total ? `${visits.total} feitas` : "Nenhuma marcada",
     },
-    {
+    !!docs && {
       href: `${base}/documentos`, icon: "docs", title: "Documentos",
       line: docs.documents.length ? `${docs.documents.length} ${docs.documents.length === 1 ? "arquivo" : "arquivos"} · ${docs.documents.filter((d) => d.visibleToField).length} no campo` : "Nenhum enviado",
     },
-    { href: `${base}/funcoes`, icon: "functions", title: "Produtores e Funções", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
-    { href: `${base}/relatorios`, icon: "report", title: "Relatórios", line: "Book, itens, fornecedores, montagem e mais, em PDF e Excel" },
+    !!fn && { href: `${base}/funcoes`, icon: "functions", title: "Produtores e Funções", line: `${fn.functions.length} funções · ${people - withFunction} sem função` },
+    can("ATENDIMENTO") && { href: `${base}/atendimento`, icon: "team", title: "Atendimento", line: "O que o Cliente vê do evento" },
+    can("RELATORIOS") && { href: `${base}/relatorios`, icon: "report", title: "Relatórios", line: "Book, itens, fornecedores, montagem e mais, em PDF e Excel" },
   ];
+  const shown = tiles.filter((t): t is TileData => !!t);
 
   return (
     <>
@@ -136,7 +154,12 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
             <span className="shrink-0 text-sm font-semibold text-emerald-200">Abrir ›</span>
           </Link>
         )}
-        {pending.late > 0 && (
+        {shown.length === 0 && (
+          <p className="mb-4 rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
+            Nenhuma parte da Pré-produção foi liberada para você ainda. Peça ao Gerente de produção ou ao diretor.
+          </p>
+        )}
+        {!!pending && pending.late > 0 && (
           <Link
             href={`${base}/pendencias`}
             className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-red-500/50 bg-red-500/10 p-4 transition hover:border-red-400"
@@ -150,8 +173,9 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
         )}
         {/* As seções da pré-produção em cartões (como pastas); o painel com os números vem embaixo. */}
         <SectionGrid className="mb-6">
-          {tiles.map((t, i) => <SectionCard key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
+          {shown.map((t, i) => <SectionCard key={t.href} href={t.href} icon={t.icon} title={t.title} line={t.line} tone={t.alert ? "alert" : undefined} i={i} />)}
         </SectionGrid>
+        {full && sheet && types && fn && schedule && quotes && (
         <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-w-0 space-y-4">
             {toReview.length > 0 && (
@@ -261,6 +285,7 @@ export default async function PreProductionPanel({ params }: PageProps<"/eventos
             )}
           </aside>
         </div>
+        )}
       </main>
     </>
   );

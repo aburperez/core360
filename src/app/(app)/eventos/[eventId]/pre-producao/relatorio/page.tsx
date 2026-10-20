@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseField, canUsePreProduction } from "@/server/authz/policy";
+import { canUseField, canUseSection } from "@/server/authz/policy";
 import { getDailyReport } from "@/modules/reports/reports.service";
 import type { ReportOccurrence } from "@/modules/reports/report";
 import { TopBar } from "@/components/top-bar";
@@ -28,7 +28,7 @@ const pct = (s: { pct: number | null; total: number }) => (s.pct === null ? "—
 export default async function ReportPage({ params, searchParams }: PageProps<"/eventos/[eventId]/pre-producao/relatorio">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "RELATORIOS")) notFound();
   const dia = (await searchParams).dia;
   const r = await getDailyReport(actor, eventId, typeof dia === "string" ? dia : null).catch((e) => {
     if ((e as { status?: number }).status === 422) notFound();

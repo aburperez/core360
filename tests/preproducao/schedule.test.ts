@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person } from "../helpers";
+import { actorFor, appDb, demo, expectPgError, expectStatus, ownerDb, type Person, grantAllSections } from "../helpers";
 import { withUser, type Tx } from "@/server/db/with-user";
 import { createEvent } from "@/modules/events/events.service";
 import { createCostItem, createCostSection, deleteCostItem, updateCostItem } from "@/modules/costs/costs.service";
@@ -39,6 +39,7 @@ beforeAll(async () => {
     owner.participant.create({ data: { eventId: ev, userId: d.users[p]!, name: p, email: `${p}-cr@rockfestival.dev`, role, areaId: role === "HEAD" ? area : undefined, joinedAt: new Date() } });
   await join("marina", "GERENTE");
   sofiaP = (await join("sofia", "PRE_PRODUTOR")).id;
+  await grantAllSections(owner, ev);
   await join("rafael", "HEAD");
   claudiaP = (await join("claudia", "CLIENTE")).id;
 });

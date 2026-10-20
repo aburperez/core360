@@ -53,8 +53,11 @@ enum ParticipantRole {
   HEAD
   OPERACIONAL
   CLIENTE
-  /// Só a Pré-produção do evento (sem campo).
+  /// Só a Pré-produção do evento (sem campo), nas partes que liberarem para ele.
   PRE_PRODUTOR
+  /// Produtor executivo: partes fixas da Pré-produção (financeiro, orçamento,
+  /// briefing, produtores, estrutura e cenografia, atendimento). Sem campo.
+  PRODUTOR_EXECUTIVO
 
   @@map("participant_role")
 }
@@ -223,6 +226,7 @@ model User {
   functionsCreated         EventFunction[]      @relation("EventFunctionCreatedBy")
   activitiesCreated        Activity[]           @relation("ActivityCreatedBy")
   clientViewsUpdated       ClientView[]         @relation("ClientViewUpdatedBy")
+  producerAccessUpdated    ProducerAccess[]     @relation("ProducerAccessUpdatedBy")
   profilesUpdated          ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
   directors                Director[]           @relation("DirectorUser")
   directorsCreated         Director[]           @relation("DirectorCreatedBy")
@@ -461,6 +465,7 @@ model Event {
   functions       EventFunction[]
   activities      Activity[]
   clientViews     ClientView[]
+  producerAccess  ProducerAccess[]
   profiles        ParticipantProfile[]
   activityChecks  ActivityCheck[]
   quoteRequests   QuoteRequest[]
@@ -589,6 +594,7 @@ model Participant {
   itemReceipts           ItemReceipt[]       @relation("ItemReceiptReceiver")
   briefing               Briefing?
   clientView             ClientView?
+  producerAccess         ProducerAccess?
   profile                ParticipantProfile?
   ownActivities          Activity[]
   activityChecks         ActivityCheck[]
@@ -1628,6 +1634,24 @@ model ClientView {
 
   @@unique([eventId, participantId])
   @@map("client_views")
+}
+
+/// Partes da Pré-produção que um Pré-produtor pode abrir (caixas marcadas pelo
+/// Gerente ou pelo diretor). Chaves em src/server/authz/sections.ts.
+model ProducerAccess {
+  participantId String   @id @map("participant_id") @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  sections      String[] @default([])
+  /// Vazio: liberado pela migration (os Pré-produtores que já existiam).
+  updatedById   String?  @map("updated_by") @db.Uuid
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  participant Participant @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Cascade)
+  updatedBy   User?       @relation("ProducerAccessUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, participantId])
+  @@map("producer_access")
 }
 
 /// Valores da ficha do evento: orçamento aprovado e centro de custo. Tabela à

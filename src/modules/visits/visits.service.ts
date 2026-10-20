@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
 import { membershipFor } from "../../server/authz/actor";
-import { canReviewSla, canUsePreProduction } from "../../server/authz/policy";
+import { canReviewSla, canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -20,7 +20,7 @@ import { PPE_OPTIONS } from "./ppe";
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "VISITAS")) throw new NotFoundError("Pré-produção");
 }
 
 const visitSelect = {
@@ -47,14 +47,14 @@ export function requireOpen(v: { status: string }) {
 
 async function load(actor: Actor, tx: Tx, id: string) {
   const v = uuid.safeParse(id).success ? await tx.technicalVisit.findUnique({ where: { id }, select: visitSelect }) : null;
-  if (!v || !canUsePreProduction(actor, v.eventId)) throw new NotFoundError("Visita técnica");
+  if (!v || !canUseSection(actor, v.eventId, "VISITAS")) throw new NotFoundError("Visita técnica");
   return v;
 }
 
 /** Quem pode ir: Gerente ou Pré-produtor ativo do evento. */
 async function pickers(tx: Tx, eventId: string) {
   return tx.participant.findMany({
-    where: { eventId, deletedAt: null, active: true, role: { in: ["GERENTE", "PRE_PRODUTOR"] } },
+    where: { eventId, deletedAt: null, active: true, role: { in: ["GERENTE", "PRE_PRODUTOR", "PRODUTOR_EXECUTIVO"] } },
     orderBy: { name: "asc" },
     select: { id: true, name: true, role: true },
   });
@@ -63,7 +63,7 @@ async function pickers(tx: Tx, eventId: string) {
 async function checkResponsible(tx: Tx, eventId: string, responsibleId: string | undefined) {
   if (!responsibleId) return;
   const p = await tx.participant.findFirst({
-    where: { id: responsibleId, eventId, deletedAt: null, active: true, role: { in: ["GERENTE", "PRE_PRODUTOR"] } },
+    where: { id: responsibleId, eventId, deletedAt: null, active: true, role: { in: ["GERENTE", "PRE_PRODUTOR", "PRODUTOR_EXECUTIVO"] } },
     select: { id: true },
   });
   if (!p) throw new ValidationError("Quem vai à visita precisa ser Gerente ou Pré-produtor do evento");

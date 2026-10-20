@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUsePreProduction } from "@/server/authz/policy";
+import { canUseSection } from "@/server/authz/policy";
 import { getSchedule } from "@/modules/schedule/schedule.service";
 import { DUE_STATE, dayText, weekday } from "@/modules/schedule/schedule-meta";
 import { ITEM_STATUS_LABEL } from "@/modules/items/item-meta";
@@ -21,7 +21,7 @@ export const metadata = { title: "Cronograma" };
 export default async function SchedulePage({ params }: PageProps<"/eventos/[eventId]/pre-producao/cronograma">) {
   const actor = await requireUser();
   const { eventId } = await params;
-  if (!canUsePreProduction(actor, eventId)) notFound();
+  if (!canUseSection(actor, eventId, "CRONOGRAMA")) notFound();
   const s = await getSchedule(actor, eventId);
   const items = `/eventos/${eventId}/pre-producao/itens`;
   // Onde entra a linha "Hoje" na lista de marcos.

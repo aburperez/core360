@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canUsePreProduction } from "../../server/authz/policy";
+import { canUseSection } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { NotFoundError } from "../../server/errors";
 import { optionalText, parse } from "../../lib/validation";
@@ -17,7 +17,7 @@ import { requireEventAccess } from "./events.service";
 
 function requirePre(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
-  if (!canUsePreProduction(actor, eventId)) throw new NotFoundError("Pré-produção");
+  if (!canUseSection(actor, eventId, "BRIEFING")) throw new NotFoundError("Pré-produção");
 }
 
 export type BriefingFrontRow = { key: BriefingFrontKey; label: string; needed: boolean | null; notes: string | null };

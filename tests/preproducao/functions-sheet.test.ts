@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { actorFor, appDb, demo, expectStatus, ownerDb } from "../helpers";
+import { actorFor, appDb, demo, expectStatus, ownerDb, grantAllSections } from "../helpers";
 import { loadActor, type Actor } from "@/server/authz/actor";
 import { DEFAULT_FUNCTIONS } from "@/modules/functions/functions.service";
 import { exportFunctionsSheet, importFunctionsSheet } from "@/modules/functions/functions-sheet.service";
@@ -45,6 +45,7 @@ beforeAll(async () => {
       { eventId: ev, name: "Sofia", email: (emails.sofia = `sofia.${uniq()}@x.dev`), role: "PRE_PRODUTOR", userId: users.pre },
     ],
   });
+  await grantAllSections(owner, ev);
   joaoHere = (await owner.participant.create({
     data: { eventId: ev, name: "João", email: (emails.joao = `joao.${uniq()}@x.dev`), role: "OPERACIONAL", areaId: area.id, teamId: team.id, userId: users.campo },
   })).id;
