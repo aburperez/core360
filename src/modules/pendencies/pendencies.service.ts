@@ -15,6 +15,7 @@ import { pendencyGroup, type PendencyGroup, type PendencyKind } from "./pendency
 import { assemblyDeadlines } from "../arrivals/assembly";
 import { formatDateTime } from "../../lib/format";
 import { financialState } from "../finance/lock";
+import { assertProductionArea, defaultArea } from "../items/production-area";
 
 /**
  * Central de pendências (fase 4B): numa lista só, o que falta fazer no
@@ -276,8 +277,9 @@ export async function createTask(actor: Actor, eventId: string, input: unknown) 
   const data = parse(taskSchema, input);
   return actor.run(async (tx) => {
     await checkRefs(tx, eventId, data);
+    assertProductionArea(actor, eventId, data.areaId ?? null, true);
     const t = await tx.eventTask.create({
-      data: { eventId, title: data.title, dueOn: toDate(data.dueOn), areaId: data.areaId ?? null, responsibleId: data.responsibleId ?? null, createdById: actor.userId },
+      data: { eventId, title: data.title, dueOn: toDate(data.dueOn), areaId: defaultArea(actor, eventId, data.areaId), responsibleId: data.responsibleId ?? null, createdById: actor.userId },
     });
     await audit(tx, actor, { eventId, entity: "event_task", entityId: t.id, action: "CREATE", after: auditable(t) });
     return { id: t.id };
@@ -288,6 +290,7 @@ export async function updateTask(actor: Actor, id: string, input: unknown) {
   const data = parse(taskSchema.partial(), input);
   return actor.run(async (tx) => {
     const t = await loadTask(actor, tx, id);
+    assertProductionArea(actor, t.eventId, data.areaId, true);
     await checkRefs(tx, t.eventId, data);
     const updated = await tx.eventTask.update({
       where: { id: t.id },

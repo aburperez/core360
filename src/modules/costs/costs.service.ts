@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "../../server/authz/actor";
-import { canHandleFinance, canReviewSla, canSendToField, canUseSection, clientCan } from "../../server/authz/policy";
+import { canHandleFinance, canReviewSla, canSendToField, canUseSection, clientCan, productionArea } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
@@ -13,6 +13,7 @@ import { fieldText } from "../receipts/field-text";
 import { assertFinancialOpen, LOCKED_ITEM_FIELDS } from "../finance/lock";
 import { norm } from "../../server/xlsx";
 import { canSetItemStatus, COST_CENTERS, ITEM_CATEGORIES, ITEM_STATUS_LABEL, ITEM_STATUSES, itemCode, type ItemCategory, type ItemStatus } from "../items/item-meta";
+import { assertProductionArea, defaultArea } from "../items/production-area";
 
 /**
  * Pré-produção: planilha de custos (orçamento) do evento, no formato da
@@ -389,6 +390,7 @@ export async function createCostItem(actor: Actor, sectionId: string, input: unk
       data: {
         ...data,
         frequency: data.frequency ?? null,
+        areaId: defaultArea(actor, s.eventId, null),
         eventId: s.eventId,
         sectionId: s.id,
         position: await nextPosition(tx, "item", { eventId: s.eventId, sectionId: s.id }),
@@ -413,6 +415,7 @@ export async function updateCostItem(actor: Actor, id: string, input: unknown) {
   const patch: Record<string, unknown> = Object.fromEntries(Object.entries(data).filter(([k]) => k in sent));
   return actor.run(async (tx) => {
     const i = await loadItem(actor, tx, id);
+    assertProductionArea(actor, i.eventId, patch.areaId as string | null | undefined);
     if (LOCKED_ITEM_FIELDS.some((k) => k in patch)) await assertFinancialOpen(tx, i.eventId);
     await checkItemFields(actor, tx, i, patch);
     if (sectionId && sectionId !== i.sectionId) {
@@ -473,6 +476,7 @@ async function dropReceipts(actor: Actor, tx: Tx, eventId: string, where: { cost
  */
 export async function importCostSheet(actor: Actor, eventId: string, bytes: Uint8Array, opts: { confirm: boolean; fileName?: string | null }) {
   requirePreProduction(actor, eventId);
+  if (productionArea(actor, eventId)) throw new ForbiddenError("A planilha inteira é enviada pelo Gerente de produção: você trabalha só na sua área");
   const m = await readMatrix(bytes);
   const items = m.sections.flatMap((s) => s.items);
   const totals = costTotals(items, m.rates);

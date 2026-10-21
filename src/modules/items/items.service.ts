@@ -1,10 +1,12 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
 import { canReviewSla, canUseSection, isExecutive } from "../../server/authz/policy";
-import { NotFoundError } from "../../server/errors";
+import { ForbiddenError, NotFoundError } from "../../server/errors";
 import type { Tx } from "../../server/db/with-user";
 import { uuid } from "../../lib/validation";
 import { requireEventAccess } from "../events/events.service";
+import { normName } from "../areas/areas.service";
+import { audit } from "../../server/audit/audit";
 import {
   canSetItemStatus, effectiveCostCenter, ITEM_CATEGORIES, ITEM_STATUSES, itemCode, STRUCTURE_CATEGORIES, STRUCTURE_CENTERS,
   type CostCenter, type ItemCategory, type ItemStatus,
@@ -135,6 +137,7 @@ export async function listItemMap(actor: Actor, eventId: string, filters: ItemFi
     const supplierOf = await suppliers(tx, eventId);
     const counts = await tx.costItem.groupBy({ by: ["status"], where: scope, _count: { _all: true } });
     const total = counts.reduce((a, c) => a + c._count._all, 0);
+    const withoutArea = await tx.costItem.count({ where: { ...scope, areaId: null } });
     return {
       items: rows.map((r) => toItem(r, number, supplierOf.get(r.id))),
       total,
@@ -142,6 +145,8 @@ export async function listItemMap(actor: Actor, eventId: string, filters: ItemFi
       filters: f,
       /** Só estrutura e cenografia (Produtor executivo). */
       structureOnly: isExecutive(actor, eventId),
+      /** Itens ainda sem área (do evento todo). */
+      withoutArea,
       ...(await options(tx, eventId)),
     };
   });
@@ -179,5 +184,56 @@ export async function getItem(actor: Actor, itemId: string) {
         statuses: ITEM_STATUSES.filter((s) => canSetItemStatus(item.status, s, director)),
       },
     };
+  });
+}
+
+/** Palavras do nome da área que recebe cada categoria, em ordem de preferência. */
+const AREA_KEYS: Partial<Record<ItemCategory, string[]>> = {
+  INFRAESTRUTURA: ["infra"],
+  LOCACAO: ["infra"],
+  CENOGRAFIA: ["ceno"],
+  MOBILIARIO: ["ceno"],
+  COMUNICACAO_VISUAL: ["comunicacao visual", "ceno"],
+  TECNICA: ["tecnica"],
+  AUDIOVISUAL: ["audiovisual", "tecnica"],
+  ILUMINACAO: ["iluminacao", "tecnica"],
+  SEGURANCA: ["seguranca", "operac"],
+  LIMPEZA: ["limpeza", "operac"],
+  ALIMENTACAO: ["a&b", "alimentacao"],
+  TRANSPORTE: ["logistica"],
+  HOSPEDAGEM: ["logistica"],
+  LOGISTICA: ["logistica"],
+  RECURSOS_HUMANOS: ["staff", "apoio"],
+};
+
+/** A área sugerida para um item, pela categoria dele (ex.: Cenografia vai para a área Cenografia). */
+export function suggestArea(category: ItemCategory | null, areas: { id: string; name: string }[]): string | null {
+  for (const key of (category && AREA_KEYS[category]) || []) {
+    const hit = areas.find((a) => normName(a.name).startsWith(key)) ?? areas.find((a) => normName(a.name).includes(key));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
+/**
+ * Pré-produção por área (2026-10-21): o gestor põe cada item sem área na área
+ * da categoria dele, de uma vez. Os que não têm área parecida ficam do evento
+ * todo (só o gestor e quem não tem área veem).
+ */
+export async function distributeItemsByArea(actor: Actor, eventId: string) {
+  requireEventAccess(actor, eventId);
+  if (!canReviewSla(actor, eventId)) throw new ForbiddenError("Só o Gerente de produção e o diretor distribuem os itens pelas áreas");
+  return actor.run(async (tx) => {
+    const areas = await tx.area.findMany({ where: { eventId, deletedAt: null }, select: { id: true, name: true } });
+    const items = await tx.costItem.findMany({ where: { eventId, areaId: null }, select: { id: true, category: true } });
+    let assigned = 0;
+    for (const it of items) {
+      const areaId = suggestArea(it.category as ItemCategory | null, areas);
+      if (!areaId) continue;
+      await tx.costItem.update({ where: { id: it.id }, data: { areaId } });
+      assigned++;
+    }
+    if (assigned) await audit(tx, actor, { eventId, entity: "cost_item", action: "UPDATE", after: { distributedByArea: assigned } });
+    return { assigned, left: items.length - assigned };
   });
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canUseSection } from "@/server/authz/policy";
+import { canReviewSla, canUseSection, productionArea } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listItemMap, type MapItem } from "@/modules/items/items.service";
 import { CATEGORY, ITEM_STATUS_LABEL, ITEM_STATUSES } from "@/modules/items/item-meta";
@@ -11,6 +11,7 @@ import { PageHeading, Panel } from "@/components/panel";
 import { EmptyState, LinkButton, PAGE, cx } from "@/components/ui";
 import { ItemFilters } from "./filters";
 import { ItemStatusPill } from "./status-pill";
+import { DistributeAreas } from "./distribute-areas";
 
 export const metadata = { title: "Mapa de itens" };
 
@@ -33,6 +34,8 @@ export default async function ItemMapPage({ params, searchParams }: PageProps<"/
   const base = `/eventos/${eventId}/pre-producao/itens`;
   const filtered = Object.values(data.filters).some(Boolean);
   const costs = `/eventos/${eventId}/pre-producao/custos`;
+  const myArea = productionArea(actor, eventId);
+  const myAreaName = myArea ? (data.areas.find((a) => a.id === myArea)?.name ?? "sua área") : null;
 
   return (
     <>
@@ -43,6 +46,12 @@ export default async function ItemMapPage({ params, searchParams }: PageProps<"/
         </PageHeading>
         {data.structureOnly && (
           <p className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-sm">Mostrando só <b>Estrutura e cenografia</b> (infra, locação, cenografia, mobiliário e comunicação visual), a sua área como Produtor executivo.</p>
+        )}
+        {myAreaName && (
+          <p className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-sm">Mostrando só os itens de <b>{myAreaName}</b>, a sua área na pré-produção.</p>
+        )}
+        {canReviewSla(actor, eventId) && data.withoutArea > 0 && data.areas.length > 0 && (
+          <DistributeAreas eventId={eventId} count={data.withoutArea} />
         )}
         <p className="text-sm text-muted">
           Cada item da planilha Padrão CORE 360, com quem cuida, quando precisa, onde fica e em que pé está. Aqui não aparecem valores (eles ficam no Orçamento).

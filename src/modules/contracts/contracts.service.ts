@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
-import { canUseSection } from "../../server/authz/policy";
+import { canUseSection, productionArea } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -61,10 +61,12 @@ const itemLabel = (n: number, r: { title: string; costItem: { name: string; numb
 /** Lista do evento e os fornecedores aprovados que ainda não têm contrato. */
 export async function listContracts(actor: Actor, eventId: string) {
   requirePre(actor, eventId);
+  const area = productionArea(actor, eventId);
   return actor.run(async (tx) => {
     const [rows, free] = await Promise.all([
       tx.contract.findMany({
-        where: { eventId },
+        // Pré-produtor de uma área: só os contratos com itens dela.
+        where: area ? { eventId, items: { some: { quote: { request: { costItem: { areaId: area } } } } } } : { eventId },
         orderBy: { number: "asc" },
         select: {
           id: true, number: true, status: true, signedOn: true, documentId: true, createdAt: true,

@@ -214,6 +214,17 @@ export function canGrantSectionsFor(a: Actor, eventId: string, p: { role: EventR
 }
 
 /**
+ * A área da pré-produção desta pessoa: o Pré-produtor ligado a uma área
+ * trabalha só nela (itens e cotações da área; chegadas e pendências da área
+ * ou do evento todo). null = o evento todo. Espelha app.production_area.
+ */
+export function productionArea(a: Actor, eventId: string): string | null {
+  if (isEventAdmin(a, eventId)) return null;
+  const m = membershipFor(a, eventId);
+  return m?.role === "PRE_PRODUTOR" ? m.areaId : null;
+}
+
+/**
  * Pagar, lançar Contratado e Realizado e fechar o financeiro: o diretor (não o
  * Suporte), o Gerente de produção e o Produtor executivo. Espelha app.can_handle_finance.
  */

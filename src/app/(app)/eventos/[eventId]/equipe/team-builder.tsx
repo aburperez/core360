@@ -84,7 +84,15 @@ export function TeamBuilder(props: {
       )}
 
       <SectionTitle
-        action={props.canAddArea ? <InlineAdd label="+ Área" placeholder="Nome da área (ex.: Segurança)" onSave={(name) => guard(() => api(`/api/events/${props.eventId}/areas`, { body: { name } }))} /> : undefined}
+        action={props.canAddArea ? (
+          <span className="flex flex-wrap items-center justify-end gap-3">
+            <button type="button" className="text-sm font-semibold text-primary"
+              onClick={() => guard(() => api(`/api/events/${props.eventId}/areas/from-producers`, { body: {} }))}>
+              Criar as áreas da lista de produtores
+            </button>
+            <InlineAdd label="+ Área" placeholder="Nome da área (ex.: Segurança)" onSave={(name) => guard(() => api(`/api/events/${props.eventId}/areas`, { body: { name } }))} />
+          </span>
+        ) : undefined}
       >
         Áreas
       </SectionTitle>

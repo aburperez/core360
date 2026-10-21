@@ -3,7 +3,7 @@ import { assertFinancialOpen } from "../finance/lock";
 import { z } from "zod";
 import type { Prisma } from "../../generated/prisma/client";
 import type { Actor } from "../../server/authz/actor";
-import { canReviewSla, canUseSection } from "../../server/authz/policy";
+import { canReviewSla, canUseSection, productionArea } from "../../server/authz/policy";
 import { audit, diff } from "../../server/audit/audit";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../server/errors";
 import { isUniqueViolation } from "../../server/db/errors";
@@ -18,6 +18,7 @@ import { resolveSupplier, supplierOptions } from "../suppliers/suppliers.service
 import { ratingSummaries } from "../suppliers/ratings.service";
 import { sniffImage } from "../attachments/image";
 import { AI_READABLE, AiUnavailableError, QUOTE_READER_MODEL, anthropicQuoteReader, quoteReaderEnabled, type AiReadableMime, type QuoteReader } from "./quote-reader";
+
 
 /**
  * Pré-produção: cotação. O responsável escreve o descritivo (o "briefing" que
@@ -250,6 +251,9 @@ async function checkLinks(tx: Tx, eventId: string, data: { responsibleId?: strin
 export async function createQuote(actor: Actor, eventId: string, input: unknown) {
   requirePre(actor, eventId);
   const data = parse(requestSchema, input);
+  if (productionArea(actor, eventId) && !data.costItemId) {
+    throw new ValidationError("Escolha um item da sua área para cotar", { costItemId: ["Escolha um item da sua área"] });
+  }
   return actor.run(async (tx) => {
     await checkLinks(tx, eventId, data);
     const r = await tx.quoteRequest.create({

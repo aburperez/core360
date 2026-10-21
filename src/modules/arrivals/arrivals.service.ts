@@ -12,6 +12,7 @@ import { structureItemWhere } from "../items/items.service";
 import { itemCode, type ItemCategory } from "../items/item-meta";
 import { todayIn } from "../schedule/schedule-meta";
 import { ARRIVAL_STATUSES, arrivalLate, type ArrivalStatus } from "./arrival-meta";
+import { assertProductionArea, defaultArea } from "../items/production-area";
 
 /**
  * Mapa de montagem (fase 5A): cada chegada de fornecedor, com horário,
@@ -195,7 +196,8 @@ export async function createArrival(actor: Actor, eventId: string, input: unknow
   requirePre(actor, eventId);
   const d = parse(arrivalSchema, input);
   return actor.run(async (tx) => {
-    const data = await toData(tx, eventId, d);
+    assertProductionArea(actor, eventId, d.areaId ?? null, true);
+    const data = await toData(tx, eventId, { ...d, areaId: defaultArea(actor, eventId, d.areaId) });
     checkPeriod(data.scheduledAt, data.endsAt);
     const a = await tx.arrival.create({ data: { eventId, supplierName: d.supplierName, ...data, createdById: actor.userId } });
     if (d.itemIds?.length) await setItems(tx, eventId, a.id, d.itemIds);
@@ -215,6 +217,7 @@ export async function updateArrival(actor: Actor, id: string, input: unknown) {
   return actor.run(async (tx) => {
     const a = await loadArrival(actor, tx, id);
     if (!canUseSection(actor, a.eventId, "MONTAGEM")) throw new NotFoundError("Chegada");
+    assertProductionArea(actor, a.eventId, d.areaId, true);
     const data = await toData(tx, a.eventId, d);
     checkPeriod("scheduledAt" in data ? data.scheduledAt : a.scheduledAt, "endsAt" in data ? data.endsAt : a.endsAt);
     const updated = await tx.arrival.update({ where: { id: a.id }, data });
