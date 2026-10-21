@@ -288,6 +288,18 @@ export const TOOLS: Tool[] = [
     ],
     img: "/site/acessos.webp", alt: "Montar equipe com as caixas do que o pré-produtor abre na Pré-produção",
   },
+  {
+    id: "areas", part: "pre", title: "Produção por área",
+    serve: "A pré-produção se divide pelas áreas do evento, como Infraestrutura, Cenografia, Técnica, Operações e A&B: cada produtor cuida só dos itens da sua área.",
+    quem: "Diretor e Gerente de produção organizam; Heads e produtores de área usam",
+    passos: [
+      "Em Montar equipe, um botão cria as áreas a partir da lista de produtores e funções.",
+      "No Mapa de itens, \"Distribuir pelas áreas\" coloca cada item na área certa pela categoria.",
+      "O produtor ligado a uma área vê só os itens, cotações, contratos, montagem e pendências dela. A regra vale também no banco de dados.",
+      "O diretor dá a cada Head as áreas que ele também acompanha, e o Head marca o que os produtores dessas áreas abrem.",
+    ],
+    img: "/site/areas.webp", alt: "Mapa de itens de uma pré-produtora que vê só os itens de Cenografia",
+  },
 ];
 
 const PARTS = {
@@ -362,8 +374,8 @@ const ROLES = [
   { title: "Diretor de produção", text: "Vê todos os eventos da agência, escolhe os fornecedores e acompanha a preparação, os prazos e os custos no painel executivo." },
   { title: "Gerente de produção", text: "Cuida dos seus eventos: coordena áreas, equipes e chamados, marca o que cada pré-produtor abre e fecha o relatório do dia." },
   { title: "Produtor executivo", text: "Produtores e funções, orçamento, financeiro, briefing, estrutura e cenografia e o atendimento ao cliente." },
-  { title: "Head de área", text: "Recebe os urgentes da área, confirma a montagem, valida a entrega e avalia os fornecedores." },
-  { title: "Pré-produtor", text: "Recebe a sua função e abre só as partes da Pré-produção marcadas para ele." },
+  { title: "Head de área", text: "Cuida da sua área e das áreas que o diretor liberar: recebe os urgentes, confirma a montagem e marca o que os produtores da área abrem." },
+  { title: "Pré-produtor", text: "Recebe a sua função e a sua área e abre só as partes da Pré-produção e os itens da área dele." },
   { title: "Produtor operacional", text: "Só a gestão de campo: lê o briefing e abre e resolve chamados com foto, pelo celular." },
 ];
 
