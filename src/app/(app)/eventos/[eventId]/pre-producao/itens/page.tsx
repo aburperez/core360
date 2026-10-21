@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/http/session";
-import { canReviewSla, canUseSection, productionArea } from "@/server/authz/policy";
+import { canReviewSla, canUseSection, isExecutive, productionArea } from "@/server/authz/policy";
 import { getEvent } from "@/modules/events/events.service";
 import { listItemMap, type MapItem } from "@/modules/items/items.service";
 import { CATEGORY, ITEM_STATUS_LABEL, ITEM_STATUSES } from "@/modules/items/item-meta";
@@ -35,6 +35,8 @@ export default async function ItemMapPage({ params, searchParams }: PageProps<"/
   const filtered = Object.values(data.filters).some(Boolean);
   const costs = `/eventos/${eventId}/pre-producao/custos`;
   const myArea = productionArea(actor, eventId);
+  // Leitor de planta técnica: quem lança itens, menos o Produtor executivo (estrutura e cenografia).
+  const planReader = !isExecutive(actor, eventId);
   const myAreaName = myArea ? (data.areas.find((a) => a.id === myArea)?.name ?? "sua área") : null;
 
   return (
@@ -42,8 +44,14 @@ export default async function ItemMapPage({ params, searchParams }: PageProps<"/
       <TopBar title="Mapa de itens" subtitle={event.name} back={`/eventos/${eventId}/pre-producao`} />
       <main className={cx(PAGE, "space-y-4 py-4 lg:py-6")}>
         <PageHeading trail={[event.name, "Pré-produção"]} title="Mapa de itens">
-          <LinkButton href={costs} variant="secondary">Novo item na planilha</LinkButton>
+          <div className="flex gap-2">
+            {planReader && <LinkButton href={`${base}/ler-planta`} variant="secondary">Ler planta técnica</LinkButton>}
+            <LinkButton href={costs} variant="secondary">Novo item na planilha</LinkButton>
+          </div>
         </PageHeading>
+        {planReader && (
+          <LinkButton href={`${base}/ler-planta`} variant="secondary" className="w-full lg:hidden">Ler planta técnica com a IA</LinkButton>
+        )}
         {data.structureOnly && (
           <p className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-sm">Mostrando só <b>Estrutura e cenografia</b> (infra, locação, cenografia, mobiliário e comunicação visual), a sua área como Produtor executivo.</p>
         )}
