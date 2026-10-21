@@ -48,10 +48,14 @@ export async function createArea(actor: Actor, input: unknown) {
 
 export const normName = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
+/** "Infra" e "Infraestrutura", "Operação" e "Operações": a mesma área com outro nome. */
+const sameArea = (a: string, b: string) => a === b || a.startsWith(b) || b.startsWith(a) || (a.length >= 6 && b.length >= 6 && a.slice(0, 6) === b.slice(0, 6));
+
 /**
  * Áreas da produção (2026-10-21): cria as áreas do evento a partir da lista
  * de Produtores e Funções (a do evento ou, sem ela, a padrão) e Cenografia,
- * que o Abu pediu junto. As que já existem ficam como estão.
+ * que o Abu pediu junto. As que já existem, mesmo com outro nome parecido
+ * ("Infra" e "Infraestrutura"), ficam como estão.
  */
 export async function createProducerAreas(actor: Actor, eventId: string) {
   requireEventAccess(actor, eventId);
@@ -59,11 +63,11 @@ export async function createProducerAreas(actor: Actor, eventId: string) {
   return actor.run(async (tx) => {
     const fns = await tx.eventFunction.findMany({ where: { eventId }, orderBy: { name: "asc" }, select: { name: true } });
     const names = [...(fns.length ? fns.map((f) => f.name) : DEFAULT_FUNCTIONS), "Cenografia"];
-    const have = new Set((await tx.area.findMany({ where: { eventId, deletedAt: null }, select: { name: true } })).map((a) => normName(a.name)));
+    const have = (await tx.area.findMany({ where: { eventId, deletedAt: null }, select: { name: true } })).map((a) => normName(a.name));
     const created: string[] = [];
     for (const name of names) {
-      if (have.has(normName(name))) continue;
-      have.add(normName(name));
+      if (have.some((h) => sameArea(h, normName(name)))) continue;
+      have.push(normName(name));
       const area = await tx.area.create({ data: { eventId, name } });
       await audit(tx, actor, { eventId, entity: "area", entityId: area.id, action: "CREATE", after: { name, from: "lista de produtores" } });
       created.push(name);

@@ -62,9 +62,11 @@ describe("áreas da lista de produtores", () => {
   it("o Gerente cria as áreas da lista de Produtores e Funções, mais Cenografia, sem repetir", async () => {
     await expectStatus(createProducerAreas(await actorFor(db, "sofia"), ev), 403);
     const m = await actorFor(db, "marina");
+    await owner.area.create({ data: { eventId: ev, name: "Operações" } });
     const { created } = await createProducerAreas(m, ev);
-    expect(created).toEqual(expect.arrayContaining(["A&B", "Infra", "Técnica", "Operação", "Cenografia"]));
-    expect(created).toHaveLength(19);
+    expect(created).toEqual(expect.arrayContaining(["A&B", "Infra", "Técnica", "Cenografia"]));
+    expect(created).not.toContain("Operação");
+    expect(created).toHaveLength(18);
     expect((await createProducerAreas(m, ev)).created).toEqual([]);
     const areas = await owner.area.findMany({ where: { eventId: ev }, select: { id: true, name: true } });
     infra = areas.find((a) => a.name === "Infra")!.id;
