@@ -69,7 +69,7 @@ describe("quem entra na Pré-produção", () => {
     expect("totals" in dash ? dash.totals.total : 0).toBe(0);
   });
 
-  it("só a Gerente coloca alguém como Pré-produtor, sempre sem área", async () => {
+  it("só a Gerente coloca alguém como Pré-produtor, numa área ou no evento todo, nunca numa equipe", async () => {
     const marina = await actorFor(db, "marina");
     const p = await createParticipant(marina, { eventId: rock, name: "Nova Pré", email: `pre.${uniq()}@x.dev`, role: "PRE_PRODUTOR" });
     expect(p.role).toBe("PRE_PRODUTOR");
@@ -77,7 +77,7 @@ describe("quem entra na Pré-produção", () => {
     await expectStatus(createParticipant(rafael, { eventId: rock, name: "X", email: `x.${uniq()}@x.dev`, role: "PRE_PRODUTOR" }), 403);
     await expectPgError(
       as("marina", (tx) => tx.participant.create({
-        data: { eventId: rock, name: "Y", email: `y.${uniq()}@x.dev`, role: "PRE_PRODUTOR", areaId: d.areas.infra.id },
+        data: { eventId: rock, name: "Y", email: `y.${uniq()}@x.dev`, role: "PRE_PRODUTOR", areaId: d.areas.infra.id, teamId: d.teams.eletrica.id },
       })),
       "23514",
     );

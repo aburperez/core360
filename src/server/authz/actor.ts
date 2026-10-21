@@ -15,6 +15,8 @@ export interface Membership {
   clientView: ClientView | null;
   /** Pré-produtor e Produtor executivo: as partes da Pré-produção que ele abre. */
   sections: readonly Section[] | null;
+  /** Só do Head: a área dele e as correlacionadas que o diretor deu. */
+  headAreaIds?: readonly string[] | null;
 }
 
 export interface ClientView {
@@ -74,6 +76,7 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
         id: true, eventId: true, role: true, areaId: true, teamId: true, event: { select: { clientId: true } },
         clientView: { select: { costs: true, team: true, progress: true } },
         producerAccess: { select: { sections: true } },
+        headAreas: { select: { areaId: true } },
       },
     });
     const admin = await tx.agencyAdmin.findMany({
@@ -115,6 +118,7 @@ export async function loadActor(db: Db, userId: string, meta: RequestMeta = {}):
       sections: p.role === "PRODUTOR_EXECUTIVO" ? EXECUTIVE_SECTIONS
         : p.role === "PRE_PRODUTOR" ? (p.producerAccess?.sections ?? []).filter(isSection)
         : null,
+      headAreaIds: p.role === "HEAD" && p.areaId ? [p.areaId, ...p.headAreas.map((h) => h.areaId).filter((id) => id !== p.areaId)] : null,
     })),
     meta,
     run: (fn) => withUser(db, userId, fn),

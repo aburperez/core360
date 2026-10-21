@@ -7,8 +7,8 @@ import { FormError, Input, Label, Select, Textarea } from "@/components/field";
 import { api } from "@/components/api-client";
 import { InviteShare } from "@/components/invite-share";
 import { ROLE_LABEL } from "@/lib/format";
-import type { Section } from "@/server/authz/sections";
-import { ClientViewSwitches, SectionBoxes, type ClientView } from "./access-switches";
+import { ClientViewSwitches, HeadAreaBoxes, ProducerAreaSelect, SectionBoxes, type ClientView } from "./access-switches";
+import type { ProducerBoxes } from "@/modules/participants/producer-access.service";
 
 type Role = "GERENTE" | "PRODUTOR_EXECUTIVO" | "HEAD" | "OPERACIONAL" | "CLIENTE" | "PRE_PRODUTOR";
 const EVENT_LEVEL: Role[] = ["GERENTE", "PRODUTOR_EXECUTIVO", "CLIENTE", "PRE_PRODUTOR"];
@@ -35,8 +35,10 @@ export function TeamBuilder(props: {
   people: Person[];
   canGrantClientView: boolean;
   clientViews: Record<string, ClientView>;
-  /** Caixas de acesso dos Pré-produtores, para quem pode marcar (senão null). */
-  producerAccess: Record<string, Section[]> | null;
+  /** Caixas de acesso dos Pré-produtores que quem vê a tela pode marcar. */
+  producerAccess: Record<string, ProducerBoxes>;
+  /** Áreas correlacionadas de cada Head, para o diretor (senão null). */
+  headAreas: Record<string, string[]> | null;
   functionChoices: FunctionChoices;
 }) {
   const router = useRouter();
@@ -73,7 +75,9 @@ export function TeamBuilder(props: {
               <PersonRow key={p.id} p={p} areaName={props.areas.find((a) => a.id === p.areaId)?.name} guard={guard}
                 canManage={canManagePerson(p, props)} fn={fnFor(p)}
                 clientView={p.role === "CLIENTE" && props.canGrantClientView ? (props.clientViews[p.id] ?? NO_VIEW) : undefined}
-                sections={p.role === "PRE_PRODUTOR" && props.producerAccess ? (props.producerAccess[p.id] ?? []) : undefined} />
+                boxes={p.role === "PRE_PRODUTOR" ? props.producerAccess[p.id] : undefined}
+                headAreas={p.role === "HEAD" && props.headAreas ? { areas: props.areas, selected: props.headAreas[p.id] ?? [] } : undefined}
+                producerArea={p.role === "PRE_PRODUTOR" && canManagePerson(p, props) ? props.areas : undefined} />
             ))}
           </Card>
         </>
@@ -176,12 +180,16 @@ function TeamBlock({ team, area, eventId, people, guard, canManage, fnFor }: {
 
 type FunctionPick = { eventId: string; options: Fn[]; value: string | null };
 
-function PersonRow({ p, areaName, guard, canManage, clientView, sections, fn }: {
+function PersonRow({ p, areaName, guard, canManage, clientView, boxes, headAreas, producerArea, fn }: {
   p: Person; areaName?: string; guard: (fn: () => Promise<unknown>) => Promise<boolean>; canManage: boolean;
   /** Só para o Cliente, quando quem vê a tela pode liberar a visão dele. */
   clientView?: ClientView;
   /** Só para o Pré-produtor, quando quem vê a tela marca as caixas dele. */
-  sections?: Section[];
+  boxes?: ProducerBoxes;
+  /** Só para o Head, quando o diretor vê a tela: as áreas correlacionadas. */
+  headAreas?: { areas: { id: string; name: string }[]; selected: string[] };
+  /** Só para o Pré-produtor, quando quem vê a tela escolhe a área dele. */
+  producerArea?: { id: string; name: string }[];
   /** Escolher a função desta pessoa (Pré-produção e o Head da área). */
   fn?: FunctionPick;
 }) {
@@ -262,7 +270,9 @@ function PersonRow({ p, areaName, guard, canManage, clientView, sections, fn }: 
       )}
       {fn && <FunctionSelect participantId={p.id} name={p.name} pick={fn} guard={guard} />}
       {clientView && p.active && <ClientViewSwitches participantId={p.id} view={clientView} guard={guard} />}
-      {sections && p.active && <SectionBoxes participantId={p.id} sections={sections} guard={guard} />}
+      {producerArea && p.active && <ProducerAreaSelect participantId={p.id} areaId={p.areaId} areas={producerArea} guard={guard} />}
+      {boxes && p.active && <SectionBoxes participantId={p.id} sections={boxes.sections} editable={boxes.editable} guard={guard} />}
+      {headAreas && p.active && <HeadAreaBoxes participantId={p.id} ownAreaId={p.areaId} areas={headAreas.areas} selected={headAreas.selected} guard={guard} />}
       {link && <InviteShare url={link} name={p.name} note="vale 7 dias, uso único" />}
     </div>
   );

@@ -67,6 +67,9 @@ export const EXECUTIVE_SECTIONS: readonly Section[] = [
   "FUNCOES", "ORCAMENTO", "FINANCEIRO", "EXECUTIVO", "BRIEFING", "ITENS", "MONTAGEM", "DOCUMENTOS", "ATENDIMENTO",
 ];
 
+/** As caixas que o Head marca nos produtores da área dele. As de valores e do cliente ficam com o gestor. Espelha app.head_sections(). */
+export const HEAD_SECTIONS: readonly Section[] = SECTIONS.filter((s) => s !== "EXECUTIVO" && s !== "ORCAMENTO" && s !== "FINANCEIRO" && s !== "ATENDIMENTO");
+
 /** O que o Pré-produtor abria antes das caixas (a migration liberou isto para os que já existiam). */
 export const LEGACY_PRODUCER_SECTIONS: readonly Section[] = SECTIONS.filter((s) => s !== "EXECUTIVO" && s !== "FINANCEIRO" && s !== "ATENDIMENTO");
 

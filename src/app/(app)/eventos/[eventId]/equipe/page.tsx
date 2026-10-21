@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { assignableRoles, canGiveFunction, canGrantClientView, canManageAreas, canManageTeams, clientCan, isClient } from "@/server/authz/policy";
 import { listClientViews } from "@/modules/participants/client-views.service";
 import { listProducerAccess } from "@/modules/participants/producer-access.service";
+import { listHeadAreas } from "@/modules/participants/head-areas.service";
 import { listFunctionChoices } from "@/modules/functions/functions.service";
 import { getEvent } from "@/modules/events/events.service";
 import { listAreas } from "@/modules/areas/areas.service";
@@ -24,13 +25,14 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
   const { eventId } = await params;
   // O Cliente vê a equipe só quando o Gerente libera.
   if (isClient(actor, eventId) && !clientCan(actor, eventId, "team")) notFound();
-  const [event, areas, teams, people, clientViews, producerAccess, functionChoices] = await Promise.all([
+  const [event, areas, teams, people, clientViews, producerAccess, headAreas, functionChoices] = await Promise.all([
     getEvent(actor, eventId),
     listAreas(actor, eventId),
     listTeams(actor, eventId),
     listParticipants(actor, eventId, { includeInactive: true }),
     listClientViews(actor, eventId),
     listProducerAccess(actor, eventId),
+    listHeadAreas(actor, eventId),
     listFunctionChoices(actor, eventId),
   ]);
   const me = membershipFor(actor, eventId);
@@ -54,6 +56,7 @@ export default async function TeamPage({ params }: PageProps<"/eventos/[eventId]
             canGrantClientView={canGrantClientView(actor, eventId)}
             clientViews={clientViews}
             producerAccess={producerAccess}
+            headAreas={headAreas}
             functionChoices={functionChoices}
             teams={teams.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId }))}
             people={people.map((p) => ({

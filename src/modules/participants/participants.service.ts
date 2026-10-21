@@ -35,7 +35,7 @@ function scopeWhere(actor: Actor, eventId: string): Prisma.ParticipantWhereInput
       // O Cliente vê a equipe só quando o Gerente libera; senão, só a si mesmo.
       return m.clientView?.team ? { eventId } : { eventId, userId: actor.userId };
     case "HEAD":
-      return { eventId, OR: [{ areaId: m.areaId }, { role: "GERENTE" }, { userId: actor.userId }] };
+      return { eventId, OR: [{ areaId: { in: [...(m.headAreaIds ?? (m.areaId ? [m.areaId] : []))] } }, { role: "GERENTE" }, { userId: actor.userId }] };
     case "OPERACIONAL":
       // A própria equipe + contatos de coordenação (Head da área e Gerentes).
       return {
@@ -112,6 +112,8 @@ async function resolvePlacement(
 function checkRoleShape(role: ParticipantRole, areaId: string | null, teamId: string | null) {
   if (role === "HEAD" && !areaId) throw new ValidationError("Head precisa de uma área");
   if (role === "OPERACIONAL" && !teamId) throw new ValidationError("Operacional precisa de uma equipe");
+  if (role === "PRODUTOR_EXECUTIVO" && areaId) throw new ValidationError("O Produtor executivo é do evento todo, sem área");
+  if (role === "PRE_PRODUTOR" && teamId) throw new ValidationError("O pré-produtor fica numa área, não numa equipe");
 }
 
 const createSchema = z.object({

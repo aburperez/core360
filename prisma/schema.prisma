@@ -227,6 +227,7 @@ model User {
   activitiesCreated        Activity[]           @relation("ActivityCreatedBy")
   clientViewsUpdated       ClientView[]         @relation("ClientViewUpdatedBy")
   producerAccessUpdated    ProducerAccess[]     @relation("ProducerAccessUpdatedBy")
+  headAreasGranted         HeadArea[]           @relation("HeadAreaGrantedBy")
   profilesUpdated          ParticipantProfile[] @relation("ParticipantProfileUpdatedBy")
   directors                Director[]           @relation("DirectorUser")
   directorsCreated         Director[]           @relation("DirectorCreatedBy")
@@ -466,6 +467,7 @@ model Event {
   activities      Activity[]
   clientViews     ClientView[]
   producerAccess  ProducerAccess[]
+  headAreas       HeadArea[]
   profiles        ParticipantProfile[]
   activityChecks  ActivityCheck[]
   quoteRequests   QuoteRequest[]
@@ -515,6 +517,7 @@ model Area {
   tasks        EventTask[]
   arrivals     Arrival[]
   receipts     ItemReceipt[]
+  headAreas    HeadArea[]
 
   /// Alvo das FKs compostas: garante que filhos apontem para área do MESMO evento.
   @@unique([eventId, id])
@@ -595,6 +598,7 @@ model Participant {
   briefing               Briefing?
   clientView             ClientView?
   producerAccess         ProducerAccess?
+  headAreas              HeadArea[]
   profile                ParticipantProfile?
   ownActivities          Activity[]
   activityChecks         ActivityCheck[]
@@ -2110,4 +2114,23 @@ model DeadlineAlert {
   @@id([participantId, kind, refId, bucket])
   @@index([eventId])
   @@map("deadline_alerts")
+}
+
+/// Áreas correlacionadas de um Head (hierarquia de acessos, etapa 2): o
+/// diretor marca, e nelas o Head enxerga e age como na área dele.
+model HeadArea {
+  participantId String   @map("participant_id") @db.Uuid
+  eventId       String   @map("event_id") @db.Uuid
+  areaId        String   @map("area_id") @db.Uuid
+  grantedById   String?  @map("granted_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  participant Participant @relation(fields: [eventId, participantId], references: [eventId, id], onDelete: Cascade)
+  area        Area        @relation(fields: [eventId, areaId], references: [eventId, id], onDelete: Cascade)
+  grantedBy   User?       @relation("HeadAreaGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([participantId, areaId])
+  @@index([eventId])
+  @@map("head_areas")
 }

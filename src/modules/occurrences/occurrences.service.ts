@@ -32,7 +32,7 @@ export function occurrenceScope(actor: Actor, eventId: string): Prisma.Occurrenc
     case "GERENTE":
       return { eventId };
     case "HEAD":
-      return { eventId, areaId: m.areaId! };
+      return { eventId, areaId: { in: [...(m.headAreaIds ?? [m.areaId!])] } };
     case "OPERACIONAL":
       return { eventId, OR: [{ teamId: m.teamId! }, { responsibleParticipantId: m.participantId }] };
     case "CLIENTE":

@@ -35,6 +35,13 @@ export function canGrantClientView(a: Actor, eventId: string): boolean {
   return canUseSection(a, eventId, "ATENDIMENTO");
 }
 
+/** A área está entre as que este Head cobre: a dele e as correlacionadas. Espelha app.head_covers. */
+export function headCovers(a: Actor, eventId: string, areaId: string | null | undefined): boolean {
+  const m = membershipFor(a, eventId);
+  if (m?.role !== "HEAD" || !areaId) return false;
+  return (m.headAreaIds ?? (m.areaId ? [m.areaId] : [])).includes(areaId);
+}
+
 const clientSeesStructure = (a: Actor, eventId: string) => clientCan(a, eventId, "team") || clientCan(a, eventId, "progress");
 
 export function canSeeArea(a: Actor, s: Scope): boolean {
@@ -63,7 +70,7 @@ export function canSeeTeam(a: Actor, s: Scope): boolean {
     case "CLIENTE":
       return clientSeesStructure(a, s.eventId);
     case "HEAD":
-      return m.areaId === s.areaId;
+      return headCovers(a, s.eventId, s.areaId);
     case "OPERACIONAL":
       return m.teamId === s.teamId;
   }
@@ -73,7 +80,7 @@ export function canManageTeams(a: Actor, s: Scope): boolean {
   if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
   if (!m) return false;
-  return m.role === "GERENTE" || (m.role === "HEAD" && m.areaId === s.areaId);
+  return m.role === "GERENTE" || headCovers(a, s.eventId, s.areaId);
 }
 
 /** Anti-escalada: quem pode atribuir qual papel (seção 7.4 da proposta). */
@@ -84,7 +91,7 @@ export function assignableRoles(a: Actor, eventId: string, areaId?: string | nul
     case "GERENTE":
       return ["PRODUTOR_EXECUTIVO", "HEAD", "OPERACIONAL", "CLIENTE", "PRE_PRODUTOR"];
     case "HEAD":
-      return areaId && areaId === m.areaId ? ["OPERACIONAL"] : [];
+      return headCovers(a, eventId, areaId) ? ["OPERACIONAL"] : [];
     default:
       return [];
   }
@@ -109,7 +116,7 @@ export function canSeeOccurrence(a: Actor, o: OccScope): boolean {
     case "GERENTE":
       return true;
     case "HEAD":
-      return m.areaId === o.areaId;
+      return headCovers(a, o.eventId, o.areaId);
     case "OPERACIONAL":
       return m.teamId === o.teamId || m.participantId === o.responsibleParticipantId;
     case "CLIENTE":
@@ -129,7 +136,7 @@ export function canCreateOccurrence(a: Actor, s: Scope): boolean {
     case "GERENTE":
       return true;
     case "HEAD":
-      return m.areaId === s.areaId;
+      return headCovers(a, s.eventId, s.areaId);
     case "OPERACIONAL":
       return m.teamId === s.teamId;
     case "CLIENTE":
@@ -143,7 +150,7 @@ export function canCreateOccurrence(a: Actor, s: Scope): boolean {
 export function canManageOccurrence(a: Actor, o: OccScope): boolean {
   if (isEventAdmin(a, o.eventId)) return true;
   const m = membershipFor(a, o.eventId);
-  return m?.role === "GERENTE" || (m?.role === "HEAD" && m.areaId === o.areaId);
+  return m?.role === "GERENTE" || headCovers(a, o.eventId, o.areaId);
 }
 
 /**
@@ -192,6 +199,20 @@ export function canGrantSections(a: Actor, eventId: string): boolean {
   return membershipFor(a, eventId)?.role === "GERENTE";
 }
 
+/** Dar áreas correlacionadas ao Head: o diretor. Espelha app.can_grant_head_areas. */
+export function canGrantHeadAreas(a: Actor, eventId: string): boolean {
+  return isEventAdmin(a, eventId);
+}
+
+/**
+ * Marcar as caixas DESTE Pré-produtor: o Gerente, o diretor ou o Head que cobre
+ * a área dele (este só nas HEAD_SECTIONS). Espelha app.can_grant_sections_for.
+ */
+export function canGrantSectionsFor(a: Actor, eventId: string, p: { role: EventRole; areaId: string | null }): boolean {
+  if (p.role !== "PRE_PRODUTOR") return false;
+  return canGrantSections(a, eventId) || headCovers(a, eventId, p.areaId);
+}
+
 /**
  * Pagar, lançar Contratado e Realizado e fechar o financeiro: o diretor (não o
  * Suporte), o Gerente de produção e o Produtor executivo. Espelha app.can_handle_finance.
@@ -222,8 +243,7 @@ export function canGiveFunction(
 ): boolean {
   if (!p.active || !FIELD_ROLES.includes(p.role)) return false;
   if (canUseSection(a, eventId, "FUNCOES")) return true;
-  const m = membershipFor(a, eventId);
-  return m?.role === "HEAD" && !!m.areaId && p.role === "OPERACIONAL" && p.areaId === m.areaId;
+  return p.role === "OPERACIONAL" && headCovers(a, eventId, p.areaId);
 }
 
 /** Gestão de campo (painel, chamados): quem trabalha no campo. O Cliente tem a tela dele. */
@@ -248,8 +268,7 @@ export function canSendToField(a: Actor, eventId: string): boolean {
 /** Marcar Montado e Conferido no item: o gestor ou o Head da área do item. Espelha app.can_assemble. */
 export function canAssemble(a: Actor, eventId: string, areaId: string | null): boolean {
   if (canSendToField(a, eventId)) return true;
-  const m = membershipFor(a, eventId);
-  return m?.role === "HEAD" && !!areaId && m.areaId === areaId;
+  return headCovers(a, eventId, areaId);
 }
 
 /** A participação da pessoa logada neste evento é esta? (quem recebe um item) */
@@ -282,7 +301,7 @@ export function canManagePlans(a: Actor, eventId: string): boolean {
 export function canEditPlanPoint(a: Actor, s: { eventId: string; areaId: string | null }): boolean {
   if (isEventAdmin(a, s.eventId)) return true;
   const m = membershipFor(a, s.eventId);
-  return m?.role === "GERENTE" || (m?.role === "HEAD" && !!s.areaId && m.areaId === s.areaId);
+  return m?.role === "GERENTE" || headCovers(a, s.eventId, s.areaId);
 }
 
 /** Iniciar e concluir a etapa: quem edita, o responsável e o Operacional da equipe dela. */

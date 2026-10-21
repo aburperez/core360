@@ -182,18 +182,18 @@ const plain = <T extends ReceiptRow>(actor: Actor, r: T) => ({
   canAssemble: canAssemble(actor, r.eventId, r.areaId),
 });
 
-/** Área de quem é Head neste evento (vê e monta os itens dela). */
-const headArea = (actor: Actor, eventId: string) => {
+/** Áreas de quem é Head neste evento, a dele e as correlacionadas (vê e monta os itens delas). */
+const headAreas = (actor: Actor, eventId: string) => {
   const m = membershipFor(actor, eventId);
-  return m?.role === "HEAD" ? m.areaId : null;
+  return m?.role === "HEAD" ? [...(m.headAreaIds ?? (m.areaId ? [m.areaId] : []))] : [];
 };
 
 /** Quem vê quais recebimentos: o gestor todos; os outros os seus e, o Head, os da área dele. */
 function visibleWhere(actor: Actor, eventId: string) {
   if (canSendToField(actor, eventId)) return {};
   const me = actor.memberships.find((m) => m.eventId === eventId)?.participantId;
-  const area = headArea(actor, eventId);
-  const or = [...(me ? [{ receiverId: me }] : []), ...(area ? [{ areaId: area }] : [])];
+  const areas = headAreas(actor, eventId);
+  const or = [...(me ? [{ receiverId: me }] : []), ...(areas.length ? [{ areaId: { in: areas } }] : [])];
   return or.length ? { OR: or } : null;
 }
 

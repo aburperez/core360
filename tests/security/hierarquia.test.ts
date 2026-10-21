@@ -92,7 +92,7 @@ describe("caixas de acesso", () => {
   it("o Gerente marca; o Pré-produtor abre só o que foi marcado", async () => {
     const m = await actorFor(db, "marina");
     expect(await setProducerAccess(m, sofiaP, { sections: ["DOCUMENTOS", "CRONOGRAMA"] })).toEqual({ sections: ["CRONOGRAMA", "DOCUMENTOS"] });
-    expect((await listProducerAccess(m, ev))![sofiaP]).toEqual(["CRONOGRAMA", "DOCUMENTOS"]);
+    expect((await listProducerAccess(m, ev))[sofiaP]).toEqual({ sections: ["CRONOGRAMA", "DOCUMENTOS"], editable: SECTIONS });
     expect(await owner.auditLog.count({ where: { entity: "producer_access", entityId: sofiaP } })).toBe(1);
 
     const s = await actorFor(db, "sofia");
@@ -114,11 +114,11 @@ describe("caixas de acesso", () => {
     await getSchedule(await actorFor(db, "sofia"), ev);
   });
 
-  it("só o Gerente e o diretor marcam; só para Pré-produtor; só partes que existem", async () => {
+  it("sem área, só o Gerente e o diretor marcam; só para Pré-produtor; só partes que existem", async () => {
     for (const p of ["sofia", "ana", "rafael", "claudia", "paulo"] as const) {
       await expectStatus(setProducerAccess(await actorFor(db, p), sofiaP, { sections: [...SECTIONS] }), [403, 404]);
     }
-    expect(await listProducerAccess(await actorFor(db, "sofia"), ev)).toBeNull();
+    expect(await listProducerAccess(await actorFor(db, "sofia"), ev)).toEqual({});
     const m = await actorFor(db, "marina");
     await expectStatus(setProducerAccess(m, anaP, { sections: ["ORCAMENTO"] }), 422);
     await expectStatus(setProducerAccess(m, sofiaP, { sections: ["CAMPO"] }), 422);
