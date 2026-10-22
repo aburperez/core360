@@ -111,6 +111,17 @@ export const TOOLS: Tool[] = [
     img: "/site/orcamento.webp", alt: "Orçamento com os 4 valores no computador",
   },
   {
+    id: "leitor-planta", part: "pre", title: "Leitor de planta técnica",
+    serve: "Transformar a planta técnica (som, luz, LED, vídeo, energia e estrutura) na lista de itens do evento, sem digitar item por item.",
+    quem: "Diretor, Gerente de produção e produtores da área Técnica",
+    passos: [
+      "No Mapa de itens, toque em \"Ler planta técnica\" e envie a planta em PDF ou foto. A IA lista cada item com quantidade, unidade, local e especificação, e os pontos técnicos, como carga de energia e rigging.",
+      "Você confere, corrige e desmarca o que não entra. O que já está na planilha vem desmarcado e nada é salvo sem a sua conferência.",
+      "Os itens entram na área Técnica como A definir, já com código e prontos para a cotação, e a planta fica guardada nos Documentos.",
+    ],
+    img: "/site/leitor-planta.webp", alt: "Lista de itens técnicos lida da planta, para conferir antes de adicionar",
+  },
+  {
     id: "fornecedores", part: "pre", title: "Fornecedores, cotações e contratos",
     serve: "Cotar, escolher e contratar fornecedores com tudo registrado, do primeiro orçamento à avaliação final.",
     quem: "Pré-produtor cota; o Diretor negocia, escolhe e avalia com o Head da área",
